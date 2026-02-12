@@ -1,0 +1,149 @@
+/* Design Tokens - PGME Admin Platform
+ * Minimal, consistent design system for Notion/Obsidian-style UI
+ * All values follow a 4px base unit system
+ */
+
+:root {
+  /* ===== Spacing Scale ===== */
+  /* Base unit: 4px */
+  --space-0: 0;
+  --space-1: 4px;    /* tight spacing */
+  --space-2: 8px;    /* compact spacing */
+  --space-3: 12px;   /* comfortable spacing */
+  --space-4: 16px;   /* default spacing */
+  --space-5: 20px;   /* relaxed spacing */
+  --space-6: 24px;   /* section spacing */
+  --space-8: 32px;   /* large spacing */
+  --space-10: 40px;  /* extra large spacing */
+  --space-12: 48px;  /* huge spacing */
+  --space-16: 64px;  /* maximum spacing */
+
+  /* ===== Sizing System ===== */
+  /* Component Heights */
+  --size-input: 36px;
+  --size-button-sm: 32px;
+  --size-button-md: 36px;
+  --size-button-lg: 40px;
+  --size-table-row: 48px;
+  --size-header: 64px;
+  --size-sidebar-collapsed: 68px;
+  --size-sidebar-expanded: 256px;
+
+  /* Icon Sizes */
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+
+  /* Container Widths */
+  --width-xs: 320px;
+  --width-sm: 384px;
+  --width-md: 512px;
+  --width-lg: 640px;
+  --width-xl: 768px;
+
+  /* ===== Typography Scale ===== */
+  /* Font Sizes */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* Line Heights */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Font Weights */
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* ===== Border & Radius ===== */
+  --border-width: 1px;
+  --border-radius-sm: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-full: 9999px;
+
+  /* ===== Semantic Color Tokens ===== */
+  /* Text Colors */
+  --color-text-primary: hsl(var(--foreground));
+  --color-text-secondary: hsl(var(--muted-foreground));
+  --color-text-tertiary: hsl(var(--muted-foreground) / 0.7);
+  --color-text-inverse: hsl(var(--primary-foreground));
+
+  /* Background Colors */
+  --color-bg-primary: hsl(var(--background));
+  --color-bg-secondary: hsl(var(--muted));
+  --color-bg-hover: hsl(var(--accent));
+  --color-bg-selected: hsl(var(--primary) / 0.1);
+
+  /* Border Colors */
+  --color-border-default: hsl(var(--border));
+  --color-border-focus: hsl(var(--ring));
+
+  /* Brand Colors */
+  --color-brand-primary: hsl(var(--primary));
+  --color-brand-secondary: hsl(var(--secondary));
+  --color-brand-primary-fg: hsl(var(--primary-foreground));
+  --color-brand-secondary-fg: hsl(var(--secondary-foreground));
+
+  /* State Colors */
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-fg: hsl(var(--destructive-foreground));
+}
+
+/* ===== Utility Classes ===== */
+/* Spacing Utilities */
+.spacing-section {
+  gap: var(--space-6);
+}
+
+.spacing-component {
+  gap: var(--space-4);
+}
+
+.spacing-element {
+  gap: var(--space-2);
+}
+
+.spacing-tight {
+  gap: var(--space-1);
+}
+
+/* Layout Utilities */
+.container-centered {
+  max-width: var(--width-xl);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Text Utilities */
+.text-minimal {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-weight: var(--font-regular);
+}
+
+.text-heading {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  font-weight: var(--font-semibold);
+}
+
+/* Component Sizing Utilities */
+.input-standard {
+  height: var(--size-input);
+}
+
+.button-standard {
+  height: var(--size-button-md);
+}
+
+.table-row-standard {
+  height: var(--size-table-row);
+}

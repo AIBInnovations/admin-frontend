@@ -57,8 +57,8 @@ export function AppSettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0000C8]/10">
-                <Settings className="h-4 w-4 text-[#0000C8]" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <Settings className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <CardTitle className="text-base">General Settings</CardTitle>
@@ -147,10 +147,10 @@ export function AppSettingsPage() {
                 <Input id="videoFormats" value={videoFormats} onChange={(e) => setVideoFormats(e.target.value)} />
               </div>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] p-4">
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div className="space-y-0.5">
                 <Label htmlFor="enableFreeContent">Enable Free Content</Label>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Allow users to access selected content for free</p>
+                <p className="text-xs text-muted-foreground">Allow users to access selected content for free</p>
               </div>
               <Switch id="enableFreeContent" checked={enableFreeContent} onCheckedChange={setEnableFreeContent} />
             </div>
@@ -224,24 +224,24 @@ export function AppSettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] p-4">
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div className="space-y-0.5">
                 <Label htmlFor="enablePush">Enable Push Notifications</Label>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Send push notifications via Firebase Cloud Messaging</p>
+                <p className="text-xs text-muted-foreground">Send push notifications via Firebase Cloud Messaging</p>
               </div>
               <Switch id="enablePush" checked={enablePush} onCheckedChange={setEnablePush} />
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] p-4">
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div className="space-y-0.5">
                 <Label htmlFor="enableEmail">Enable Email Notifications</Label>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Send email notifications for important updates</p>
+                <p className="text-xs text-muted-foreground">Send email notifications for important updates</p>
               </div>
               <Switch id="enableEmail" checked={enableEmail} onCheckedChange={setEnableEmail} />
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] p-4">
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div className="space-y-0.5">
                 <Label htmlFor="enableSMS">Enable SMS Notifications</Label>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Send SMS alerts via MSG91 for critical events</p>
+                <p className="text-xs text-muted-foreground">Send SMS alerts via MSG91 for critical events</p>
               </div>
               <Switch id="enableSMS" checked={enableSMS} onCheckedChange={setEnableSMS} />
             </div>

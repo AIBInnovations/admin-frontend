@@ -22,7 +22,7 @@ export function SeriesPage() {
       />
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -39,18 +39,18 @@ export function SeriesPage() {
               <TableRow key={series._id}>
                 <TableCell>
                   <div className="flex items-center gap-1">
-                    <ArrowUpDown className="h-3 w-3 cursor-grab text-[hsl(var(--muted-foreground))]" />
+                    <ArrowUpDown className="h-3 w-3 cursor-grab text-muted-foreground" />
                     <span className="text-sm font-medium">{series.display_order}</span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0000C8]/10 text-sm font-bold text-[#0000C8]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
                       {series.name.charAt(0)}
                     </div>
                     <div>
                       <p className="text-sm font-medium">{series.name}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{series.description}</p>
+                      <p className="text-xs text-muted-foreground">{series.description}</p>
                     </div>
                   </div>
                 </TableCell>
@@ -59,7 +59,7 @@ export function SeriesPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
+                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm">{series.module_count} modules</span>
                   </div>
                 </TableCell>

@@ -49,8 +49,8 @@ export function AnalyticsPage() {
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-                <Users className="h-5 w-5 text-[#0000C8]" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
               </div>
               <div className={`flex items-center gap-0.5 text-xs font-medium ${userGrowthPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {userGrowthPct >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
@@ -58,7 +58,7 @@ export function AnalyticsPage() {
               </div>
             </div>
             <p className="text-2xl font-bold">{currentMonthUsers.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Users</p>
+            <p className="text-xs text-muted-foreground">Total Users</p>
           </CardContent>
         </Card>
         <Card>
@@ -73,7 +73,7 @@ export function AnalyticsPage() {
               </div>
             </div>
             <p className="text-2xl font-bold">{`₹${currentMonthRevenue.toLocaleString('en-IN')}`}</p>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Revenue (This Month)</p>
+            <p className="text-xs text-muted-foreground">Revenue (This Month)</p>
           </CardContent>
         </Card>
         <Card>
@@ -84,7 +84,7 @@ export function AnalyticsPage() {
               </div>
             </div>
             <p className="text-2xl font-bold">{engagementMetrics.daily_active_users}</p>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Daily Active Users</p>
+            <p className="text-xs text-muted-foreground">Daily Active Users</p>
           </CardContent>
         </Card>
         <Card>
@@ -95,7 +95,7 @@ export function AnalyticsPage() {
               </div>
             </div>
             <p className="text-2xl font-bold">{engagementMetrics.avg_session_duration_minutes}m</p>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Avg Session Duration</p>
+            <p className="text-xs text-muted-foreground">Avg Session Duration</p>
           </CardContent>
         </Card>
       </div>
@@ -114,8 +114,8 @@ export function AnalyticsPage() {
                 return (
                   <div key={item.month} className="flex flex-1 flex-col items-center gap-1">
                     <span className="text-[10px] font-medium">{item.users}</span>
-                    <div className="w-full rounded-t-md bg-[#0000C8]/80 transition-all" style={{ height: `${heightPct}%` }} />
-                    <span className="text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap">
+                    <div className="w-full rounded-t-md bg-primary/80 transition-all" style={{ height: `${heightPct}%` }} />
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                       {item.month.split(' ')[0].slice(0, 3)}
                     </span>
                   </div>
@@ -133,27 +133,27 @@ export function AnalyticsPage() {
           <CardContent>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[hsl(var(--muted-foreground))]">DAU</span>
+                <span className="text-sm text-muted-foreground">DAU</span>
                 <span className="text-sm font-semibold">{engagementMetrics.daily_active_users}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[hsl(var(--muted-foreground))]">WAU</span>
+                <span className="text-sm text-muted-foreground">WAU</span>
                 <span className="text-sm font-semibold">{engagementMetrics.weekly_active_users}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[hsl(var(--muted-foreground))]">MAU</span>
+                <span className="text-sm text-muted-foreground">MAU</span>
                 <span className="text-sm font-semibold">{engagementMetrics.monthly_active_users.toLocaleString('en-IN')}</span>
               </div>
-              <div className="border-t border-[hsl(var(--border))] pt-3">
+              <div className="border-t border-border pt-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[hsl(var(--muted-foreground))]">Avg Videos / User</span>
+                  <span className="text-sm text-muted-foreground">Avg Videos / User</span>
                   <span className="text-sm font-semibold">{engagementMetrics.avg_videos_watched_per_user}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[hsl(var(--muted-foreground))]">Completion Rate</span>
+                <span className="text-sm text-muted-foreground">Completion Rate</span>
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${engagementMetrics.completion_rate}%` }} />
                   </div>
                   <span className="text-sm font-semibold">{engagementMetrics.completion_rate}%</span>
@@ -179,7 +179,7 @@ export function AnalyticsPage() {
                   <div key={item.month} className="flex flex-1 flex-col items-center gap-1">
                     <span className="text-[10px] font-medium">{`₹${(item.revenue / 1000).toFixed(0)}k`}</span>
                     <div className="w-full rounded-t-md bg-emerald-500/80 transition-all" style={{ height: `${heightPct}%` }} />
-                    <span className="text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                       {item.month.split(' ')[0].slice(0, 3)}
                     </span>
                   </div>
@@ -200,13 +200,13 @@ export function AnalyticsPage() {
                 const DeviceIcon = deviceIcons[item.device] || Monitor
                 return (
                   <div key={item.device} className="flex items-center gap-3">
-                    <DeviceIcon className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                    <DeviceIcon className="h-4 w-4 text-muted-foreground" />
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium">{item.device}</span>
                         <span className="text-sm font-semibold">{item.percentage}%</span>
                       </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                         <div
                           className={`h-full rounded-full ${item.device === 'Android' ? 'bg-emerald-500' : item.device === 'iOS' ? 'bg-blue-500' : 'bg-purple-500'}`}
                           style={{ width: `${item.percentage}%` }}
@@ -241,7 +241,7 @@ export function AnalyticsPage() {
                   <TableRow key={pkg.name}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0000C8]/10 text-[10px] font-bold text-[#0000C8]">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
                           {i + 1}
                         </span>
                         <span className="text-sm font-medium">{pkg.name}</span>
@@ -272,12 +272,12 @@ export function AnalyticsPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-medium">{item.subject}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[hsl(var(--muted-foreground))]">{item.students} students</span>
+                      <span className="text-xs text-muted-foreground">{item.students} students</span>
                       <span className="text-sm font-semibold">{item.percentage}%</span>
                     </div>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
-                    <div className="h-full rounded-full bg-[#0000C8]" style={{ width: `${item.percentage}%` }} />
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${item.percentage}%` }} />
                   </div>
                 </div>
               ))}
@@ -314,7 +314,7 @@ export function AnalyticsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Eye className="h-3 w-3 text-[hsl(var(--muted-foreground))]" />
+                      <Eye className="h-3 w-3 text-muted-foreground" />
                       <span className="text-sm">{video.views.toLocaleString('en-IN')}</span>
                     </div>
                   </TableCell>

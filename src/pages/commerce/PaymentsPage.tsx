@@ -92,12 +92,12 @@ export function PaymentsPage() {
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <IndianRupee className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <IndianRupee className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{`₹${totalAmount.toLocaleString('en-IN')}`}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Collected</p>
+              <p className="text-xs text-muted-foreground">Total Collected</p>
             </div>
           </CardContent>
         </Card>
@@ -108,7 +108,7 @@ export function PaymentsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{successCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Successful</p>
+              <p className="text-xs text-muted-foreground">Successful</p>
             </div>
           </CardContent>
         </Card>
@@ -119,7 +119,7 @@ export function PaymentsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{pendingCount + failedCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Pending / Failed</p>
+              <p className="text-xs text-muted-foreground">Pending / Failed</p>
             </div>
           </CardContent>
         </Card>
@@ -130,7 +130,7 @@ export function PaymentsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{`₹${refundedAmount.toLocaleString('en-IN')}`}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Refunded</p>
+              <p className="text-xs text-muted-foreground">Refunded</p>
             </div>
           </CardContent>
         </Card>
@@ -139,7 +139,7 @@ export function PaymentsPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search user, transaction ID, item..."
             value={search}
@@ -175,7 +175,7 @@ export function PaymentsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -213,11 +213,11 @@ export function PaymentsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
-                      <MethodIcon className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
+                      <MethodIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-xs">{methodLabels[payment.method]}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <TableCell className="text-xs text-muted-foreground">
                     {payment.method === 'upi' && payment.upi_id ? payment.upi_id : null}
                     {payment.method === 'card' && payment.card_last4 ? `•••• ${payment.card_last4}` : null}
                     {payment.method === 'netbanking' && payment.bank_name ? payment.bank_name : null}
@@ -230,7 +230,7 @@ export function PaymentsPage() {
                       {status.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <TableCell className="text-xs text-muted-foreground">
                     {new Date(payment.createdAt).toLocaleDateString('en-IN', {
                       day: 'numeric', month: 'short', year: 'numeric',
                     })}
@@ -279,7 +279,7 @@ export function PaymentsPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {mockPayments.length} transactions
         </p>
         <div className="flex gap-2">

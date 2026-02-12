@@ -111,12 +111,12 @@ export function InvoicesPage() {
       <div className="mb-6 grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <FileText className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{totalInvoices}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Invoices</p>
+              <p className="text-xs text-muted-foreground">Total Invoices</p>
             </div>
           </CardContent>
         </Card>
@@ -127,7 +127,7 @@ export function InvoicesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{`₹${paidAmount.toLocaleString('en-IN')}`}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Paid Amount</p>
+              <p className="text-xs text-muted-foreground">Paid Amount</p>
             </div>
           </CardContent>
         </Card>
@@ -138,7 +138,7 @@ export function InvoicesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{`₹${unpaidAmount.toLocaleString('en-IN')}`}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Unpaid Amount</p>
+              <p className="text-xs text-muted-foreground">Unpaid Amount</p>
             </div>
           </CardContent>
         </Card>
@@ -147,7 +147,7 @@ export function InvoicesPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search invoice #, user, item..."
             value={search}
@@ -180,7 +180,7 @@ export function InvoicesPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -209,17 +209,17 @@ export function InvoicesPage() {
                 <TableCell className="text-sm">
                   {`₹${invoice.amount.toLocaleString('en-IN')}`}
                 </TableCell>
-                <TableCell className="text-sm text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-sm text-muted-foreground">
                   {`₹${invoice.gst_amount.toLocaleString('en-IN')}`}
                 </TableCell>
                 <TableCell className="text-sm font-medium">
                   {`₹${(invoice.amount + invoice.gst_amount).toLocaleString('en-IN')}`}
                 </TableCell>
                 <TableCell>{paymentBadge(invoice.payment_status)}</TableCell>
-                <TableCell className="text-xs font-mono text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs font-mono text-muted-foreground">
                   {invoice.zoho_invoice_id || '—'}
                 </TableCell>
-                <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(invoice.createdAt).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'short',
@@ -261,7 +261,7 @@ export function InvoicesPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {totalInvoices} invoices
         </p>
         <div className="flex gap-2">

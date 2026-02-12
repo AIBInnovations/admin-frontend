@@ -60,27 +60,27 @@ export function VideosPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10"><Video className="h-5 w-5 text-[#0000C8]" /></div>
-          <div><p className="text-2xl font-bold">{totalVideos}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Videos</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><Video className="h-5 w-5 text-primary" /></div>
+          <div><p className="text-2xl font-bold">{totalVideos}</p><p className="text-xs text-muted-foreground">Total Videos</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><Eye className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{totalViews.toLocaleString('en-IN')}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Views</p></div>
+          <div><p className="text-2xl font-bold">{totalViews.toLocaleString('en-IN')}</p><p className="text-xs text-muted-foreground">Total Views</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10"><HardDrive className="h-5 w-5 text-violet-600" /></div>
-          <div><p className="text-2xl font-bold">{formatSize(totalSizeMb)}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Size</p></div>
+          <div><p className="text-2xl font-bold">{formatSize(totalSizeMb)}</p><p className="text-xs text-muted-foreground">Total Size</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Loader2 className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{processingCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Processing</p></div>
+          <div><p className="text-2xl font-bold">{processingCount}</p><p className="text-xs text-muted-foreground">Processing</p></div>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search videos or faculty..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -94,7 +94,7 @@ export function VideosPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -113,12 +113,12 @@ export function VideosPage() {
               <TableRow key={video._id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0000C8]/10">
-                      <Play className="h-4 w-4 text-[#0000C8]" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Play className="h-4 w-4 text-primary" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">{video.title}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{video.module_name}</p>
+                      <p className="text-xs text-muted-foreground">{video.module_name}</p>
                     </div>
                   </div>
                 </TableCell>
@@ -165,7 +165,7 @@ export function VideosPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Showing {filtered.length} of {totalVideos} videos</p>
+        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalVideos} videos</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled>Previous</Button>
           <Button variant="outline" size="sm">Next</Button>

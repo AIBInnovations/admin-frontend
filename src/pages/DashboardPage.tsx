@@ -26,7 +26,7 @@ function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+            <p className="text-sm font-medium text-muted-foreground">
               {title}
             </p>
             <p className="text-3xl font-bold tracking-tight">{value}</p>
@@ -41,8 +41,8 @@ function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
               {trend}
             </p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0000C8]/10">
-            <Icon className="h-5 w-5 text-[#0000C8]" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+            <Icon className="h-5 w-5 text-primary" />
           </div>
         </div>
       </CardContent>
@@ -166,7 +166,7 @@ export function DashboardPage() {
           <CardContent className="space-y-4">
             {recentActivity.map((item, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--muted))] text-xs font-semibold">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                   {item.user
                     .split(' ')
                     .map((n) => n[0])
@@ -175,12 +175,12 @@ export function DashboardPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm">
                     <span className="font-medium">{item.user}</span>{' '}
-                    <span className="text-[hsl(var(--muted-foreground))]">
+                    <span className="text-muted-foreground">
                       {item.action}
                     </span>{' '}
                     <span className="font-medium">{item.target}</span>
                   </p>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <p className="text-xs text-muted-foreground">
                     {item.time}
                   </p>
                 </div>
@@ -204,25 +204,25 @@ export function DashboardPage() {
             {upcomingSessions.map((session, i) => (
               <div
                 key={i}
-                className="flex items-start justify-between gap-4 rounded-lg border border-[hsl(var(--border))] p-3"
+                className="flex items-start justify-between gap-4 rounded-lg border border-border p-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{session.title}</p>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <p className="text-xs text-muted-foreground">
                     {session.faculty}
                   </p>
-                  <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {session.time}
                   </p>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-[#0000C8]"
+                      className="h-full rounded-full bg-primary"
                       style={{
                         width: `${(session.enrolled / session.capacity) * 100}%`,
                       }}
                     />
                   </div>
-                  <p className="mt-1 text-[10px] text-[hsl(var(--muted-foreground))]">
+                  <p className="mt-1 text-[10px] text-muted-foreground">
                     {session.enrolled}/{session.capacity} enrolled
                   </p>
                 </div>

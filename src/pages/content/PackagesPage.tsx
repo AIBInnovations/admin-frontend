@@ -52,23 +52,23 @@ export function PackagesPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-3 gap-4">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10"><Package className="h-5 w-5 text-[#0000C8]" /></div>
-          <div><p className="text-2xl font-bold">{totalPackages}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Packages</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><Package className="h-5 w-5 text-primary" /></div>
+          <div><p className="text-2xl font-bold">{totalPackages}</p><p className="text-xs text-muted-foreground">Total Packages</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><CheckCircle className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{activePackages}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Active</p></div>
+          <div><p className="text-2xl font-bold">{activePackages}</p><p className="text-xs text-muted-foreground">Active</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Percent className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{onSalePackages}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">On Sale</p></div>
+          <div><p className="text-2xl font-bold">{onSalePackages}</p><p className="text-xs text-muted-foreground">On Sale</p></div>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search packages..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={subjectFilter} onValueChange={setSubjectFilter}>
@@ -83,7 +83,7 @@ export function PackagesPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -101,7 +101,7 @@ export function PackagesPage() {
               <TableRow key={pkg._id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0000C8]/10 text-sm font-bold text-[#0000C8]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
                       {pkg.name.charAt(0)}
                     </div>
                     <div>
@@ -119,13 +119,13 @@ export function PackagesPage() {
                           <span className="text-sm font-semibold text-emerald-600">₹{pkg.sale_price?.toLocaleString('en-IN')}</span>
                           <Badge className="bg-emerald-500/10 text-[10px] text-emerald-700 hover:bg-emerald-500/10">SALE</Badge>
                         </div>
-                        <span className="text-xs text-[hsl(var(--muted-foreground))] line-through">₹{(pkg.original_price ?? pkg.price).toLocaleString('en-IN')}</span>
+                        <span className="text-xs text-muted-foreground line-through">₹{(pkg.original_price ?? pkg.price).toLocaleString('en-IN')}</span>
                       </>
                     ) : (
                       <>
                         <span className="text-sm font-semibold">₹{pkg.price.toLocaleString('en-IN')}</span>
                         {pkg.original_price && (
-                          <span className="text-xs text-[hsl(var(--muted-foreground))] line-through">₹{pkg.original_price.toLocaleString('en-IN')}</span>
+                          <span className="text-xs text-muted-foreground line-through">₹{pkg.original_price.toLocaleString('en-IN')}</span>
                         )}
                       </>
                     )}
@@ -159,7 +159,7 @@ export function PackagesPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Showing {filtered.length} of {totalPackages} packages</p>
+        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalPackages} packages</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled>Previous</Button>
           <Button variant="outline" size="sm">Next</Button>

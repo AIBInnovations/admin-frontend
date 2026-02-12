@@ -8,14 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // PGME Brand Colors
-        brand: {
-          primary: '#0000C8',
-          secondary: '#00BEFA',
-          'primary-dark': '#000099',
-          'secondary-dark': '#0095C8',
-        },
-        // shadcn/ui color system
+        // shadcn/ui color system (semantic tokens)
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -50,10 +43,39 @@ export default {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      spacing: {
+        // Design token spacing scale (4px base unit)
+        '1': 'var(--space-1)',
+        '2': 'var(--space-2)',
+        '3': 'var(--space-3)',
+        '4': 'var(--space-4)',
+        '5': 'var(--space-5)',
+        '6': 'var(--space-6)',
+        '8': 'var(--space-8)',
+        '10': 'var(--space-10)',
+        '12': 'var(--space-12)',
+        '16': 'var(--space-16)',
+      },
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        sm: 'var(--border-radius-sm)',
+        md: 'var(--border-radius-md)',
+        lg: 'var(--border-radius-lg)',
+        full: 'var(--border-radius-full)',
+      },
+      fontSize: {
+        xs: 'var(--text-xs)',
+        sm: 'var(--text-sm)',
+        base: 'var(--text-base)',
+        lg: 'var(--text-lg)',
+        xl: 'var(--text-xl)',
+        '2xl': 'var(--text-2xl)',
+        '3xl': 'var(--text-3xl)',
+      },
+      fontWeight: {
+        normal: 'var(--font-regular)',
+        medium: 'var(--font-medium)',
+        semibold: 'var(--font-semibold)',
+        bold: 'var(--font-bold)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

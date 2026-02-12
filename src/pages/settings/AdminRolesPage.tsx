@@ -109,7 +109,7 @@ export function AdminRolesPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* User Count */}
-                <div className="flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))]">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="h-4 w-4" />
                   <span>{userCount} {userCount === 1 ? 'user' : 'users'} assigned</span>
                 </div>
@@ -118,7 +118,7 @@ export function AdminRolesPage() {
 
                 {/* Permissions */}
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Permissions
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -145,7 +145,7 @@ export function AdminRolesPage() {
                       Edit Permissions
                     </Button>
                   ) : (
-                    <p className="text-center text-xs text-[hsl(var(--muted-foreground))]">
+                    <p className="text-center text-xs text-muted-foreground">
                       Cannot modify
                     </p>
                   )}

@@ -66,12 +66,12 @@ export function AdminUsersPage() {
       <div className="mb-6 grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <UserCog className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <UserCog className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{totalAdmins}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Admins</p>
+              <p className="text-xs text-muted-foreground">Total Admins</p>
             </div>
           </CardContent>
         </Card>
@@ -82,7 +82,7 @@ export function AdminUsersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{activeAdmins}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Active</p>
+              <p className="text-xs text-muted-foreground">Active</p>
             </div>
           </CardContent>
         </Card>
@@ -93,7 +93,7 @@ export function AdminUsersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{inactiveAdmins}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Inactive</p>
+              <p className="text-xs text-muted-foreground">Inactive</p>
             </div>
           </CardContent>
         </Card>
@@ -102,7 +102,7 @@ export function AdminUsersPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search name, email, phone..."
             value={search}
@@ -132,7 +132,7 @@ export function AdminUsersPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -151,12 +151,12 @@ export function AdminUsersPage() {
                 <TableRow key={admin._id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--muted))] text-xs font-semibold">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                         {admin.name.split(' ').map((n) => n[0]).join('')}
                       </div>
                       <div>
                         <p className="text-sm font-medium">{admin.name}</p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">{admin.email}</p>
+                        <p className="text-xs text-muted-foreground">{admin.email}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -174,7 +174,7 @@ export function AdminUsersPage() {
                       {admin.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <TableCell className="text-xs text-muted-foreground">
                     {new Date(admin.createdAt).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
@@ -226,7 +226,7 @@ export function AdminUsersPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {totalAdmins} admins
         </p>
         <div className="flex gap-2">

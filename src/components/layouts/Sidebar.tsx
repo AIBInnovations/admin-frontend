@@ -107,13 +107,13 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          'relative flex flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--card))] transition-all duration-300 ease-in-out',
+          'relative flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out',
           isOpen ? 'w-64' : 'w-[68px]'
         )}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center gap-2 border-b border-[hsl(var(--border))] px-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0000C8] text-sm font-bold text-white">
+        <div className="flex h-16 items-center gap-2 border-b border-border px-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
             P
           </div>
           {isOpen && (
@@ -150,15 +150,15 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         </ScrollArea>
 
         {/* User Profile (footer) */}
-        <div className="border-t border-[hsl(var(--border))] p-3">
+        <div className="border-t border-border p-3">
           <div className={cn('flex items-center gap-3', !isOpen && 'justify-center')}>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0000C8]/10 text-sm font-semibold text-[#0000C8]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
               SA
             </div>
             {isOpen && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">Super Admin</p>
-                <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                <p className="truncate text-xs text-muted-foreground">
                   admin@pgme.com
                 </p>
               </div>
@@ -203,8 +203,8 @@ function NavItemComponent({
                 className={cn(
                   'flex h-10 w-full items-center justify-center rounded-lg transition-colors',
                   hasActiveChild
-                    ? 'bg-[#0000C8]/10 text-[#0000C8]'
-                    : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" />
@@ -226,13 +226,13 @@ function NavItemComponent({
             className={cn(
               'relative flex h-10 items-center justify-center rounded-lg transition-colors',
               isActive
-                ? 'bg-[#0000C8] text-white'
-                : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
           >
             <Icon className="h-5 w-5 shrink-0" />
             {item.badge && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0000C8] text-[9px] font-medium text-white">
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-medium text-primary-foreground">
                 !
               </span>
             )}
@@ -255,8 +255,8 @@ function NavItemComponent({
           className={cn(
             'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
             hasActiveChild
-              ? 'text-[#0000C8]'
-              : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]'
+              ? 'text-primary'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           )}
         >
           <Icon className="h-5 w-5 shrink-0" />
@@ -269,7 +269,7 @@ function NavItemComponent({
           />
         </button>
         {isExpanded && (
-          <div className="ml-4 mt-1 space-y-0.5 border-l border-[hsl(var(--border))] pl-3">
+          <div className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
             {item.children.map((child) => {
               const childActive = location.pathname === child.href
               return (
@@ -277,10 +277,10 @@ function NavItemComponent({
                   key={child.name}
                   to={child.href}
                   className={cn(
-                    'flex h-9 items-center rounded-lg px-3 text-sm transition-colors',
+                    'flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-all',
                     childActive
-                      ? 'bg-[#0000C8] font-medium text-white'
-                      : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]'
+                      ? 'bg-primary text-primary-foreground shadow-sm border-l-2 border-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   {child.name}
@@ -300,16 +300,15 @@ function NavItemComponent({
       className={cn(
         'flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
         isActive
-          ? 'bg-[#0000C8] text-white'
-          : 'text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]'
+          ? 'bg-primary text-primary-foreground shadow-sm'
+          : 'text-foreground hover:bg-accent hover:text-accent-foreground'
       )}
     >
       <Icon className="h-5 w-5 shrink-0" />
       <span className="flex-1">{item.name}</span>
       {item.badge && (
         <Badge
-          variant="secondary"
-          className="ml-auto h-5 px-1.5 text-[10px] font-medium"
+          className="ml-auto h-5 px-1.5 text-[10px] font-medium bg-primary text-primary-foreground border-0"
         >
           {item.badge}
         </Badge>

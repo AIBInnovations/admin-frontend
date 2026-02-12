@@ -7,7 +7,7 @@ export function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))]">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}

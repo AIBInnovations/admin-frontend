@@ -90,12 +90,12 @@ export function PurchasesPage() {
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <CreditCard className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <CreditCard className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{totalPurchases}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Purchases</p>
+              <p className="text-xs text-muted-foreground">Total Purchases</p>
             </div>
           </CardContent>
         </Card>
@@ -106,7 +106,7 @@ export function PurchasesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{`₹${totalRevenue.toLocaleString('en-IN')}`}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Revenue</p>
+              <p className="text-xs text-muted-foreground">Total Revenue</p>
             </div>
           </CardContent>
         </Card>
@@ -117,7 +117,7 @@ export function PurchasesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{completedCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Completed</p>
+              <p className="text-xs text-muted-foreground">Completed</p>
             </div>
           </CardContent>
         </Card>
@@ -128,7 +128,7 @@ export function PurchasesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{pendingFailedCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Pending / Failed</p>
+              <p className="text-xs text-muted-foreground">Pending / Failed</p>
             </div>
           </CardContent>
         </Card>
@@ -137,7 +137,7 @@ export function PurchasesPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search user, package, Zoho ID..."
             value={search}
@@ -160,7 +160,7 @@ export function PurchasesPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -190,17 +190,17 @@ export function PurchasesPage() {
                     {purchase.payment_gateway.replace('_', ' ')}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs font-mono text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs font-mono text-muted-foreground">
                   {purchase.zoho_payment_id || '—'}
                 </TableCell>
-                <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(purchase.purchased_at).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'short',
                     year: 'numeric',
                   })}
                 </TableCell>
-                <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(purchase.expires_at).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'short',
@@ -249,7 +249,7 @@ export function PurchasesPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {totalPurchases} purchases
         </p>
         <div className="flex gap-2">

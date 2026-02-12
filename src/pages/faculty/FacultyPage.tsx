@@ -60,29 +60,29 @@ export function FacultyPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-3 gap-4">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10"><GraduationCap className="h-5 w-5 text-[#0000C8]" /></div>
-          <div><p className="text-2xl font-bold">{totalFaculty}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Faculty</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><GraduationCap className="h-5 w-5 text-primary" /></div>
+          <div><p className="text-2xl font-bold">{totalFaculty}</p><p className="text-xs text-muted-foreground">Total Faculty</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><ShieldCheck className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{verifiedCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Verified</p></div>
+          <div><p className="text-2xl font-bold">{verifiedCount}</p><p className="text-xs text-muted-foreground">Verified</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Clock className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{pendingCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Pending Verification</p></div>
+          <div><p className="text-2xl font-bold">{pendingCount}</p><p className="text-xs text-muted-foreground">Pending Verification</p></div>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search name, email, phone, specialization..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -104,12 +104,12 @@ export function FacultyPage() {
                 {/* Faculty: avatar + name + email */}
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--muted))] text-xs font-semibold">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                       {getInitials(faculty.name)}
                     </div>
                     <div>
                       <p className="text-sm font-medium">{faculty.name}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{faculty.email}</p>
+                      <p className="text-xs text-muted-foreground">{faculty.email}</p>
                     </div>
                   </div>
                 </TableCell>
@@ -133,7 +133,7 @@ export function FacultyPage() {
                 {/* Sessions */}
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <Video className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
+                    <Video className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm">{faculty.session_count}</span>
                   </div>
                 </TableCell>
@@ -161,7 +161,7 @@ export function FacultyPage() {
                 </TableCell>
 
                 {/* Last Login */}
-                <TableCell className="whitespace-nowrap text-xs text-[hsl(var(--muted-foreground))]">
+                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                   {new Date(faculty.last_login).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </TableCell>
 
@@ -204,7 +204,7 @@ export function FacultyPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Showing {filtered.length} of {totalFaculty} faculty members</p>
+        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalFaculty} faculty members</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled>Previous</Button>
           <Button variant="outline" size="sm">Next</Button>
@@ -221,31 +221,31 @@ export function FacultyPage() {
           {selectedFaculty && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Phone</p>
+                <p className="text-muted-foreground">Phone</p>
                 <p className="font-medium">{selectedFaculty.phone}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Specialization</p>
+                <p className="text-muted-foreground">Specialization</p>
                 <p className="font-medium">{selectedFaculty.specialization}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Qualifications</p>
+                <p className="text-muted-foreground">Qualifications</p>
                 <p className="font-medium">{selectedFaculty.qualifications}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Experience</p>
+                <p className="text-muted-foreground">Experience</p>
                 <p className="font-medium">{selectedFaculty.experience_years} years</p>
               </div>
               <div className="col-span-2">
-                <p className="text-[hsl(var(--muted-foreground))]">Bio</p>
+                <p className="text-muted-foreground">Bio</p>
                 <p className="font-medium">{selectedFaculty.bio}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Sessions Conducted</p>
+                <p className="text-muted-foreground">Sessions Conducted</p>
                 <p className="font-medium">{selectedFaculty.session_count}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Verified</p>
+                <p className="text-muted-foreground">Verified</p>
                 <p>
                   <Badge className={selectedFaculty.is_verified ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'border-amber-200 bg-amber-100 text-amber-700'}>
                     {selectedFaculty.is_verified ? 'Verified' : 'Pending'}
@@ -253,7 +253,7 @@ export function FacultyPage() {
                 </p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Status</p>
+                <p className="text-muted-foreground">Status</p>
                 <p>
                   <Badge variant={selectedFaculty.is_active ? 'default' : 'destructive'}>
                     {selectedFaculty.is_active ? 'Active' : 'Inactive'}
@@ -261,11 +261,11 @@ export function FacultyPage() {
                 </p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Last Login</p>
+                <p className="text-muted-foreground">Last Login</p>
                 <p className="font-medium">{new Date(selectedFaculty.last_login).toLocaleString('en-IN')}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Joined</p>
+                <p className="text-muted-foreground">Joined</p>
                 <p className="font-medium">{new Date(selectedFaculty.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               </div>
             </div>

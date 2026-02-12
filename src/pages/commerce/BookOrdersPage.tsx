@@ -93,12 +93,12 @@ export function BookOrdersPage() {
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <BookCopy className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <BookCopy className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{totalOrders}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Orders</p>
+              <p className="text-xs text-muted-foreground">Total Orders</p>
             </div>
           </CardContent>
         </Card>
@@ -109,7 +109,7 @@ export function BookOrdersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{processingCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Processing</p>
+              <p className="text-xs text-muted-foreground">Processing</p>
             </div>
           </CardContent>
         </Card>
@@ -120,7 +120,7 @@ export function BookOrdersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{shippedCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Shipped</p>
+              <p className="text-xs text-muted-foreground">Shipped</p>
             </div>
           </CardContent>
         </Card>
@@ -131,7 +131,7 @@ export function BookOrdersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{deliveredCount}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Delivered</p>
+              <p className="text-xs text-muted-foreground">Delivered</p>
             </div>
           </CardContent>
         </Card>
@@ -140,7 +140,7 @@ export function BookOrdersPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search order #, customer, book title..."
             value={search}
@@ -163,7 +163,7 @@ export function BookOrdersPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -189,7 +189,7 @@ export function BookOrdersPage() {
                 <TableCell>
                   <div>
                     <p className="text-sm font-medium">{order.recipient_name}</p>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))]">{order.shipping_phone}</p>
+                    <p className="text-xs text-muted-foreground">{order.shipping_phone}</p>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm max-w-[180px] truncate">
@@ -218,13 +218,13 @@ export function BookOrdersPage() {
                   {order.tracking_number ? (
                     <div>
                       <p className="text-xs font-mono">{order.tracking_number}</p>
-                      <p className="text-[10px] text-[hsl(var(--muted-foreground))]">{order.courier_name}</p>
+                      <p className="text-[10px] text-muted-foreground">{order.courier_name}</p>
                     </div>
                   ) : (
-                    <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(order.createdAt).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'short',
@@ -262,7 +262,7 @@ export function BookOrdersPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {totalOrders} orders
         </p>
         <div className="flex gap-2">

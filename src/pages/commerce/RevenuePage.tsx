@@ -59,11 +59,11 @@ export function RevenuePage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#0000C8]/10">
-                <IndianRupee className="h-6 w-6 text-[#0000C8]" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                <IndianRupee className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Revenue</p>
+                <p className="text-xs text-muted-foreground">Total Revenue</p>
                 <p className="text-3xl font-bold">{`₹${totalRevenue.toLocaleString('en-IN')}`}</p>
               </div>
             </div>
@@ -80,11 +80,11 @@ export function RevenuePage() {
                 <Package className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Package Revenue</p>
+                <p className="text-xs text-muted-foreground">Package Revenue</p>
                 <p className="text-3xl font-bold">{`₹${packageRevenue.toLocaleString('en-IN')}`}</p>
               </div>
             </div>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            <p className="text-xs text-muted-foreground">
               {packagePct}% of total category revenue
             </p>
           </CardContent>
@@ -96,11 +96,11 @@ export function RevenuePage() {
                 <BookOpen className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Book Revenue</p>
+                <p className="text-xs text-muted-foreground">Book Revenue</p>
                 <p className="text-3xl font-bold">{`₹${bookRevenue.toLocaleString('en-IN')}`}</p>
               </div>
             </div>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            <p className="text-xs text-muted-foreground">
               {bookPct}% of total category revenue
             </p>
           </CardContent>
@@ -112,11 +112,11 @@ export function RevenuePage() {
                 <Video className="h-6 w-6 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Session Revenue</p>
+                <p className="text-xs text-muted-foreground">Session Revenue</p>
                 <p className="text-3xl font-bold">{`₹${sessionRevenue.toLocaleString('en-IN')}`}</p>
               </div>
             </div>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            <p className="text-xs text-muted-foreground">
               {sessionPct}% of total category revenue
             </p>
           </CardContent>
@@ -127,7 +127,7 @@ export function RevenuePage() {
       <div className="mb-8 grid grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Package Sales Breakdown
             </CardTitle>
           </CardHeader>
@@ -145,13 +145,13 @@ export function RevenuePage() {
                   {`₹${paidInvoices.filter((i) => i.purchase_type === 'package').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="border-t border-[hsl(var(--border))] pt-3 flex items-center justify-between">
+              <div className="border-t border-border pt-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Total</span>
                 <span className="text-lg font-bold text-blue-600">
                   {`₹${packageRevenue.toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-blue-500" style={{ width: `${packagePct}%` }} />
               </div>
             </div>
@@ -160,7 +160,7 @@ export function RevenuePage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Book Sales Breakdown
             </CardTitle>
           </CardHeader>
@@ -178,13 +178,13 @@ export function RevenuePage() {
                   {`₹${paidInvoices.filter((i) => i.purchase_type === 'book').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="border-t border-[hsl(var(--border))] pt-3 flex items-center justify-between">
+              <div className="border-t border-border pt-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Total</span>
                 <span className="text-lg font-bold text-purple-600">
                   {`₹${bookRevenue.toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-purple-500" style={{ width: `${bookPct}%` }} />
               </div>
             </div>
@@ -193,7 +193,7 @@ export function RevenuePage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Session Sales Breakdown
             </CardTitle>
           </CardHeader>
@@ -211,13 +211,13 @@ export function RevenuePage() {
                   {`₹${paidInvoices.filter((i) => i.purchase_type === 'session').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="border-t border-[hsl(var(--border))] pt-3 flex items-center justify-between">
+              <div className="border-t border-border pt-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Total</span>
                 <span className="text-lg font-bold text-emerald-600">
                   {`₹${sessionRevenue.toLocaleString('en-IN')}`}
                 </span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-emerald-500" style={{ width: `${sessionPct}%` }} />
               </div>
             </div>
@@ -231,7 +231,7 @@ export function RevenuePage() {
           <CardTitle className="text-lg font-semibold">Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="rounded-b-lg border-t border-[hsl(var(--border))]">
+          <div className="rounded-b-lg border-t border-border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -255,7 +255,7 @@ export function RevenuePage() {
                         Completed
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                    <TableCell className="text-xs text-muted-foreground">
                       {new Date(txn.purchased_at).toLocaleDateString('en-IN', {
                         day: 'numeric',
                         month: 'short',

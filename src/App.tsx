@@ -1,7 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { DashboardLayout } from '@/components/layouts'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 
 // Pages
+import { LoginPage } from '@/pages/auth/LoginPage'
+import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { UsersPage } from '@/pages/users/UsersPage'
 import { SubjectsPage } from '@/pages/content/SubjectsPage'
@@ -29,50 +33,59 @@ import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route element={<DashboardLayout />}>
-          {/* Dashboard */}
-          <Route path="/" element={<DashboardPage />} />
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          {/* Users */}
-          <Route path="/users" element={<UsersPage />} />
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<DashboardLayout />}>
+              {/* Dashboard */}
+              <Route path="/" element={<DashboardPage />} />
 
-          {/* Content */}
-          <Route path="/content/subjects" element={<SubjectsPage />} />
-          <Route path="/content/packages" element={<PackagesPage />} />
-          <Route path="/content/series" element={<SeriesPage />} />
-          <Route path="/content/modules" element={<ModulesPage />} />
-          <Route path="/content/videos" element={<VideosPage />} />
-          <Route path="/content/documents" element={<DocumentsPage />} />
-          <Route path="/content/video-tags" element={<VideoTagsPage />} />
-          <Route path="/content/books" element={<BooksPage />} />
-          <Route path="/content/banners" element={<BannersPage />} />
+              {/* Users */}
+              <Route path="/users" element={<UsersPage />} />
 
-          {/* Live Sessions */}
-          <Route path="/sessions" element={<SessionsPage />} />
+              {/* Content */}
+              <Route path="/content/subjects" element={<SubjectsPage />} />
+              <Route path="/content/packages" element={<PackagesPage />} />
+              <Route path="/content/series" element={<SeriesPage />} />
+              <Route path="/content/modules" element={<ModulesPage />} />
+              <Route path="/content/videos" element={<VideosPage />} />
+              <Route path="/content/documents" element={<DocumentsPage />} />
+              <Route path="/content/video-tags" element={<VideoTagsPage />} />
+              <Route path="/content/books" element={<BooksPage />} />
+              <Route path="/content/banners" element={<BannersPage />} />
 
-          {/* Faculty */}
-          <Route path="/faculty" element={<FacultyPage />} />
+              {/* Live Sessions */}
+              <Route path="/sessions" element={<SessionsPage />} />
 
-          {/* Commerce */}
-          <Route path="/commerce/purchases" element={<PurchasesPage />} />
-          <Route path="/commerce/payments" element={<PaymentsPage />} />
-          <Route path="/commerce/book-orders" element={<BookOrdersPage />} />
-          <Route path="/commerce/revenue" element={<RevenuePage />} />
-          <Route path="/commerce/invoices" element={<InvoicesPage />} />
+              {/* Faculty */}
+              <Route path="/faculty" element={<FacultyPage />} />
 
-          {/* Analytics */}
-          <Route path="/analytics" element={<AnalyticsPage />} />
+              {/* Commerce */}
+              <Route path="/commerce/purchases" element={<PurchasesPage />} />
+              <Route path="/commerce/payments" element={<PaymentsPage />} />
+              <Route path="/commerce/book-orders" element={<BookOrdersPage />} />
+              <Route path="/commerce/revenue" element={<RevenuePage />} />
+              <Route path="/commerce/invoices" element={<InvoicesPage />} />
 
-          {/* Notifications */}
-          <Route path="/notifications" element={<NotificationsPage />} />
+              {/* Analytics */}
+              <Route path="/analytics" element={<AnalyticsPage />} />
 
-          {/* Settings */}
-          <Route path="/settings/admin-users" element={<AdminUsersPage />} />
-          <Route path="/settings/admin-roles" element={<AdminRolesPage />} />
-          <Route path="/settings/app" element={<AppSettingsPage />} />
-        </Route>
-      </Routes>
+              {/* Notifications */}
+              <Route path="/notifications" element={<NotificationsPage />} />
+
+              {/* Settings */}
+              <Route path="/settings/admin-users" element={<AdminUsersPage />} />
+              <Route path="/settings/admin-roles" element={<AdminRolesPage />} />
+              <Route path="/settings/app" element={<AppSettingsPage />} />
+            </Route>
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

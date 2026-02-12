@@ -76,12 +76,12 @@ export function NotificationsPage() {
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10">
-              <Send className="h-5 w-5 text-[#0000C8]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Send className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold">{totalSent}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Campaigns Sent</p>
+              <p className="text-xs text-muted-foreground">Campaigns Sent</p>
             </div>
           </CardContent>
         </Card>
@@ -92,7 +92,7 @@ export function NotificationsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{totalDelivered.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Delivered</p>
+              <p className="text-xs text-muted-foreground">Total Delivered</p>
             </div>
           </CardContent>
         </Card>
@@ -103,7 +103,7 @@ export function NotificationsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{avgReadRate}%</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Avg Read Rate</p>
+              <p className="text-xs text-muted-foreground">Avg Read Rate</p>
             </div>
           </CardContent>
         </Card>
@@ -114,7 +114,7 @@ export function NotificationsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{totalClicks.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Total Clicks</p>
+              <p className="text-xs text-muted-foreground">Total Clicks</p>
             </div>
           </CardContent>
         </Card>
@@ -123,7 +123,7 @@ export function NotificationsPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search notifications..."
             value={search}
@@ -158,7 +158,7 @@ export function NotificationsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -192,7 +192,7 @@ export function NotificationsPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{notif.title}</p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))] truncate max-w-[240px]">{notif.body}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[240px]">{notif.body}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -202,7 +202,7 @@ export function NotificationsPage() {
                   <TableCell>
                     <div>
                       <span className="text-xs font-medium">{targetLabels[notif.target]}</span>
-                      <p className="text-[10px] text-[hsl(var(--muted-foreground))]">{notif.target_count.toLocaleString('en-IN')} recipients</p>
+                      <p className="text-[10px] text-muted-foreground">{notif.target_count.toLocaleString('en-IN')} recipients</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm font-medium">
@@ -216,13 +216,13 @@ export function NotificationsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+                      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
                         <div
                           className={`h-full rounded-full ${readRate >= 60 ? 'bg-emerald-500' : readRate >= 30 ? 'bg-amber-500' : 'bg-red-500'}`}
                           style={{ width: `${readRate}%` }}
                         />
                       </div>
-                      <span className="text-xs text-[hsl(var(--muted-foreground))]">{readRate}%</span>
+                      <span className="text-xs text-muted-foreground">{readRate}%</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -236,7 +236,7 @@ export function NotificationsPage() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <TableCell className="text-xs text-muted-foreground">
                     {notif.sent_at
                       ? new Date(notif.sent_at).toLocaleDateString('en-IN', {
                           day: 'numeric', month: 'short',
@@ -247,7 +247,7 @@ export function NotificationsPage() {
                           })
                         : '—'}
                   </TableCell>
-                  <TableCell className="text-xs text-[hsl(var(--muted-foreground))]">
+                  <TableCell className="text-xs text-muted-foreground">
                     {notif.created_by}
                   </TableCell>
                   <TableCell>
@@ -282,7 +282,7 @@ export function NotificationsPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="text-sm text-muted-foreground">
           Showing {filtered.length} of {mockNotifications.length} notifications
         </p>
         <div className="flex gap-2">

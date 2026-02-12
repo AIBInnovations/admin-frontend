@@ -77,27 +77,27 @@ export function SessionsPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10"><Video className="h-5 w-5 text-[#0000C8]" /></div>
-          <div><p className="text-2xl font-bold">{totalSessions}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Sessions</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><Video className="h-5 w-5 text-primary" /></div>
+          <div><p className="text-2xl font-bold">{totalSessions}</p><p className="text-xs text-muted-foreground">Total Sessions</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10"><Calendar className="h-5 w-5 text-blue-600" /></div>
-          <div><p className="text-2xl font-bold">{scheduledCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Scheduled</p></div>
+          <div><p className="text-2xl font-bold">{scheduledCount}</p><p className="text-xs text-muted-foreground">Scheduled</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><CalendarCheck className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{completedCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Completed</p></div>
+          <div><p className="text-2xl font-bold">{completedCount}</p><p className="text-xs text-muted-foreground">Completed</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10"><CalendarX className="h-5 w-5 text-red-500" /></div>
-          <div><p className="text-2xl font-bold">{cancelledCount}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Cancelled</p></div>
+          <div><p className="text-2xl font-bold">{cancelledCount}</p><p className="text-xs text-muted-foreground">Cancelled</p></div>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search by session title..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -112,7 +112,7 @@ export function SessionsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -140,7 +140,7 @@ export function SessionsPage() {
                   {/* Session title + description */}
                   <TableCell className="max-w-[200px]">
                     <p className="truncate text-sm font-medium">{session.title}</p>
-                    <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">{session.description}</p>
+                    <p className="truncate text-xs text-muted-foreground">{session.description}</p>
                   </TableCell>
 
                   {/* Faculty */}
@@ -167,9 +167,9 @@ export function SessionsPage() {
                           {session.enrolled_count}/{session.capacity_mode === 'unlimited' ? '\u221E' : session.max_attendees}
                         </p>
                         {session.capacity_mode === 'limited' && session.max_attendees && (
-                          <div className="mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-[hsl(var(--muted))]">
+                          <div className="mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-muted">
                             <div
-                              className={`h-full rounded-full ${capacityPercent >= 90 ? 'bg-red-500' : capacityPercent >= 70 ? 'bg-amber-500' : 'bg-[#0000C8]'}`}
+                              className={`h-full rounded-full ${capacityPercent >= 90 ? 'bg-red-500' : capacityPercent >= 70 ? 'bg-amber-500' : 'bg-primary'}`}
                               style={{ width: `${capacityPercent}%` }}
                             />
                           </div>
@@ -243,7 +243,7 @@ export function SessionsPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Showing {filtered.length} of {totalSessions} sessions</p>
+        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalSessions} sessions</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled>Previous</Button>
           <Button variant="outline" size="sm">Next</Button>
@@ -260,56 +260,56 @@ export function SessionsPage() {
           {selectedSession && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Faculty</p>
+                <p className="text-muted-foreground">Faculty</p>
                 <p className="font-medium">{selectedSession.faculty_name}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Subject</p>
+                <p className="text-muted-foreground">Subject</p>
                 <p className="font-medium">{selectedSession.subject_name}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Date & Time</p>
+                <p className="text-muted-foreground">Date & Time</p>
                 <p className="font-medium">{formatSessionDateTime(selectedSession.scheduled_start_time)}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Duration</p>
+                <p className="text-muted-foreground">Duration</p>
                 <p className="font-medium">{formatDuration(selectedSession.duration_minutes)}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Platform</p>
+                <p className="text-muted-foreground">Platform</p>
                 <p className="font-medium capitalize">{selectedSession.platform}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Status</p>
+                <p className="text-muted-foreground">Status</p>
                 <Badge className={statusConfig[selectedSession.status].className}>
                   {statusConfig[selectedSession.status].label}
                 </Badge>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Capacity</p>
+                <p className="text-muted-foreground">Capacity</p>
                 <p className="font-medium">
                   {selectedSession.enrolled_count} / {selectedSession.capacity_mode === 'unlimited' ? '\u221E' : selectedSession.max_attendees}
                   {' '}enrolled
                 </p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Pricing</p>
+                <p className="text-muted-foreground">Pricing</p>
                 <p className="font-medium">{selectedSession.is_free ? 'Free' : `\u20B9${selectedSession.price}`}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Enrollment Mode</p>
+                <p className="text-muted-foreground">Enrollment Mode</p>
                 <p className="font-medium capitalize">{selectedSession.enrollment_mode.replace('_', ' ')}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Waitlist</p>
+                <p className="text-muted-foreground">Waitlist</p>
                 <p className="font-medium">{selectedSession.allow_waitlist ? 'Allowed' : 'Not allowed'}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Guaranteed Seats (Paid)</p>
+                <p className="text-muted-foreground">Guaranteed Seats (Paid)</p>
                 <p className="font-medium">{selectedSession.guaranteed_seats_for_paid ? 'Yes' : 'No'}</p>
               </div>
               <div>
-                <p className="text-[hsl(var(--muted-foreground))]">Capacity Mode</p>
+                <p className="text-muted-foreground">Capacity Mode</p>
                 <p className="font-medium capitalize">{selectedSession.capacity_mode}</p>
               </div>
             </div>

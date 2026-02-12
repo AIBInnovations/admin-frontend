@@ -28,7 +28,7 @@ export function PageHeader({
   action,
 }: PageHeaderProps) {
   return (
-    <div className="mb-6 space-y-3">
+    <div className="space-y-4">
       {breadcrumbs && breadcrumbs.length > 0 && (
         <Breadcrumb>
           <BreadcrumbList>
@@ -51,9 +51,9 @@ export function PageHeader({
       )}
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {description && (
-            <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            <p className="mt-1 text-sm text-muted-foreground">
               {description}
             </p>
           )}

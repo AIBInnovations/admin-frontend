@@ -40,29 +40,29 @@ export function BooksPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-3 gap-4">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0000C8]/10"><BookOpen className="h-5 w-5 text-[#0000C8]" /></div>
-          <div><p className="text-2xl font-bold">{totalBooks}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Total Books</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><BookOpen className="h-5 w-5 text-primary" /></div>
+          <div><p className="text-2xl font-bold">{totalBooks}</p><p className="text-xs text-muted-foreground">Total Books</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><PackageCheck className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{inStock}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">In Stock</p></div>
+          <div><p className="text-2xl font-bold">{inStock}</p><p className="text-xs text-muted-foreground">In Stock</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10"><PackageX className="h-5 w-5 text-red-500" /></div>
-          <div><p className="text-2xl font-bold">{outOfStock}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Out of Stock</p></div>
+          <div><p className="text-2xl font-bold">{outOfStock}</p><p className="text-xs text-muted-foreground">Out of Stock</p></div>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search title, author, ISBN..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-[hsl(var(--border))]">
+      <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -83,16 +83,16 @@ export function BooksPage() {
               <TableRow key={book._id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0000C8]/10 text-sm font-bold text-[#0000C8]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
                       {book.title.charAt(0)}
                     </div>
                     <div>
                       <p className="max-w-[200px] truncate text-sm font-medium">{book.title}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{book.author}</p>
+                      <p className="text-xs text-muted-foreground">{book.author}</p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="text-xs font-mono text-[hsl(var(--muted-foreground))]">{book.isbn}</TableCell>
+                <TableCell className="text-xs font-mono text-muted-foreground">{book.isbn}</TableCell>
                 <TableCell>
                   <Badge variant="secondary" className="text-[10px]">{book.category}</Badge>
                 </TableCell>
@@ -104,13 +104,13 @@ export function BooksPage() {
                           <span className="text-sm font-semibold text-emerald-600">{'\u20B9'}{book.sale_price?.toLocaleString('en-IN')}</span>
                           <Badge className="bg-emerald-500/10 text-[10px] text-emerald-700 hover:bg-emerald-500/10">SALE</Badge>
                         </div>
-                        <span className="text-xs text-[hsl(var(--muted-foreground))] line-through">{'\u20B9'}{(book.original_price ?? book.price).toLocaleString('en-IN')}</span>
+                        <span className="text-xs text-muted-foreground line-through">{'\u20B9'}{(book.original_price ?? book.price).toLocaleString('en-IN')}</span>
                       </>
                     ) : (
                       <>
                         <span className="text-sm font-semibold">{'\u20B9'}{book.price.toLocaleString('en-IN')}</span>
                         {book.original_price && (
-                          <span className="text-xs text-[hsl(var(--muted-foreground))] line-through">{'\u20B9'}{book.original_price.toLocaleString('en-IN')}</span>
+                          <span className="text-xs text-muted-foreground line-through">{'\u20B9'}{book.original_price.toLocaleString('en-IN')}</span>
                         )}
                       </>
                     )}
@@ -122,8 +122,8 @@ export function BooksPage() {
                   </span>
                 </TableCell>
                 <TableCell className="text-sm">{book.publisher}</TableCell>
-                <TableCell className="text-sm text-[hsl(var(--muted-foreground))]">{book.publication_year}</TableCell>
-                <TableCell className="text-sm text-[hsl(var(--muted-foreground))]">{book.pages}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{book.publication_year}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{book.pages}</TableCell>
                 <TableCell>
                   <Badge variant={book.is_available ? 'default' : 'outline'} className="text-[10px]">
                     {book.is_available ? 'Available' : 'Unavailable'}
@@ -150,7 +150,7 @@ export function BooksPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Showing {filtered.length} of {totalBooks} books</p>
+        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalBooks} books</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled>Previous</Button>
           <Button variant="outline" size="sm">Next</Button>
