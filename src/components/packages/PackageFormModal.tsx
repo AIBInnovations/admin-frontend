@@ -75,7 +75,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       subjectsService.getSubjects({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
         if (res.success && res.data) setSubjects(res.data.entities)
       })
-      packageTypesService.getAll().then((res) => {
+      packageTypesService.getAllPublic().then((res) => {
         if (res.success && res.data) setPackageTypes(res.data)
       })
     }

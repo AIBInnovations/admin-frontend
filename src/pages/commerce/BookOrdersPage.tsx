@@ -33,6 +33,7 @@ export function BookOrdersPage() {
   // State
   const [orders, setOrders] = useState<BookOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -75,16 +76,17 @@ export function BookOrdersPage() {
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (searchQuery.trim()) params.search = searchQuery
     if (statusFilter !== 'all') params.status = statusFilter
     if (paymentFilter !== 'all') params.payment = paymentFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [statusFilter, paymentFilter, currentPage, setSearchParams])
+  }, [searchQuery, statusFilter, paymentFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, paymentFilter])
+  }, [statusFilter, paymentFilter, searchQuery])
 
   // Handlers
   const handleViewDetails = (order: BookOrder) => {
@@ -154,6 +156,26 @@ export function BookOrdersPage() {
     onUpdateShipping: handleUpdateShipping,
   })
 
+  // Client-side search filter
+  const filteredOrders = orders.filter((order) => {
+    if (!searchQuery.trim()) return true
+
+    const query = searchQuery.toLowerCase()
+
+    // Search by book title
+    const matchesTitle = order.items.some(item =>
+      item.title.toLowerCase().includes(query)
+    )
+
+    // Search by user details (name, phone, email)
+    const matchesUser =
+      order.recipient_name.toLowerCase().includes(query) ||
+      order.shipping_phone.toLowerCase().includes(query) ||
+      (order.user_email && order.user_email.toLowerCase().includes(query))
+
+    return matchesTitle || matchesUser
+  })
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -167,9 +189,9 @@ export function BookOrdersPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter orders..."
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search by book title, recipient name, phone, or email..."
         filters={filters}
         activeFilters={{ status: statusFilter, payment: paymentFilter }}
         onFiltersChange={(f) => {
@@ -179,7 +201,7 @@ export function BookOrdersPage() {
       />
 
       <DataTable
-        data={orders}
+        data={filteredOrders}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -190,10 +212,12 @@ export function BookOrdersPage() {
         }}
         emptyState={{
           icon: BookCopy,
-          title: statusFilter !== 'all' || paymentFilter !== 'all'
-            ? 'No orders found matching your filters'
-            : 'No book orders yet',
-          description: statusFilter === 'all' && paymentFilter === 'all'
+          title: searchQuery.trim() !== ''
+            ? 'No orders found matching your search'
+            : statusFilter !== 'all' || paymentFilter !== 'all'
+              ? 'No orders found matching your filters'
+              : 'No book orders yet',
+          description: searchQuery.trim() === '' && statusFilter === 'all' && paymentFilter === 'all'
             ? 'Book orders will appear here when users purchase physical books'
             : undefined,
         }}

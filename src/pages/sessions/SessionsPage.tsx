@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -15,6 +15,7 @@ import { useSessionsColumns } from './SessionsPage.columns'
 
 export function SessionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   // State
   const [sessions, setSessions] = useState<LiveSession[]>([])
@@ -38,7 +39,6 @@ export function SessionsPage() {
       const response = await liveSessionsService.getAll({
         page: currentPage,
         limit: 20,
-        search: search || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
       })
 
@@ -53,9 +53,14 @@ export function SessionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, search, statusFilter])
+  }, [currentPage, statusFilter])
 
   useEffect(() => { fetchSessions() }, [fetchSessions])
+
+  // Client-side filter
+  const filteredSessions = search
+    ? sessions.filter((s) => s.title.toLowerCase().includes(search.toLowerCase()))
+    : sessions
 
   // URL params sync
   useEffect(() => {
@@ -185,7 +190,7 @@ export function SessionsPage() {
       />
 
       <DataTable
-        data={sessions}
+        data={filteredSessions}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -196,18 +201,19 @@ export function SessionsPage() {
         }}
         emptyState={{
           icon: Video,
-          title: search || statusFilter !== 'all'
+          title: filteredSessions.length === 0 && (search || statusFilter !== 'all')
             ? 'No sessions found matching your filters'
             : 'No live sessions yet',
-          description: !search && statusFilter === 'all'
+          description: filteredSessions.length === 0 && !search && statusFilter === 'all'
             ? 'Get started by scheduling your first live session'
             : undefined,
-          action: !search && statusFilter === 'all' ? (
+          action: filteredSessions.length === 0 && !search && statusFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Schedule your first session
             </Button>
           ) : undefined,
         }}
+        onRowClick={(session) => navigate(`/sessions/${session._id}`)}
         getRowKey={(session) => session._id}
       />
 

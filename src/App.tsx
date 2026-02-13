@@ -18,6 +18,7 @@ import { ModulesPage } from '@/pages/content/ModulesPage'
 import { VideosPage } from '@/pages/content/VideosPage'
 import { DocumentsPage } from '@/pages/content/DocumentsPage'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
+import { SessionDetailPage } from '@/pages/sessions/SessionDetailPage'
 import { FacultyPage } from '@/pages/faculty/FacultyPage'
 import { PurchasesPage } from '@/pages/commerce/PurchasesPage'
 import { PaymentsPage } from '@/pages/commerce/PaymentsPage'
@@ -32,6 +33,7 @@ import { VideoTagsPage } from '@/pages/content/VideoTagsPage'
 import { BooksPage } from '@/pages/content/BooksPage'
 import { BannersPage } from '@/pages/content/BannersPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
+import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 
 function App() {
   return (
@@ -57,6 +59,7 @@ function App() {
               <Route path="/content/subjects/:subjectId" element={<SubjectDetailPage />} />
               <Route path="/content/packages" element={<PackagesPage />} />
               <Route path="/content/packages/:packageId" element={<PackageDetailPage />} />
+              <Route path="/content/package-types" element={<PackageTypesPage />} />
               <Route path="/content/series" element={<SeriesPage />} />
               <Route path="/content/modules" element={<ModulesPage />} />
               <Route path="/content/videos" element={<VideosPage />} />
@@ -67,6 +70,7 @@ function App() {
 
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />
+              <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
 
               {/* Faculty */}
               <Route path="/faculty" element={<FacultyPage />} />

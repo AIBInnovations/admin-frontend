@@ -18,6 +18,7 @@ export function AdminUsersPage() {
   // State
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -76,6 +77,15 @@ export function AdminUsersPage() {
   }, [statusFilter, roleFilter, currentPage, setSearchParams])
 
   useEffect(() => { setCurrentPage(1) }, [statusFilter, roleFilter])
+
+  // Client-side filter
+  const filteredAdmins = search
+    ? adminUsers.filter(
+        (a) =>
+          a.name.toLowerCase().includes(search.toLowerCase()) ||
+          a.email.toLowerCase().includes(search.toLowerCase())
+      )
+    : adminUsers
 
   // Handlers
   const handleCreate = () => {
@@ -183,7 +193,7 @@ export function AdminUsersPage() {
     onToggleActive: handleToggleActive,
   })
 
-  const hasFilters = statusFilter !== 'all' || roleFilter !== 'all'
+  const hasFilters = statusFilter !== 'all' || roleFilter !== 'all' || search !== ''
 
   return (
     <div className="space-y-6">
@@ -199,9 +209,9 @@ export function AdminUsersPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter admin users..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search by name or email..."
         filters={filters}
         activeFilters={{ role: roleFilter, status: statusFilter }}
         onFiltersChange={(f) => {
@@ -211,7 +221,7 @@ export function AdminUsersPage() {
       />
 
       <DataTable
-        data={adminUsers}
+        data={filteredAdmins}
         columns={columns}
         isLoading={loading}
         pagination={{

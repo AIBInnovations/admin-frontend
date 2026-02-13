@@ -18,6 +18,7 @@ export function ModulesPage() {
   // State
   const [modules, setModules] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -191,6 +192,11 @@ export function ModulesPage() {
     onRecalculate: handleRecalculate,
   })
 
+  // Client-side filtering
+  const filteredModules = search
+    ? modules.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()))
+    : modules
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -205,9 +211,9 @@ export function ModulesPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter modules..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search modules..."
         filters={filters}
         activeFilters={{ series: seriesFilter, status: activeFilter }}
         onFiltersChange={(f) => {
@@ -217,7 +223,7 @@ export function ModulesPage() {
       />
 
       <DataTable
-        data={modules}
+        data={filteredModules}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -228,13 +234,13 @@ export function ModulesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: seriesFilter !== 'all' || activeFilter !== 'all'
+          title: seriesFilter !== 'all' || activeFilter !== 'all' || search
             ? 'No modules found matching your filters'
             : 'No modules yet',
-          description: seriesFilter === 'all' && activeFilter === 'all'
+          description: seriesFilter === 'all' && activeFilter === 'all' && !search
             ? 'Get started by creating your first module'
             : undefined,
-          action: seriesFilter === 'all' && activeFilter === 'all' ? (
+          action: seriesFilter === 'all' && activeFilter === 'all' && !search ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first module
             </Button>

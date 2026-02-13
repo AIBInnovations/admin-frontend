@@ -17,6 +17,7 @@ export function DocumentsPage() {
 
   // State
   const [documents, setDocuments] = useState<Document[]>([])
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [formatFilter, setFormatFilter] = useState(searchParams.get('format') || 'all')
@@ -36,7 +37,7 @@ export function DocumentsPage() {
 
   // Fetch series for filter dropdown
   useEffect(() => {
-    seriesService.getAll({ limit: 200, sort_by: 'name', sort_order: 'asc' }).then((res) => {
+    seriesService.getAll({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
       if (res.success && res.data) setSeriesList(res.data.entities)
     })
   }, [])
@@ -184,7 +185,9 @@ export function DocumentsPage() {
     onDelete: handleDeleteClick,
   })
 
-  const hasFilters = seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all'
+  const filteredDocuments = search ? documents.filter((d) => d.title.toLowerCase().includes(search.toLowerCase())) : documents
+
+  const hasFilters = search !== '' || seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -200,9 +203,9 @@ export function DocumentsPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter documents..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search documents..."
         filters={filters}
         activeFilters={{ series: seriesFilter, format: formatFilter, access: accessFilter }}
         onFiltersChange={(f) => {
@@ -213,7 +216,7 @@ export function DocumentsPage() {
       />
 
       <DataTable
-        data={documents}
+        data={filteredDocuments}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -224,7 +227,7 @@ export function DocumentsPage() {
         }}
         emptyState={{
           icon: FileText,
-          title: hasFilters ? 'No documents found matching your filters' : 'No documents yet',
+          title: hasFilters ? 'No documents found matching your search and filters' : 'No documents yet',
           description: !hasFilters ? 'Get started by uploading your first document' : undefined,
           action: !hasFilters ? (
             <Button onClick={handleCreate} variant="outline" size="sm">

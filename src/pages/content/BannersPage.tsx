@@ -29,6 +29,11 @@ export function BannersPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
 
+  // Client-side search filter
+  const filteredBanners = search
+    ? banners.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
+    : banners
+
   // Fetch banners
   const fetchBanners = useCallback(async () => {
     try {
@@ -36,7 +41,6 @@ export function BannersPage() {
       const response = await bannersService.getAll({
         page: currentPage,
         limit: 20,
-        search: search || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
 
@@ -51,7 +55,7 @@ export function BannersPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, search, statusFilter])
+  }, [currentPage, statusFilter])
 
   useEffect(() => { fetchBanners() }, [fetchBanners])
 
@@ -168,7 +172,7 @@ export function BannersPage() {
       />
 
       <DataTable
-        data={banners}
+        data={filteredBanners}
         columns={columns}
         isLoading={loading}
         pagination={{

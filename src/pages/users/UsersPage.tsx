@@ -28,7 +28,6 @@ export function UsersPage() {
       const response = await usersService.getAll({
         page: currentPage,
         limit: 20,
-        search: search || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
 
@@ -43,9 +42,18 @@ export function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, search, statusFilter])
+  }, [currentPage, statusFilter])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
+
+  // Client-side search filter
+  const filteredUsers = search
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(search.toLowerCase()) ||
+          u.email.toLowerCase().includes(search.toLowerCase())
+      )
+    : users
 
   // URL params sync
   useEffect(() => {
@@ -56,10 +64,10 @@ export function UsersPage() {
     setSearchParams(params)
   }, [search, statusFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
+  // Reset page when status filter changes (not search, since that's client-side)
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, statusFilter])
+  }, [statusFilter])
 
   // Handlers
   const handleBlockToggle = async (user: User) => {
@@ -123,7 +131,7 @@ export function UsersPage() {
       />
 
       <DataTable
-        data={users}
+        data={filteredUsers}
         columns={columns}
         isLoading={loading}
         onRowClick={(user) => navigate(`/users/${user._id}`)}

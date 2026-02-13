@@ -17,6 +17,7 @@ export function VideoTagsPage() {
   // State
   const [tags, setTags] = useState<VideoTag[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
@@ -30,6 +31,9 @@ export function VideoTagsPage() {
 
   // Collect unique categories from loaded tags for filter
   const categories = Array.from(new Set(tags.map((t) => t.category).filter(Boolean))) as string[]
+
+  // Client-side search filter
+  const filteredTags = search ? tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase())) : tags
 
   // Fetch tags
   const fetchTags = useCallback(async () => {
@@ -158,9 +162,9 @@ export function VideoTagsPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter tags..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search by tag name..."
         filters={filters}
         activeFilters={{ category: categoryFilter }}
         onFiltersChange={(f) => {
@@ -169,7 +173,7 @@ export function VideoTagsPage() {
       />
 
       <DataTable
-        data={tags}
+        data={filteredTags}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -180,9 +184,9 @@ export function VideoTagsPage() {
         }}
         emptyState={{
           icon: Tags,
-          title: hasFilters ? 'No tags found matching your filters' : 'No tags yet',
-          description: !hasFilters ? 'Get started by creating your first tag' : undefined,
-          action: !hasFilters ? (
+          title: search || hasFilters ? 'No tags found matching your criteria' : 'No tags yet',
+          description: !search && !hasFilters ? 'Get started by creating your first tag' : undefined,
+          action: !search && !hasFilters ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first tag
             </Button>

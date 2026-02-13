@@ -14,6 +14,7 @@ export function PaymentsPage() {
   // State
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || 'all')
   const [gatewayFilter, setGatewayFilter] = useState(searchParams.get('gateway') || 'all')
@@ -62,6 +63,25 @@ export function PaymentsPage() {
   useEffect(() => {
     setCurrentPage(1)
   }, [statusFilter, typeFilter, gatewayFilter])
+
+  // Client-side search filter
+  const filteredPayments = transactions.filter((transaction) => {
+    const searchLower = searchQuery.toLowerCase().trim()
+
+    // If no search query, include all
+    if (!searchLower) return true
+
+    // Search by transaction_id
+    if (transaction.transaction_id.toLowerCase().includes(searchLower)) return true
+
+    // Search by user name
+    if (transaction.user?.name?.toLowerCase().includes(searchLower)) return true
+
+    // Search by user email
+    if (transaction.user?.email?.toLowerCase().includes(searchLower)) return true
+
+    return false
+  })
 
   // Filters
   const filters: FilterConfig[] = [
@@ -121,9 +141,9 @@ export function PaymentsPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter transactions..."
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search by transaction ID, user name, or email..."
         filters={filters}
         activeFilters={{ status: statusFilter, type: typeFilter, gateway: gatewayFilter }}
         onFiltersChange={(f) => {
@@ -134,7 +154,7 @@ export function PaymentsPage() {
       />
 
       <DataTable
-        data={transactions}
+        data={filteredPayments}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -145,10 +165,12 @@ export function PaymentsPage() {
         }}
         emptyState={{
           icon: IndianRupee,
-          title: statusFilter !== 'all' || typeFilter !== 'all' || gatewayFilter !== 'all'
+          title: searchQuery.trim()
+            ? 'No transactions found matching your search'
+            : statusFilter !== 'all' || typeFilter !== 'all' || gatewayFilter !== 'all'
             ? 'No transactions found matching your filters'
             : 'No transactions yet',
-          description: statusFilter === 'all' && typeFilter === 'all' && gatewayFilter === 'all'
+          description: searchQuery === '' && statusFilter === 'all' && typeFilter === 'all' && gatewayFilter === 'all'
             ? 'Transactions will appear here when users make purchases'
             : undefined,
         }}

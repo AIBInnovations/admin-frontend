@@ -16,6 +16,7 @@ export function VideosPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // State
+  const [search, setSearch] = useState('')
   const [videos, setVideos] = useState<Video[]>([])
   const [loading, setLoading] = useState(true)
   const [moduleFilter, setModuleFilter] = useState(searchParams.get('module') || 'all')
@@ -183,12 +184,19 @@ export function VideosPage() {
     },
   ]
 
+  // Client-side search filter
+  const filteredVideos = search
+    ? videos.filter((video) =>
+        video.title.toLowerCase().includes(search.toLowerCase())
+      )
+    : videos
+
   const columns = useVideosColumns({
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
   })
 
-  const hasFilters = moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all'
+  const hasFilters = search || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -204,9 +212,9 @@ export function VideosPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter videos..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search videos..."
         filters={filters}
         activeFilters={{ module: moduleFilter, status: statusFilter, access: accessFilter }}
         onFiltersChange={(f) => {
@@ -217,7 +225,7 @@ export function VideosPage() {
       />
 
       <DataTable
-        data={videos}
+        data={filteredVideos}
         columns={columns}
         isLoading={loading}
         pagination={{

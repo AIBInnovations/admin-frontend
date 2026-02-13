@@ -16,6 +16,7 @@ export function FacultyPage() {
 
   // State
   const [facultyList, setFacultyList] = useState<Faculty[]>([])
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -140,6 +141,11 @@ export function FacultyPage() {
     }
   }
 
+  // Client-side filtering
+  const filteredFaculty = search
+    ? facultyList.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    : facultyList
+
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -177,8 +183,8 @@ export function FacultyPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
+        value={search}
+        onChange={setSearch}
         placeholder="Filter faculty..."
         filters={filters}
         activeFilters={{ status: statusFilter }}
@@ -188,7 +194,7 @@ export function FacultyPage() {
       />
 
       <DataTable
-        data={facultyList}
+        data={filteredFaculty}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -199,9 +205,9 @@ export function FacultyPage() {
         }}
         emptyState={{
           icon: GraduationCap,
-          title: statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
-          description: statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
-          action: statusFilter === 'all' ? (
+          title: search || statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
+          description: !search && statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
+          action: !search && statusFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first faculty
             </Button>

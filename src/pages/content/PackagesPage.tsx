@@ -6,7 +6,8 @@ import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { PackageFormModal } from '@/components/packages/PackageFormModal'
-import { Plus, Package as PackageIcon } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Package as PackageIcon, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { packagesService, Package, PackageFormData } from '@/services/packages.service'
 import { subjectsService, Subject } from '@/services/subjects.service'
@@ -19,6 +20,7 @@ export function PackagesPage() {
   // State
   const [packages, setPackages] = useState<Package[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [saleFilter, setSaleFilter] = useState(searchParams.get('sale') || 'all')
@@ -83,6 +85,13 @@ export function PackagesPage() {
   useEffect(() => {
     setCurrentPage(1)
   }, [subjectFilter, activeFilter, saleFilter])
+
+  // Client-side search filter
+  const filteredPackages = search
+    ? packages.filter((pkg) =>
+        pkg.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : packages
 
   // Handlers
   const handleCreate = () => {
@@ -206,16 +215,23 @@ export function PackagesPage() {
         description="Manage course packages, pricing, and enrollment"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Packages' }]}
         action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Package
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/content/package-types">
+                <Layers className="mr-2 h-4 w-4" />Manage Types
+              </Link>
+            </Button>
+            <Button onClick={handleCreate}>
+              <Plus className="mr-2 h-4 w-4" />Add Package
+            </Button>
+          </div>
         }
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter packages..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search packages..."
         filters={filters}
         activeFilters={{ subject: subjectFilter, status: activeFilter, sale: saleFilter }}
         onFiltersChange={(f) => {
@@ -226,7 +242,7 @@ export function PackagesPage() {
       />
 
       <DataTable
-        data={packages}
+        data={filteredPackages}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -237,13 +253,13 @@ export function PackagesPage() {
         }}
         emptyState={{
           icon: PackageIcon,
-          title: subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all'
+          title: search || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all'
             ? 'No packages found matching your filters'
             : 'No packages yet',
-          description: subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all'
+          description: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all'
             ? 'Get started by creating your first package'
             : undefined,
-          action: subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' ? (
+          action: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first package
             </Button>

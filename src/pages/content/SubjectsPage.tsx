@@ -40,7 +40,6 @@ export function SubjectsPage() {
       const response = await subjectsService.getSubjects({
         page: currentPage,
         limit: 20,
-        search: searchQuery || undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         sort_by: 'display_order',
         sort_order: 'asc',
@@ -57,7 +56,7 @@ export function SubjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchQuery, activeFilter]);
+  }, [currentPage, activeFilter]);
 
   useEffect(() => {
     fetchSubjects();
@@ -71,14 +70,6 @@ export function SubjectsPage() {
     if (currentPage > 1) params.page = currentPage.toString();
     setSearchParams(params);
   }, [searchQuery, activeFilter, currentPage, setSearchParams]);
-
-  // Handle search with debounce
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   // Create subject
   const handleCreate = () => {
@@ -180,6 +171,13 @@ export function SubjectsPage() {
     },
   ];
 
+  // Client-side search filter
+  const filteredSubjects = searchQuery
+    ? subjects.filter((subject) =>
+        subject.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : subjects;
+
   // Column definitions
   const columns = useSubjectsColumns({
     onNavigate: (subject) => navigate(`/content/subjects/${subject._id}`),
@@ -216,7 +214,7 @@ export function SubjectsPage() {
       />
 
       <DataTable
-        data={subjects}
+        data={filteredSubjects}
         columns={columns}
         isLoading={loading}
         pagination={{

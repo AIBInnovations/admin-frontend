@@ -14,6 +14,7 @@ export function PurchasesPage() {
   // State
   const [purchases, setPurchases] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [gatewayFilter, setGatewayFilter] = useState(searchParams.get('gateway') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -61,6 +62,22 @@ export function PurchasesPage() {
     setCurrentPage(1)
   }, [statusFilter, gatewayFilter])
 
+  // Client-side search filter
+  const filteredPurchases = purchases.filter((purchase) => {
+    const query = searchQuery.toLowerCase()
+
+    // Search by package name
+    const packageNameMatch = purchase.package_name?.toLowerCase().includes(query) || false
+
+    // Search by user name
+    const userNameMatch = purchase.user_name?.toLowerCase().includes(query) || false
+
+    // Search by user email
+    const userEmailMatch = purchase.user_email?.toLowerCase().includes(query) || false
+
+    return packageNameMatch || userNameMatch || userEmailMatch
+  })
+
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -106,9 +123,9 @@ export function PurchasesPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter purchases..."
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search by package name, user name, or email..."
         filters={filters}
         activeFilters={{ status: statusFilter, gateway: gatewayFilter }}
         onFiltersChange={(f) => {
@@ -118,7 +135,7 @@ export function PurchasesPage() {
       />
 
       <DataTable
-        data={purchases}
+        data={filteredPurchases}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -129,10 +146,10 @@ export function PurchasesPage() {
         }}
         emptyState={{
           icon: Package,
-          title: statusFilter !== 'all' || gatewayFilter !== 'all'
+          title: searchQuery || statusFilter !== 'all' || gatewayFilter !== 'all'
             ? 'No purchases found matching your filters'
             : 'No purchases yet',
-          description: statusFilter === 'all' && gatewayFilter === 'all'
+          description: !searchQuery && statusFilter === 'all' && gatewayFilter === 'all'
             ? 'Package purchases will appear here when users subscribe'
             : undefined,
         }}

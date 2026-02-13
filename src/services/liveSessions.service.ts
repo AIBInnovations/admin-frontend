@@ -16,6 +16,7 @@ export interface LiveSession {
   platform: 'zoom' | 'agora' | 'teams' | 'other'
   zoom_meeting_id: string | null
   zoom_join_url: string | null
+  zoom_host_url: string | null
   status: 'scheduled' | 'live' | 'completed' | 'cancelled'
   max_attendees: number | null
   current_attendees: number

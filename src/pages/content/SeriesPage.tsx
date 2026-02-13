@@ -18,6 +18,7 @@ export function SeriesPage() {
   // State
   const [seriesList, setSeriesList] = useState<Series[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [packageFilter, setPackageFilter] = useState(searchParams.get('package') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -178,6 +179,9 @@ export function SeriesPage() {
     onToggleActive: handleToggleActive,
   })
 
+  // Client-side filtering
+  const filteredSeries = search ? seriesList.filter((s) => s.name.toLowerCase().includes(search.toLowerCase())) : seriesList
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -192,9 +196,9 @@ export function SeriesPage() {
       />
 
       <SearchWithFilters
-        value=""
-        onChange={() => {}}
-        placeholder="Filter series..."
+        value={search}
+        onChange={setSearch}
+        placeholder="Search series..."
         filters={filters}
         activeFilters={{ package: packageFilter, status: activeFilter }}
         onFiltersChange={(f) => {
@@ -204,7 +208,7 @@ export function SeriesPage() {
       />
 
       <DataTable
-        data={seriesList}
+        data={filteredSeries}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -215,13 +219,13 @@ export function SeriesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: packageFilter !== 'all' || activeFilter !== 'all'
+          title: search || packageFilter !== 'all' || activeFilter !== 'all'
             ? 'No series found matching your filters'
             : 'No series yet',
-          description: packageFilter === 'all' && activeFilter === 'all'
+          description: search === '' && packageFilter === 'all' && activeFilter === 'all'
             ? 'Get started by creating your first series'
             : undefined,
-          action: packageFilter === 'all' && activeFilter === 'all' ? (
+          action: search === '' && packageFilter === 'all' && activeFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first series
             </Button>

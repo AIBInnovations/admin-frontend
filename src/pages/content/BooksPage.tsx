@@ -34,16 +34,13 @@ export function BooksPage() {
     try {
       setLoading(true)
       const response = await booksService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: search || undefined,
+        page: 1,
+        limit: 1000,
         is_available: availabilityFilter === 'all' ? null : availabilityFilter === 'available',
       })
 
       if (response.success && response.data) {
         setBooks(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
       }
     } catch (error) {
       toast.error('Failed to load books')
@@ -51,7 +48,7 @@ export function BooksPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, search, availabilityFilter])
+  }, [availabilityFilter])
 
   useEffect(() => { fetchBooks() }, [fetchBooks])
 
@@ -63,6 +60,16 @@ export function BooksPage() {
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
   }, [search, availabilityFilter, currentPage, setSearchParams])
+
+  // Client-side filter
+  const filteredBooks = search
+    ? books.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
+    : books
+
+  // Pagination for filtered results
+  const startIndex = (currentPage - 1) * 20
+  const paginatedBooks = filteredBooks.slice(startIndex, startIndex + 20)
+  const filteredTotalPages = Math.ceil(filteredBooks.length / 20)
 
   // Reset page when filters change
   useEffect(() => {
@@ -168,13 +175,13 @@ export function BooksPage() {
       />
 
       <DataTable
-        data={books}
+        data={paginatedBooks}
         columns={columns}
         isLoading={loading}
         pagination={{
           currentPage,
-          totalPages,
-          totalCount,
+          totalPages: filteredTotalPages,
+          totalCount: filteredBooks.length,
           onPageChange: setCurrentPage,
         }}
         emptyState={{
