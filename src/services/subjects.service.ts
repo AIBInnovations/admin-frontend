@@ -8,9 +8,27 @@ export interface Subject {
   icon_url?: string;
   display_order: number;
   is_active: boolean;
-  packages_count?: number;
+  package_count?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SubjectPackage {
+  _id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  original_price: number;
+  is_on_sale: boolean;
+  sale_price: number | null;
+  duration_days: number;
+  is_active: boolean;
+  display_order: number;
+  createdAt: string;
+}
+
+export interface SubjectDetail extends Subject {
+  packages: SubjectPackage[];
 }
 
 export interface SubjectFormData {
@@ -73,8 +91,8 @@ class SubjectsService {
   /**
    * Get single subject by ID
    */
-  async getSubject(subjectId: string): Promise<ApiResponse<Subject>> {
-    const response = await apiService.get<{ subject: Subject }>(`admin/subjects/${subjectId}`);
+  async getSubject(subjectId: string): Promise<ApiResponse<SubjectDetail>> {
+    const response = await apiService.get<{ subject: SubjectDetail }>(`admin/subjects/${subjectId}`);
     // Unwrap subject from response
     if (response.success && response.data) {
       return {

@@ -55,7 +55,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Users', href: '/users', icon: Users, badge: '1.2k' },
+  { name: 'Users', href: '/users', icon: Users },
   {
     name: 'Content',
     icon: BookOpen,
@@ -71,7 +71,7 @@ const navigation: NavItem[] = [
       { name: 'Banners', href: '/content/banners' },
     ],
   },
-  { name: 'Live Sessions', href: '/sessions', icon: Calendar, badge: '3' },
+  { name: 'Live Sessions', href: '/sessions', icon: Calendar },
   { name: 'Faculty', href: '/faculty', icon: GraduationCap },
   {
     name: 'Commerce',
@@ -85,7 +85,7 @@ const navigation: NavItem[] = [
     ],
   },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Notifications', href: '/notifications', icon: Bell, badge: '12' },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
   {
     name: 'Settings',
     icon: Settings,

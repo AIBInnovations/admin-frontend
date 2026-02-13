@@ -1,46 +1,75 @@
+import { useState, useEffect } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import {
-  TrendingUp, IndianRupee, Package, BookOpen, Video,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  TrendingUp, IndianRupee, Package, BookOpen, Video, Loader2,
 } from 'lucide-react'
-import { mockPurchases, mockInvoices } from '@/lib/mock-data'
+import { toast } from 'sonner'
+import {
+  revenueService, RevenueByType, RevenueTrendsData, TopSellingData,
+} from '@/services/revenue.service'
 
 export function RevenuePage() {
-  // Calculate revenue from completed purchases
-  const completedPurchases = mockPurchases.filter((p) => p.payment_status === 'completed')
-  const purchaseRevenue = completedPurchases.reduce((sum, p) => sum + p.amount_paid, 0)
+  const [loading, setLoading] = useState(true)
+  const [revenueByType, setRevenueByType] = useState<RevenueByType | null>(null)
+  const [trends, setTrends] = useState<RevenueTrendsData | null>(null)
+  const [topSelling, setTopSelling] = useState<TopSellingData | null>(null)
+  const [trendPeriod, setTrendPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly')
 
-  // Calculate GST from paid invoices
-  const paidInvoices = mockInvoices.filter((inv) => inv.payment_status === 'paid')
-  const gstRevenue = paidInvoices.reduce((sum, inv) => sum + inv.gst_amount, 0)
+  // Fetch all revenue data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const [revenueRes, trendsRes, topSellingRes] = await Promise.all([
+          revenueService.getByProductType(),
+          revenueService.getTrends({ period: trendPeriod }),
+          revenueService.getTopSelling({ limit: 5 }),
+        ])
 
-  // Total revenue
-  const totalRevenue = purchaseRevenue + gstRevenue
+        if (revenueRes.success && revenueRes.data) setRevenueByType(revenueRes.data)
+        if (trendsRes.success && trendsRes.data) setTrends(trendsRes.data)
+        if (topSellingRes.success && topSellingRes.data) setTopSelling(topSellingRes.data)
+      } catch (error) {
+        toast.error('Failed to load revenue data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [trendPeriod])
 
-  // Revenue by category from invoices
-  const packageRevenue = paidInvoices
-    .filter((inv) => inv.purchase_type === 'package')
-    .reduce((sum, inv) => sum + inv.amount + inv.gst_amount, 0)
-  const bookRevenue = paidInvoices
-    .filter((inv) => inv.purchase_type === 'book')
-    .reduce((sum, inv) => sum + inv.amount + inv.gst_amount, 0)
-  const sessionRevenue = paidInvoices
-    .filter((inv) => inv.purchase_type === 'session')
-    .reduce((sum, inv) => sum + inv.amount + inv.gst_amount, 0)
+  if (loading) {
+    return (
+      <div>
+        <PageHeader
+          title="Revenue"
+          description="Financial overview and revenue analytics"
+          breadcrumbs={[
+            { label: 'Dashboard', href: '/' },
+            { label: 'Commerce' },
+            { label: 'Revenue' },
+          ]}
+        />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
 
-  // Recent transactions: completed purchases sorted by date desc
-  const recentTransactions = [...completedPurchases]
-    .sort((a, b) => new Date(b.purchased_at).getTime() - new Date(a.purchased_at).getTime())
-
-  // Revenue breakdown percentages
-  const categoryTotal = packageRevenue + bookRevenue + sessionRevenue
-  const packagePct = categoryTotal > 0 ? Math.round((packageRevenue / categoryTotal) * 100) : 0
-  const bookPct = categoryTotal > 0 ? Math.round((bookRevenue / categoryTotal) * 100) : 0
-  const sessionPct = categoryTotal > 0 ? Math.round((sessionRevenue / categoryTotal) * 100) : 0
+  const rev = revenueByType?.revenue_by_product_type
+  const totalRevenue = revenueByType?.total_revenue || 0
+  const packageRevenue = rev?.packages?.revenue || 0
+  const bookRevenue = rev?.books?.revenue || 0
+  const sessionRevenue = rev?.sessions?.revenue || 0
+  const packagePct = rev?.packages?.percentage || '0'
+  const bookPct = rev?.books?.percentage || '0'
+  const sessionPct = rev?.sessions?.percentage || '0'
 
   return (
     <div>
@@ -64,12 +93,12 @@ export function RevenuePage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Revenue</p>
-                <p className="text-3xl font-bold">{`₹${totalRevenue.toLocaleString('en-IN')}`}</p>
+                <p className="text-3xl font-bold">₹{totalRevenue.toLocaleString('en-IN')}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1 text-xs text-emerald-600">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3" />
-              <span>Includes GST collections</span>
+              <span>{revenueByType?.total_transactions || 0} transactions</span>
             </div>
           </CardContent>
         </Card>
@@ -81,11 +110,11 @@ export function RevenuePage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Package Revenue</p>
-                <p className="text-3xl font-bold">{`₹${packageRevenue.toLocaleString('en-IN')}`}</p>
+                <p className="text-3xl font-bold">₹{packageRevenue.toLocaleString('en-IN')}</p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {packagePct}% of total category revenue
+              {packagePct}% of total &middot; {rev?.packages?.count || 0} sales
             </p>
           </CardContent>
         </Card>
@@ -97,11 +126,11 @@ export function RevenuePage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Book Revenue</p>
-                <p className="text-3xl font-bold">{`₹${bookRevenue.toLocaleString('en-IN')}`}</p>
+                <p className="text-3xl font-bold">₹{bookRevenue.toLocaleString('en-IN')}</p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {bookPct}% of total category revenue
+              {bookPct}% of total &middot; {rev?.books?.count || 0} sales
             </p>
           </CardContent>
         </Card>
@@ -113,162 +142,148 @@ export function RevenuePage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Session Revenue</p>
-                <p className="text-3xl font-bold">{`₹${sessionRevenue.toLocaleString('en-IN')}`}</p>
+                <p className="text-3xl font-bold">₹{sessionRevenue.toLocaleString('en-IN')}</p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {sessionPct}% of total category revenue
+              {sessionPct}% of total &middot; {rev?.sessions?.count || 0} sales
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue Breakdown Section */}
-      <div className="mb-8 grid grid-cols-3 gap-4">
+      {/* Revenue Trends */}
+      <Card className="mb-8">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg font-semibold">Revenue Trends</CardTitle>
+          <Select value={trendPeriod} onValueChange={(v) => setTrendPeriod(v as typeof trendPeriod)}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          {trends?.trends && trends.trends.length > 0 ? (
+            <div className="space-y-3">
+              {trends.trends.map((trend, i) => {
+                const label = typeof trend.period === 'string'
+                  ? trend.period
+                  : `W${trend.period.week}, ${trend.period.year}`
+                const maxRevenue = Math.max(...trends.trends.map((t) => t.total_revenue), 1)
+                const barWidth = Math.max((trend.total_revenue / maxRevenue) * 100, 2)
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-24 shrink-0 truncate">{label}</span>
+                    <div className="flex-1 h-6 bg-muted rounded overflow-hidden relative">
+                      <div
+                        className="h-full bg-primary/20 rounded"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium">
+                        ₹{trend.total_revenue.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">No trend data available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Top Selling Products */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* Top Packages */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Package Sales Breakdown
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-600" /> Top Packages
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Gross Amount</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'package').reduce((s, i) => s + i.amount, 0).toLocaleString('en-IN')}`}
-                </span>
+            {topSelling?.top_selling_products?.packages?.length ? (
+              <div className="space-y-3">
+                {topSelling.top_selling_products.packages.map((p, i) => (
+                  <div key={p._id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="secondary" className="text-[10px] shrink-0">#{i + 1}</Badge>
+                      <span className="text-sm truncate">{p.name || '—'}</span>
+                    </div>
+                    <span className="text-sm font-medium shrink-0 ml-2">
+                      ₹{p.total_revenue.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">GST Collected</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'package').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="border-t border-border pt-3 flex items-center justify-between">
-                <span className="text-sm font-semibold">Total</span>
-                <span className="text-lg font-bold text-blue-600">
-                  {`₹${packageRevenue.toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-blue-500" style={{ width: `${packagePct}%` }} />
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+            )}
           </CardContent>
         </Card>
 
+        {/* Top Books */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Book Sales Breakdown
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-purple-600" /> Top Books
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Gross Amount</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'book').reduce((s, i) => s + i.amount, 0).toLocaleString('en-IN')}`}
-                </span>
+            {topSelling?.top_selling_products?.books?.length ? (
+              <div className="space-y-3">
+                {topSelling.top_selling_products.books.map((b, i) => (
+                  <div key={b._id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="secondary" className="text-[10px] shrink-0">#{i + 1}</Badge>
+                      <span className="text-sm truncate">{b.title || '—'}</span>
+                    </div>
+                    <span className="text-sm font-medium shrink-0 ml-2">
+                      ₹{b.total_revenue.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">GST Collected</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'book').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="border-t border-border pt-3 flex items-center justify-between">
-                <span className="text-sm font-semibold">Total</span>
-                <span className="text-lg font-bold text-purple-600">
-                  {`₹${bookRevenue.toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-purple-500" style={{ width: `${bookPct}%` }} />
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+            )}
           </CardContent>
         </Card>
 
+        {/* Top Sessions */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Session Sales Breakdown
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Video className="h-4 w-4 text-emerald-600" /> Top Sessions
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Gross Amount</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'session').reduce((s, i) => s + i.amount, 0).toLocaleString('en-IN')}`}
-                </span>
+            {topSelling?.top_selling_products?.sessions?.length ? (
+              <div className="space-y-3">
+                {topSelling.top_selling_products.sessions.map((s, i) => (
+                  <div key={s._id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="secondary" className="text-[10px] shrink-0">#{i + 1}</Badge>
+                      <span className="text-sm truncate">{s.name || '—'}</span>
+                    </div>
+                    <span className="text-sm font-medium shrink-0 ml-2">
+                      ₹{s.total_revenue.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">GST Collected</span>
-                <span className="text-sm font-medium">
-                  {`₹${paidInvoices.filter((i) => i.purchase_type === 'session').reduce((s, i) => s + i.gst_amount, 0).toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="border-t border-border pt-3 flex items-center justify-between">
-                <span className="text-sm font-semibold">Total</span>
-                <span className="text-lg font-bold text-emerald-600">
-                  {`₹${sessionRevenue.toLocaleString('en-IN')}`}
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${sessionPct}%` }} />
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Recent Transactions Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Recent Transactions</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="rounded-b-lg border-t border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Package</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTransactions.map((txn) => (
-                  <TableRow key={txn._id}>
-                    <TableCell className="text-sm font-medium">{txn.user_name}</TableCell>
-                    <TableCell className="text-sm">{txn.package_name}</TableCell>
-                    <TableCell className="text-sm font-bold">
-                      {`₹${txn.amount_paid.toLocaleString('en-IN')}`}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 hover:bg-emerald-500/20">
-                        Completed
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {new Date(txn.purchased_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

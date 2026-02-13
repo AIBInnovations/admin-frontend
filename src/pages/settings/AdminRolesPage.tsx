@@ -1,160 +1,199 @@
+import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { Shield, Users, Lock, CheckCircle2 } from 'lucide-react'
-import { mockAdminUsers } from '@/lib/mock-data'
-
-interface RoleDefinition {
-  key: string
-  name: string
-  description: string
-  accentColor: string
-  accentBg: string
-  accentBorder: string
-  iconBg: string
-  badgeBg: string
-  badgeText: string
-  permissions: string[]
-  editable: boolean
-}
-
-const roles: RoleDefinition[] = [
-  {
-    key: 'super_admin',
-    name: 'Super Admin',
-    description: 'Full system access with all permissions',
-    accentColor: 'text-purple-700',
-    accentBg: 'bg-purple-50',
-    accentBorder: 'border-purple-200',
-    iconBg: 'bg-purple-100',
-    badgeBg: 'bg-purple-100 border-purple-200',
-    badgeText: 'text-purple-700',
-    permissions: ['All Permissions'],
-    editable: false,
-  },
-  {
-    key: 'admin',
-    name: 'Admin',
-    description: 'Manage content, users, and commerce',
-    accentColor: 'text-blue-700',
-    accentBg: 'bg-blue-50',
-    accentBorder: 'border-blue-200',
-    iconBg: 'bg-blue-100',
-    badgeBg: 'bg-blue-100 border-blue-200',
-    badgeText: 'text-blue-700',
-    permissions: [
-      'Manage Users',
-      'Manage Content',
-      'Manage Commerce',
-      'View Analytics',
-      'Manage Sessions',
-      'Manage Faculty',
-    ],
-    editable: true,
-  },
-  {
-    key: 'moderator',
-    name: 'Moderator',
-    description: 'Monitor content and moderate sessions',
-    accentColor: 'text-amber-700',
-    accentBg: 'bg-amber-50',
-    accentBorder: 'border-amber-200',
-    iconBg: 'bg-amber-100',
-    badgeBg: 'bg-amber-100 border-amber-200',
-    badgeText: 'text-amber-700',
-    permissions: [
-      'View Users',
-      'View Content',
-      'Moderate Sessions',
-      'View Analytics',
-    ],
-    editable: true,
-  },
-]
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { AdminRoleFormModal } from '@/components/adminRoles/AdminRoleFormModal'
+import { Plus, Shield, Pencil, Trash2, Loader2, Check } from 'lucide-react'
+import { toast } from 'sonner'
+import { adminRolesService, AdminRole, AdminRoleFormData } from '@/services/adminRoles.service'
 
 export function AdminRolesPage() {
-  const getUserCount = (roleKey: string) =>
-    mockAdminUsers.filter((u) => u.role_name === roleKey).length
+  const [roles, setRoles] = useState<AdminRole[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
+  const [selectedRole, setSelectedRole] = useState<AdminRole | null>(null)
+
+  // Fetch roles
+  const fetchRoles = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await adminRolesService.getAll({ limit: 50 })
+      if (response.success && response.data) {
+        setRoles(response.data.entities || [])
+      }
+    } catch (error) {
+      toast.error('Failed to load roles')
+      setRoles([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchRoles() }, [fetchRoles])
+
+  // Handlers
+  const handleCreate = () => {
+    setModalMode('create')
+    setSelectedRole(null)
+    setFormModalOpen(true)
+  }
+
+  const handleEdit = (role: AdminRole) => {
+    setModalMode('edit')
+    setSelectedRole(role)
+    setFormModalOpen(true)
+  }
+
+  const handleDeleteClick = (role: AdminRole) => {
+    setSelectedRole(role)
+    setDeleteModalOpen(true)
+  }
+
+  const handleFormSubmit = async (data: AdminRoleFormData) => {
+    try {
+      if (modalMode === 'create') {
+        const response = await adminRolesService.create(data)
+        if (response.success) {
+          toast.success('Role created successfully')
+          fetchRoles()
+        }
+      } else if (selectedRole) {
+        const response = await adminRolesService.update(selectedRole._id, data)
+        if (response.success) {
+          toast.success('Role updated successfully')
+          fetchRoles()
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save role')
+      throw error
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedRole) return
+    try {
+      const response = await adminRolesService.delete(selectedRole._id)
+      if (response.success) {
+        toast.success('Role deleted successfully')
+        fetchRoles()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete role')
+      throw error
+    }
+  }
+
+  const getPermissionsList = (role: AdminRole): string[] => {
+    if (Array.isArray(role.permissions)) return role.permissions as string[]
+    if (typeof role.permissions === 'string') {
+      try { return JSON.parse(role.permissions) } catch { return [] }
+    }
+    return []
+  }
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Roles & Permissions"
-        description="Configure admin roles and their associated permissions"
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Settings' },
-          { label: 'Admin Roles' },
-        ]}
+        title="Admin Roles"
+        description="Manage roles and their permissions"
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Settings' }, { label: 'Admin Roles' }]}
+        action={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />Create Role
+          </Button>
+        }
       />
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {roles.map((role) => {
-          const userCount = getUserCount(role.key)
-          return (
-            <Card key={role.key} className={`border-t-4 ${role.accentBorder}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${role.iconBg}`}>
-                    <Shield className={`h-5 w-5 ${role.accentColor}`} />
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : roles.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Shield className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="text-sm font-medium">No roles yet</p>
+            <p className="text-xs text-muted-foreground mb-4">Get started by creating your first role</p>
+            <Button onClick={handleCreate} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />Create your first role
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {roles.map((role) => {
+            const permissions = getPermissionsList(role)
+            return (
+              <Card key={role._id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <CardTitle className="text-base">{role.name}</CardTitle>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(role)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteClick(role)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <Badge variant="outline" className={`text-[10px] ${role.badgeBg} ${role.badgeText}`}>
-                    {role.name}
-                  </Badge>
-                </div>
-                <CardTitle className="mt-3 text-lg">{role.name}</CardTitle>
-                <CardDescription>{role.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* User Count */}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span>{userCount} {userCount === 1 ? 'user' : 'users'} assigned</span>
-                </div>
-
-                <Separator />
-
-                {/* Permissions */}
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Permissions
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {role.permissions.map((perm) => (
-                      <Badge
-                        key={perm}
-                        variant="secondary"
-                        className="text-[10px] font-normal"
-                      >
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        {perm}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Permissions</span>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {permissions.length}
                       </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Action */}
-                <div>
-                  {role.editable ? (
-                    <Button variant="outline" size="sm" className="w-full">
-                      <Lock className="mr-2 h-4 w-4" />
-                      Edit Permissions
-                    </Button>
-                  ) : (
-                    <p className="text-center text-xs text-muted-foreground">
-                      Cannot modify
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-[120px] overflow-y-auto">
+                      {permissions.length > 0 ? permissions.map((perm) => (
+                        <div key={perm} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Check className="h-3 w-3 text-emerald-500" />
+                          <span>{perm}</span>
+                        </div>
+                      )) : (
+                        <span className="text-xs text-muted-foreground">No permissions defined</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground pt-2">
+                      Created {new Date(role.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                      })}
                     </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      <AdminRoleFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        onSubmit={handleFormSubmit}
+        role={selectedRole}
+        mode={modalMode}
+      />
+
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Role"
+        itemName={selectedRole?.name}
+      />
     </div>
   )
 }

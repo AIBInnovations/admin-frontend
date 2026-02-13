@@ -1,277 +1,230 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Plus, Search, MoreVertical, GraduationCap, ShieldCheck, Clock,
-  Eye, Pencil, UserCheck, Calendar, Video, UserX, UserCog,
-  CheckCircle2,
-} from 'lucide-react'
-import { mockFaculty } from '@/lib/mock-data'
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { FacultyFormModal } from '@/components/faculty/FacultyFormModal'
+import { Plus, GraduationCap } from 'lucide-react'
+import { toast } from 'sonner'
+import { facultyService, Faculty, FacultyFormData } from '@/services/faculty.service'
+import { useFacultyColumns } from './FacultyPage.columns'
 
 export function FacultyPage() {
-  const [search, setSearch] = useState('')
-  const [selectedFaculty, setSelectedFaculty] = useState<typeof mockFaculty[0] | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const filtered = mockFaculty.filter((f) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      f.name.toLowerCase().includes(q) ||
-      f.email.toLowerCase().includes(q) ||
-      f.phone.includes(search) ||
-      f.specialization.toLowerCase().includes(q)
-    )
-  })
+  // State
+  const [facultyList, setFacultyList] = useState<Faculty[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
-  const totalFaculty = mockFaculty.length
-  const verifiedCount = mockFaculty.filter((f) => f.is_verified).length
-  const pendingCount = mockFaculty.filter((f) => !f.is_verified).length
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
+  const [selectedFaculty, setSelectedFaculty] = useState<Faculty | null>(null)
 
-  function getInitials(name: string) {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
+  // Fetch faculty
+  const fetchFaculty = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await facultyService.getAll({
+        page: currentPage,
+        limit: 20,
+        is_active: statusFilter === 'all' ? null : statusFilter === 'active',
+      })
+
+      if (response.success && response.data) {
+        setFacultyList(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
+      }
+    } catch (error) {
+      toast.error('Failed to load faculty')
+      setFacultyList([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, statusFilter])
+
+  useEffect(() => { fetchFaculty() }, [fetchFaculty])
+
+  // URL params sync
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (statusFilter !== 'all') params.status = statusFilter
+    if (currentPage > 1) params.page = currentPage.toString()
+    setSearchParams(params)
+  }, [statusFilter, currentPage, setSearchParams])
+
+  useEffect(() => { setCurrentPage(1) }, [statusFilter])
+
+  // Handlers
+  const handleCreate = () => {
+    setModalMode('create')
+    setSelectedFaculty(null)
+    setFormModalOpen(true)
   }
 
+  const handleEdit = (faculty: Faculty) => {
+    setModalMode('edit')
+    setSelectedFaculty(faculty)
+    setFormModalOpen(true)
+  }
+
+  const handleDeleteClick = (faculty: Faculty) => {
+    setSelectedFaculty(faculty)
+    setDeleteModalOpen(true)
+  }
+
+  const handleFormSubmit = async (data: FacultyFormData) => {
+    try {
+      if (modalMode === 'create') {
+        const response = await facultyService.create(data)
+        if (response.success) {
+          toast.success('Faculty added successfully')
+          fetchFaculty()
+        }
+      } else if (selectedFaculty) {
+        const response = await facultyService.update(selectedFaculty._id, data)
+        if (response.success) {
+          toast.success('Faculty updated successfully')
+          fetchFaculty()
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save faculty')
+      throw error
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedFaculty) return
+    try {
+      const response = await facultyService.delete(selectedFaculty._id)
+      if (response.success) {
+        toast.success('Faculty deleted successfully')
+        fetchFaculty()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete faculty')
+      throw error
+    }
+  }
+
+  const handleToggleActive = async (faculty: Faculty) => {
+    try {
+      const response = await facultyService.toggleActive(faculty._id, !faculty.is_active)
+      if (response.success) {
+        toast.success(`Faculty ${!faculty.is_active ? 'activated' : 'deactivated'} successfully`)
+        fetchFaculty()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update status')
+    }
+  }
+
+  const handleVerify = async (faculty: Faculty) => {
+    try {
+      const response = await facultyService.verifyFaculty(faculty._id, true)
+      if (response.success) {
+        toast.success('Faculty verified successfully')
+        fetchFaculty()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to verify faculty')
+    }
+  }
+
+  // Filters
+  const filters: FilterConfig[] = [
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+      ],
+      placeholder: 'Filter by status',
+      defaultValue: 'all',
+    },
+  ]
+
+  const columns = useFacultyColumns({
+    onEdit: handleEdit,
+    onDelete: handleDeleteClick,
+    onToggleActive: handleToggleActive,
+    onVerify: handleVerify,
+  })
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Faculty"
-        description="Manage faculty members and their sessions"
+        description="Manage faculty members and their profiles"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Faculty' }]}
-        action={<Button><Plus className="mr-2 h-4 w-4" />Add Faculty</Button>}
+        action={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />Add Faculty
+          </Button>
+        }
       />
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><GraduationCap className="h-5 w-5 text-primary" /></div>
-          <div><p className="text-2xl font-bold">{totalFaculty}</p><p className="text-xs text-muted-foreground">Total Faculty</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><ShieldCheck className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{verifiedCount}</p><p className="text-xs text-muted-foreground">Verified</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Clock className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{pendingCount}</p><p className="text-xs text-muted-foreground">Pending Verification</p></div>
-        </CardContent></Card>
-      </div>
+      <SearchWithFilters
+        value=""
+        onChange={() => {}}
+        placeholder="Filter faculty..."
+        filters={filters}
+        activeFilters={{ status: statusFilter }}
+        onFiltersChange={(f) => {
+          if (f.status !== undefined) setStatusFilter(f.status)
+        }}
+      />
 
-      {/* Filters */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search name, email, phone, specialization..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-      </div>
+      <DataTable
+        data={facultyList}
+        columns={columns}
+        isLoading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount,
+          onPageChange: setCurrentPage,
+        }}
+        emptyState={{
+          icon: GraduationCap,
+          title: statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
+          description: statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
+          action: statusFilter === 'all' ? (
+            <Button onClick={handleCreate} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />Add your first faculty
+            </Button>
+          ) : undefined,
+        }}
+        getRowKey={(f) => f._id}
+      />
 
-      {/* Table */}
-      <div className="rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Faculty</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Specialization</TableHead>
-              <TableHead>Qualifications</TableHead>
-              <TableHead>Experience</TableHead>
-              <TableHead>Sessions</TableHead>
-              <TableHead>Verified</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Last Login</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((faculty) => (
-              <TableRow key={faculty._id}>
-                {/* Faculty: avatar + name + email */}
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                      {getInitials(faculty.name)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{faculty.name}</p>
-                      <p className="text-xs text-muted-foreground">{faculty.email}</p>
-                    </div>
-                  </div>
-                </TableCell>
+      <FacultyFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        onSubmit={handleFormSubmit}
+        faculty={selectedFaculty}
+        mode={modalMode}
+      />
 
-                {/* Phone */}
-                <TableCell className="text-sm">{faculty.phone}</TableCell>
-
-                {/* Specialization */}
-                <TableCell>
-                  <Badge variant="secondary" className="text-[10px]">{faculty.specialization}</Badge>
-                </TableCell>
-
-                {/* Qualifications */}
-                <TableCell className="max-w-[160px]">
-                  <p className="truncate text-sm">{faculty.qualifications}</p>
-                </TableCell>
-
-                {/* Experience */}
-                <TableCell className="text-sm">{faculty.experience_years} years</TableCell>
-
-                {/* Sessions */}
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <Video className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-sm">{faculty.session_count}</span>
-                  </div>
-                </TableCell>
-
-                {/* Verified */}
-                <TableCell>
-                  {faculty.is_verified ? (
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <Badge className="border-emerald-200 bg-emerald-100 text-emerald-700 text-[10px]">Verified</Badge>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-amber-500" />
-                      <Badge className="border-amber-200 bg-amber-100 text-amber-700 text-[10px]">Pending</Badge>
-                    </div>
-                  )}
-                </TableCell>
-
-                {/* Status */}
-                <TableCell>
-                  <Badge variant={faculty.is_active ? 'default' : 'destructive'} className="text-[10px]">
-                    {faculty.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </TableCell>
-
-                {/* Last Login */}
-                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {new Date(faculty.last_login).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </TableCell>
-
-                {/* Actions */}
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setSelectedFaculty(faculty)}>
-                        <Eye className="mr-2 h-4 w-4" />View Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Pencil className="mr-2 h-4 w-4" />Edit
-                      </DropdownMenuItem>
-                      {!faculty.is_verified && (
-                        <DropdownMenuItem className="text-emerald-600">
-                          <UserCheck className="mr-2 h-4 w-4" />Verify Faculty
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem>
-                        <Calendar className="mr-2 h-4 w-4" />Manage Sessions
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className={faculty.is_active ? 'text-red-600' : 'text-emerald-600'}>
-                        {faculty.is_active ? (
-                          <><UserX className="mr-2 h-4 w-4" />Deactivate</>
-                        ) : (
-                          <><UserCog className="mr-2 h-4 w-4" />Activate</>
-                        )}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalFaculty} faculty members</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>Previous</Button>
-          <Button variant="outline" size="sm">Next</Button>
-        </div>
-      </div>
-
-      {/* Faculty Detail Dialog */}
-      <Dialog open={!!selectedFaculty} onOpenChange={() => setSelectedFaculty(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{selectedFaculty?.name}</DialogTitle>
-            <DialogDescription>{selectedFaculty?.email}</DialogDescription>
-          </DialogHeader>
-          {selectedFaculty && (
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Phone</p>
-                <p className="font-medium">{selectedFaculty.phone}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Specialization</p>
-                <p className="font-medium">{selectedFaculty.specialization}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Qualifications</p>
-                <p className="font-medium">{selectedFaculty.qualifications}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Experience</p>
-                <p className="font-medium">{selectedFaculty.experience_years} years</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-muted-foreground">Bio</p>
-                <p className="font-medium">{selectedFaculty.bio}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Sessions Conducted</p>
-                <p className="font-medium">{selectedFaculty.session_count}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Verified</p>
-                <p>
-                  <Badge className={selectedFaculty.is_verified ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'border-amber-200 bg-amber-100 text-amber-700'}>
-                    {selectedFaculty.is_verified ? 'Verified' : 'Pending'}
-                  </Badge>
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Status</p>
-                <p>
-                  <Badge variant={selectedFaculty.is_active ? 'default' : 'destructive'}>
-                    {selectedFaculty.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Last Login</p>
-                <p className="font-medium">{new Date(selectedFaculty.last_login).toLocaleString('en-IN')}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Joined</p>
-                <p className="font-medium">{new Date(selectedFaculty.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Faculty"
+        itemName={selectedFaculty?.name}
+      />
     </div>
   )
 }

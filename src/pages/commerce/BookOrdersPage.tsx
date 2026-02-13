@@ -1,79 +1,161 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Search, Download, MoreVertical, BookCopy, PackageCheck, Truck, Clock,
-  Eye, RefreshCw, MapPin, Printer,
-} from 'lucide-react'
-import { mockBookOrders } from '@/lib/mock-data'
+import { BookCopy, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { bookOrdersService, BookOrder } from '@/services/bookOrders.service'
+import { useBookOrdersColumns } from './BookOrdersPage.columns'
+
+const orderStatusColors: Record<string, string> = {
+  pending: 'bg-amber-500/10 text-amber-600 border-amber-200',
+  confirmed: 'bg-blue-500/10 text-blue-600 border-blue-200',
+  processing: 'bg-violet-500/10 text-violet-600 border-violet-200',
+  shipped: 'bg-cyan-500/10 text-cyan-600 border-cyan-200',
+  delivered: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
+  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
+}
 
 export function BookOrdersPage() {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const filtered = mockBookOrders.filter((order) => {
-    const matchesSearch =
-      !search ||
-      order.recipient_name.toLowerCase().includes(search.toLowerCase()) ||
-      order.order_number.toLowerCase().includes(search.toLowerCase()) ||
-      order.items.some((item) => item.title.toLowerCase().includes(search.toLowerCase()))
-    const matchesStatus =
-      statusFilter === 'all' || order.order_status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  // State
+  const [orders, setOrders] = useState<BookOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || 'all')
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
-  const totalOrders = mockBookOrders.length
-  const processingCount = mockBookOrders.filter((o) => o.order_status === 'processing').length
-  const shippedCount = mockBookOrders.filter((o) => o.order_status === 'shipped').length
-  const deliveredCount = mockBookOrders.filter((o) => o.order_status === 'delivered').length
+  // Dialogs
+  const [detailOrder, setDetailOrder] = useState<BookOrder | null>(null)
+  const [shippingOrder, setShippingOrder] = useState<BookOrder | null>(null)
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [courierName, setCourierName] = useState('')
+  const [shippingSubmitting, setShippingSubmitting] = useState(false)
 
-  const orderStatusBadge = (status: string) => {
-    switch (status) {
-      case 'processing':
-        return (
-          <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 hover:bg-amber-500/20">
-            Processing
-          </Badge>
-        )
-      case 'shipped':
-        return (
-          <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20">
-            Shipped
-          </Badge>
-        )
-      case 'delivered':
-        return (
-          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 hover:bg-emerald-500/20">
-            Delivered
-          </Badge>
-        )
-      default:
-        return <Badge variant="outline">{status}</Badge>
+  // Fetch orders
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await bookOrdersService.getAll({
+        page: currentPage,
+        limit: 20,
+        order_status: statusFilter !== 'all' ? statusFilter : undefined,
+        payment_status: paymentFilter !== 'all' ? paymentFilter : undefined,
+      })
+
+      if (response.success && response.data) {
+        setOrders(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
+      }
+    } catch (error) {
+      toast.error('Failed to load book orders')
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, statusFilter, paymentFilter])
+
+  useEffect(() => { fetchOrders() }, [fetchOrders])
+
+  // URL params sync
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (statusFilter !== 'all') params.status = statusFilter
+    if (paymentFilter !== 'all') params.payment = paymentFilter
+    if (currentPage > 1) params.page = currentPage.toString()
+    setSearchParams(params)
+  }, [statusFilter, paymentFilter, currentPage, setSearchParams])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [statusFilter, paymentFilter])
+
+  // Handlers
+  const handleViewDetails = (order: BookOrder) => {
+    setDetailOrder(order)
+  }
+
+  const handleUpdateShipping = (order: BookOrder) => {
+    setShippingOrder(order)
+    setTrackingNumber(order.tracking_number || '')
+    setCourierName(order.courier_name || '')
+  }
+
+  const handleShippingSubmit = async () => {
+    if (!shippingOrder || !trackingNumber.trim() || !courierName.trim()) return
+    try {
+      setShippingSubmitting(true)
+      const response = await bookOrdersService.updateShipping(
+        shippingOrder._id, trackingNumber.trim(), courierName.trim(),
+      )
+      if (response.success) {
+        toast.success('Shipping info updated successfully')
+        setShippingOrder(null)
+        fetchOrders()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update shipping')
+    } finally {
+      setShippingSubmitting(false)
     }
   }
 
-  const formatItems = (items: typeof mockBookOrders[0]['items']) => {
-    if (items.length === 0) return '—'
-    const first = items[0].title
-    if (items.length === 1) return first
-    return `${first} + ${items.length - 1} more`
-  }
+  // Filters
+  const filters: FilterConfig[] = [
+    {
+      key: 'status',
+      label: 'Order Status',
+      type: 'select',
+      options: [
+        { label: 'All Status', value: 'all' },
+        { label: 'Pending', value: 'pending' },
+        { label: 'Confirmed', value: 'confirmed' },
+        { label: 'Processing', value: 'processing' },
+        { label: 'Shipped', value: 'shipped' },
+        { label: 'Delivered', value: 'delivered' },
+        { label: 'Cancelled', value: 'cancelled' },
+      ],
+      placeholder: 'Filter by order status',
+      defaultValue: 'all',
+    },
+    {
+      key: 'payment',
+      label: 'Payment',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Completed', value: 'completed' },
+        { label: 'Pending', value: 'pending' },
+        { label: 'Failed', value: 'failed' },
+      ],
+      placeholder: 'Filter by payment',
+      defaultValue: 'all',
+    },
+  ]
+
+  const columns = useBookOrdersColumns({
+    onViewDetails: handleViewDetails,
+    onUpdateShipping: handleUpdateShipping,
+  })
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Book Orders"
         description="Manage physical book orders, shipping, and delivery tracking"
@@ -82,194 +164,195 @@ export function BookOrdersPage() {
           { label: 'Commerce' },
           { label: 'Book Orders' },
         ]}
-        action={
-          <Button variant="outline" size="sm">
-            <Download className="mr-2 h-4 w-4" />Export
-          </Button>
-        }
       />
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <BookCopy className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{totalOrders}</p>
-              <p className="text-xs text-muted-foreground">Total Orders</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-              <Clock className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{processingCount}</p>
-              <p className="text-xs text-muted-foreground">Processing</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-              <Truck className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{shippedCount}</p>
-              <p className="text-xs text-muted-foreground">Shipped</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-              <PackageCheck className="h-5 w-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{deliveredCount}</p>
-              <p className="text-xs text-muted-foreground">Delivered</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <SearchWithFilters
+        value=""
+        onChange={() => {}}
+        placeholder="Filter orders..."
+        filters={filters}
+        activeFilters={{ status: statusFilter, payment: paymentFilter }}
+        onFiltersChange={(f) => {
+          if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.payment !== undefined) setPaymentFilter(f.payment)
+        }}
+      />
 
-      {/* Filters */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search order #, customer, book title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Order Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-            <SelectItem value="shipped">Shipped</SelectItem>
-            <SelectItem value="delivered">Delivered</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex-1" />
-      </div>
+      <DataTable
+        data={orders}
+        columns={columns}
+        isLoading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount,
+          onPageChange: setCurrentPage,
+        }}
+        emptyState={{
+          icon: BookCopy,
+          title: statusFilter !== 'all' || paymentFilter !== 'all'
+            ? 'No orders found matching your filters'
+            : 'No book orders yet',
+          description: statusFilter === 'all' && paymentFilter === 'all'
+            ? 'Book orders will appear here when users purchase physical books'
+            : undefined,
+        }}
+        getRowKey={(order) => order._id}
+      />
 
-      {/* Table */}
-      <div className="rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Order #</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Items</TableHead>
-              <TableHead>Subtotal</TableHead>
-              <TableHead>Shipping</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>Payment</TableHead>
-              <TableHead>Order Status</TableHead>
-              <TableHead>Tracking</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((order) => (
-              <TableRow key={order._id}>
-                <TableCell className="text-sm font-mono font-medium">
-                  {order.order_number}
-                </TableCell>
-                <TableCell>
-                  <div>
-                    <p className="text-sm font-medium">{order.recipient_name}</p>
-                    <p className="text-xs text-muted-foreground">{order.shipping_phone}</p>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm max-w-[180px] truncate">
-                  {formatItems(order.items)}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {`₹${order.subtotal.toLocaleString('en-IN')}`}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {order.shipping_cost === 0 ? (
-                    <span className="text-emerald-600 font-medium">Free</span>
-                  ) : (
-                    `₹${order.shipping_cost.toLocaleString('en-IN')}`
-                  )}
-                </TableCell>
-                <TableCell className="text-sm font-bold">
-                  {`₹${order.total_amount.toLocaleString('en-IN')}`}
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 hover:bg-emerald-500/20 text-[10px]">
-                    {order.payment_status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{orderStatusBadge(order.order_status)}</TableCell>
-                <TableCell>
-                  {order.tracking_number ? (
-                    <div>
-                      <p className="text-xs font-mono">{order.tracking_number}</p>
-                      <p className="text-[10px] text-muted-foreground">{order.courier_name}</p>
+      {/* Order Detail Dialog */}
+      <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>
+              Order #{detailOrder?.order_number}
+            </DialogDescription>
+          </DialogHeader>
+          {detailOrder && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Recipient</p>
+                  <p className="font-medium">{detailOrder.recipient_name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Phone</p>
+                  <p className="font-medium">{detailOrder.shipping_phone}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Address</p>
+                  <p className="font-medium">{detailOrder.shipping_address}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-2">Items</p>
+                <div className="space-y-2">
+                  {detailOrder.items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span>{item.title} x{item.quantity}</span>
+                      <span className="font-medium">₹{item.price_at_purchase.toLocaleString('en-IN')}</span>
                     </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Eye className="mr-2 h-4 w-4" />View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <RefreshCw className="mr-2 h-4 w-4" />Update Status
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem>
-                        <MapPin className="mr-2 h-4 w-4" />Add Tracking
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Printer className="mr-2 h-4 w-4" />Print Label
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                  ))}
+                </div>
+              </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Showing {filtered.length} of {totalOrders} orders
-        </p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>Previous</Button>
-          <Button variant="outline" size="sm">Next</Button>
-        </div>
-      </div>
+              <div className="border-t pt-4 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>₹{detailOrder.subtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Shipping</span>
+                  <span>{detailOrder.shipping_cost === 0 ? 'Free' : `₹${detailOrder.shipping_cost.toLocaleString('en-IN')}`}</span>
+                </div>
+                <div className="flex justify-between font-bold text-base pt-1 border-t">
+                  <span>Total</span>
+                  <span>₹{detailOrder.total_amount.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 flex gap-2">
+                <Badge className={`text-[10px] capitalize ${orderStatusColors[detailOrder.order_status] || ''}`}>
+                  {detailOrder.order_status}
+                </Badge>
+                {detailOrder.tracking_number && (
+                  <span className="text-xs text-muted-foreground">
+                    Tracking: {detailOrder.tracking_number} ({detailOrder.courier_name})
+                  </span>
+                )}
+              </div>
+
+              {/* Status Update */}
+              {detailOrder.order_status !== 'delivered' && detailOrder.order_status !== 'cancelled' && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm">Update Status</Label>
+                  <Select
+                    value={detailOrder.order_status}
+                    onValueChange={async (newStatus) => {
+                      try {
+                        const response = await bookOrdersService.updateStatus(detailOrder._id, newStatus)
+                        if (response.success) {
+                          toast.success(`Order status updated to ${newStatus}`)
+                          setDetailOrder(null)
+                          fetchOrders()
+                        }
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to update status')
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="confirmed">Confirmed</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="shipped">Shipped</SelectItem>
+                      <SelectItem value="delivered">Delivered</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailOrder(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Shipping Dialog */}
+      <Dialog open={!!shippingOrder} onOpenChange={() => setShippingOrder(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Update Shipping</DialogTitle>
+            <DialogDescription>
+              Add tracking info for order #{shippingOrder?.order_number}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tracking_number">Tracking Number</Label>
+              <Input
+                id="tracking_number"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="Enter tracking number"
+                disabled={shippingSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="courier_name">Courier Name</Label>
+              <Input
+                id="courier_name"
+                value={courierName}
+                onChange={(e) => setCourierName(e.target.value)}
+                placeholder="e.g. Delhivery, BlueDart"
+                disabled={shippingSubmitting}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShippingOrder(null)} disabled={shippingSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleShippingSubmit}
+              disabled={shippingSubmitting || !trackingNumber.trim() || !courierName.trim()}
+            >
+              {shippingSubmitting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating...</>
+              ) : (
+                'Update Shipping'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

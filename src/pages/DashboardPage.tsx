@@ -1,23 +1,23 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Users,
-  IndianRupee,
-  Video,
-  Calendar,
-  TrendingUp,
-  ArrowUpRight,
+  Users, IndianRupee, Video, Calendar,
+  TrendingUp, ArrowUpRight, Loader2, Eye,
   type LucideIcon,
 } from 'lucide-react'
+import { analyticsService, DashboardAnalytics } from '@/services/analytics.service'
+import { toast } from 'sonner'
 
 interface StatCardProps {
   title: string
   value: string
   icon: LucideIcon
-  trend: string
-  trendUp: boolean
+  trend?: string
+  trendUp?: boolean
 }
 
 function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
@@ -26,20 +26,14 @@ function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">
-              {title}
-            </p>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
             <p className="text-3xl font-bold tracking-tight">{value}</p>
-            <p
-              className={`flex items-center gap-1 text-xs font-medium ${
-                trendUp ? 'text-emerald-600' : 'text-red-500'
-              }`}
-            >
-              <TrendingUp
-                className={`h-3 w-3 ${!trendUp ? 'rotate-180' : ''}`}
-              />
-              {trend}
-            </p>
+            {trend && (
+              <p className={`flex items-center gap-1 text-xs font-medium ${trendUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                <TrendingUp className={`h-3 w-3 ${!trendUp ? 'rotate-180' : ''}`} />
+                {trend}
+              </p>
+            )}
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
             <Icon className="h-5 w-5 text-primary" />
@@ -50,67 +44,42 @@ function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
   )
 }
 
-const recentActivity = [
-  {
-    user: 'Raj Kumar',
-    action: 'purchased',
-    target: 'Anatomy Theory Package',
-    time: '5m ago',
-  },
-  {
-    user: 'Priya Sharma',
-    action: 'enrolled in',
-    target: 'Upper Limb Live Session',
-    time: '12m ago',
-  },
-  {
-    user: 'Dr. Anita Desai',
-    action: 'uploaded',
-    target: 'Thorax Revision Video',
-    time: '1h ago',
-  },
-  {
-    user: 'Amit Patel',
-    action: 'completed',
-    target: 'Lower Limb Module 3',
-    time: '2h ago',
-  },
-  {
-    user: 'Neha Singh',
-    action: 'registered',
-    target: 'New account',
-    time: '3h ago',
-  },
-]
-
-const upcomingSessions = [
-  {
-    title: 'Upper Limb Anatomy - Muscles',
-    faculty: 'Dr. Priya Sharma',
-    time: 'Today at 4:00 PM',
-    enrolled: 85,
-    capacity: 100,
-    status: 'upcoming' as const,
-  },
-  {
-    title: 'Thorax - Complete Revision',
-    faculty: 'Dr. Rajesh Kumar',
-    time: 'Today at 6:00 PM',
-    enrolled: 42,
-    capacity: 50,
-    status: 'upcoming' as const,
-  },
-  {
-    title: 'Abdomen - Live Discussion',
-    faculty: 'Dr. Anita Desai',
-    time: 'Tomorrow at 10:00 AM',
-    enrolled: 28,
-    capacity: 100,
-    status: 'scheduled' as const,
-  },
-]
-
 export function DashboardPage() {
+  const navigate = useNavigate()
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchDashboard() {
+      try {
+        setLoading(true)
+        const response = await analyticsService.getDashboard()
+        if (response.success && response.data) {
+          setAnalytics(response.data)
+        }
+      } catch (error) {
+        toast.error('Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDashboard()
+  }, [])
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader
+          title="Dashboard"
+          description="Welcome back! Here's what's happening with PGME today."
+        />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -122,118 +91,89 @@ export function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Users"
-          value="1,234"
+          value={analytics ? analytics.users.total.toLocaleString('en-IN') : '—'}
           icon={Users}
-          trend="+12.5% from last month"
+          trend={analytics ? `${analytics.users.new_this_month} new this month` : undefined}
           trendUp={true}
         />
         <StatCard
           title="Revenue (Month)"
-          value="₹2,45,670"
+          value={analytics ? `₹${analytics.revenue.this_month.toLocaleString('en-IN')}` : '—'}
           icon={IndianRupee}
-          trend="+8.2% from last month"
+          trend={analytics ? `₹${analytics.revenue.total.toLocaleString('en-IN')} total` : undefined}
           trendUp={true}
         />
         <StatCard
-          title="Active Videos"
-          value="342"
-          icon={Video}
-          trend="+24 this week"
-          trendUp={true}
+          title="Active Users (30d)"
+          value={analytics ? analytics.users.active_30_days.toLocaleString('en-IN') : '—'}
+          icon={Eye}
         />
         <StatCard
-          title="Upcoming Sessions"
-          value="15"
+          title="New Users (Month)"
+          value={analytics ? analytics.users.new_this_month.toLocaleString('en-IN') : '—'}
           icon={Calendar}
-          trend="3 today"
-          trendUp={true}
         />
       </div>
 
-      {/* Activity + Sessions */}
+      {/* Content Insights */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        {/* Recent Activity */}
+        {/* Popular Subjects */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-4">
-            <CardTitle className="text-base font-semibold">
-              Recent Activity
-            </CardTitle>
-            <Button variant="ghost" size="sm" className="text-xs">
+            <CardTitle className="text-base font-semibold">Popular Subjects</CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate('/content/subjects')}>
               View All
               <ArrowUpRight className="ml-1 h-3 w-3" />
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                  {item.user
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')}
+            {analytics?.content.popular_subjects && analytics.content.popular_subjects.length > 0 ? (
+              analytics.content.popular_subjects.map((subject, i) => (
+                <div key={subject.subject_id} className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm font-medium truncate">{subject.name}</span>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                    {subject.purchase_count} purchases
+                  </Badge>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">{item.user}</span>{' '}
-                    <span className="text-muted-foreground">
-                      {item.action}
-                    </span>{' '}
-                    <span className="font-medium">{item.target}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.time}
-                  </p>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No subject data available</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Upcoming Sessions */}
+        {/* Most Viewed Videos */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-4">
-            <CardTitle className="text-base font-semibold">
-              Upcoming Live Sessions
-            </CardTitle>
-            <Button variant="ghost" size="sm" className="text-xs">
+            <CardTitle className="text-base font-semibold">Most Viewed Videos</CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate('/content/videos')}>
               View All
               <ArrowUpRight className="ml-1 h-3 w-3" />
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            {upcomingSessions.map((session, i) => (
-              <div
-                key={i}
-                className="flex items-start justify-between gap-4 rounded-lg border border-border p-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{session.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {session.faculty}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {session.time}
-                  </p>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{
-                        width: `${(session.enrolled / session.capacity) * 100}%`,
-                      }}
-                    />
+            {analytics?.content.most_viewed_videos && analytics.content.most_viewed_videos.length > 0 ? (
+              analytics.content.most_viewed_videos.map((video, i) => (
+                <div key={video.video_id} className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-xs font-bold text-purple-600">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm font-medium truncate">{video.title}</span>
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    {session.enrolled}/{session.capacity} enrolled
-                  </p>
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                    {video.view_count.toLocaleString('en-IN')} views
+                  </Badge>
                 </div>
-                <Badge
-                  variant={session.status === 'upcoming' ? 'default' : 'secondary'}
-                  className="shrink-0 text-[10px]"
-                >
-                  {session.status}
-                </Badge>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No video data available</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -241,22 +181,21 @@ export function DashboardPage() {
       {/* Quick Actions */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            Quick Actions
-          </CardTitle>
+          <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { icon: Users, label: 'Add User' },
-              { icon: Video, label: 'Upload Video' },
-              { icon: Calendar, label: 'Create Session' },
-              { icon: IndianRupee, label: 'View Revenue' },
+              { icon: Users, label: 'View Users', path: '/users' },
+              { icon: Video, label: 'Manage Videos', path: '/content/videos' },
+              { icon: Calendar, label: 'Live Sessions', path: '/live-sessions' },
+              { icon: IndianRupee, label: 'View Revenue', path: '/commerce/revenue' },
             ].map((action) => (
               <Button
                 key={action.label}
                 variant="outline"
                 className="h-20 flex-col gap-2"
+                onClick={() => navigate(action.path)}
               >
                 <action.icon className="h-5 w-5" />
                 <span className="text-xs">{action.label}</span>

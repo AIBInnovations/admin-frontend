@@ -1,176 +1,259 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Plus, Search, MoreVertical, Pencil, Trash2, BarChart3,
-  Play, Video, Eye, HardDrive, Loader2,
-} from 'lucide-react'
-import { mockVideos } from '@/lib/mock-data'
-
-function formatDuration(seconds: number): string {
-  if (seconds === 0) return '--:--'
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-function formatSize(mb: number): string {
-  if (mb === 0) return '--'
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
-  return `${mb} MB`
-}
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { VideoFormModal } from '@/components/videos/VideoFormModal'
+import { Plus, Video as VideoIcon } from 'lucide-react'
+import { toast } from 'sonner'
+import { videosService, Video, VideoFormData } from '@/services/videos.service'
+import { modulesService, Module } from '@/services/modules.service'
+import { useVideosColumns } from './VideosPage.columns'
 
 export function VideosPage() {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const filtered = mockVideos.filter((v) => {
-    const matchesSearch = !search || v.title.toLowerCase().includes(search.toLowerCase()) || v.faculty_name.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || v.processing_status === statusFilter
-    return matchesSearch && matchesStatus
+  // State
+  const [videos, setVideos] = useState<Video[]>([])
+  const [loading, setLoading] = useState(true)
+  const [moduleFilter, setModuleFilter] = useState(searchParams.get('module') || 'all')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [accessFilter, setAccessFilter] = useState(searchParams.get('access') || 'all')
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+
+  // Dropdown data
+  const [modules, setModules] = useState<Module[]>([])
+
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
+
+  // Fetch modules for filter dropdown
+  useEffect(() => {
+    modulesService.getAll({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
+      if (res.success && res.data) setModules(res.data.entities)
+    })
+  }, [])
+
+  // Fetch videos
+  const fetchVideos = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await videosService.getAll({
+        page: currentPage,
+        limit: 20,
+        module_id: moduleFilter !== 'all' ? moduleFilter : undefined,
+        processing_status: statusFilter !== 'all' ? statusFilter : undefined,
+        is_free: accessFilter === 'all' ? null : accessFilter === 'free',
+      })
+
+      if (response.success && response.data) {
+        setVideos(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
+      }
+    } catch (error) {
+      toast.error('Failed to load videos')
+      setVideos([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, moduleFilter, statusFilter, accessFilter])
+
+  useEffect(() => { fetchVideos() }, [fetchVideos])
+
+  // URL params sync
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (moduleFilter !== 'all') params.module = moduleFilter
+    if (statusFilter !== 'all') params.status = statusFilter
+    if (accessFilter !== 'all') params.access = accessFilter
+    if (currentPage > 1) params.page = currentPage.toString()
+    setSearchParams(params)
+  }, [moduleFilter, statusFilter, accessFilter, currentPage, setSearchParams])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [moduleFilter, statusFilter, accessFilter])
+
+  // Handlers
+  const handleCreate = () => {
+    setModalMode('create')
+    setSelectedVideo(null)
+    setFormModalOpen(true)
+  }
+
+  const handleEdit = (video: Video) => {
+    setModalMode('edit')
+    setSelectedVideo(video)
+    setFormModalOpen(true)
+  }
+
+  const handleDeleteClick = (video: Video) => {
+    setSelectedVideo(video)
+    setDeleteModalOpen(true)
+  }
+
+  const handleFormSubmit = async (data: VideoFormData, file?: File) => {
+    try {
+      let videoId: string | undefined
+      if (modalMode === 'create' && file) {
+        const response = await videosService.upload(data, file)
+        if (response.success) {
+          videoId = response.data?.video_id
+          toast.success('Video uploaded successfully — processing will begin shortly')
+        }
+      } else if (selectedVideo) {
+        const response = await videosService.update(selectedVideo._id, data)
+        if (response.success) {
+          videoId = selectedVideo._id
+          toast.success('Video updated successfully')
+        }
+      }
+      // Assign tags if provided
+      if (videoId && data.tag_ids && data.tag_ids.length > 0) {
+        await videosService.assignTags(videoId, data.tag_ids).catch(() => {})
+      }
+      fetchVideos()
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save video')
+      throw error
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedVideo) return
+    try {
+      const response = await videosService.delete(selectedVideo._id)
+      if (response.success) {
+        toast.success('Video deleted successfully')
+        fetchVideos()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete video')
+      throw error
+    }
+  }
+
+  // Filters
+  const filters: FilterConfig[] = [
+    {
+      key: 'module',
+      label: 'Module',
+      type: 'select',
+      options: [
+        { label: 'All Modules', value: 'all' },
+        ...modules.map((m) => ({ label: m.name, value: m._id })),
+      ],
+      placeholder: 'Filter by module',
+      defaultValue: 'all',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { label: 'All Status', value: 'all' },
+        { label: 'Ready', value: 'ready' },
+        { label: 'Processing', value: 'processing' },
+        { label: 'Uploading', value: 'uploading' },
+        { label: 'Failed', value: 'failed' },
+      ],
+      placeholder: 'Filter by status',
+      defaultValue: 'all',
+    },
+    {
+      key: 'access',
+      label: 'Access',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Free', value: 'free' },
+        { label: 'Paid', value: 'paid' },
+      ],
+      placeholder: 'Filter by access',
+      defaultValue: 'all',
+    },
+  ]
+
+  const columns = useVideosColumns({
+    onEdit: handleEdit,
+    onDelete: handleDeleteClick,
   })
 
-  const totalVideos = mockVideos.length
-  const totalViews = mockVideos.reduce((sum, v) => sum + v.view_count, 0)
-  const totalSizeMb = mockVideos.reduce((sum, v) => sum + v.file_size_mb, 0)
-  const processingCount = mockVideos.filter((v) => v.processing_status === 'processing').length
+  const hasFilters = moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all'
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Videos"
         description="Manage video content, uploads, and processing"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Videos' }]}
-        action={<Button><Plus className="mr-2 h-4 w-4" />Upload Video</Button>}
+        action={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />Upload Video
+          </Button>
+        }
       />
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><Video className="h-5 w-5 text-primary" /></div>
-          <div><p className="text-2xl font-bold">{totalVideos}</p><p className="text-xs text-muted-foreground">Total Videos</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><Eye className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{totalViews.toLocaleString('en-IN')}</p><p className="text-xs text-muted-foreground">Total Views</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10"><HardDrive className="h-5 w-5 text-violet-600" /></div>
-          <div><p className="text-2xl font-bold">{formatSize(totalSizeMb)}</p><p className="text-xs text-muted-foreground">Total Size</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Loader2 className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{processingCount}</p><p className="text-xs text-muted-foreground">Processing</p></div>
-        </CardContent></Card>
-      </div>
+      <SearchWithFilters
+        value=""
+        onChange={() => {}}
+        placeholder="Filter videos..."
+        filters={filters}
+        activeFilters={{ module: moduleFilter, status: statusFilter, access: accessFilter }}
+        onFiltersChange={(f) => {
+          if (f.module !== undefined) setModuleFilter(f.module)
+          if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.access !== undefined) setAccessFilter(f.access)
+        }}
+      />
 
-      {/* Filters */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search videos or faculty..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="ready">Ready</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <DataTable
+        data={videos}
+        columns={columns}
+        isLoading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount,
+          onPageChange: setCurrentPage,
+        }}
+        emptyState={{
+          icon: VideoIcon,
+          title: hasFilters ? 'No videos found matching your filters' : 'No videos yet',
+          description: !hasFilters ? 'Get started by uploading your first video' : undefined,
+          action: !hasFilters ? (
+            <Button onClick={handleCreate} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />Upload your first video
+            </Button>
+          ) : undefined,
+        }}
+        getRowKey={(video) => video._id}
+      />
 
-      {/* Table */}
-      <div className="rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Video</TableHead>
-              <TableHead>Faculty</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Size</TableHead>
-              <TableHead>Views</TableHead>
-              <TableHead>Access</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((video) => (
-              <TableRow key={video._id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                      <Play className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{video.title}</p>
-                      <p className="text-xs text-muted-foreground">{video.module_name}</p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{video.faculty_name}</TableCell>
-                <TableCell className="text-sm font-mono">{formatDuration(video.duration_seconds)}</TableCell>
-                <TableCell className="text-sm">{formatSize(video.file_size_mb)}</TableCell>
-                <TableCell className="text-sm">{video.view_count.toLocaleString('en-IN')}</TableCell>
-                <TableCell>
-                  <Badge variant={video.is_free ? 'secondary' : 'outline'} className="text-[10px]">
-                    {video.is_free ? 'Free' : 'Paid'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {video.processing_status === 'ready' ? (
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                      <span className="text-xs text-emerald-600">Ready</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
-                      <span className="text-xs text-amber-600">Processing</span>
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem><Play className="mr-2 h-4 w-4" />Preview</DropdownMenuItem>
-                      <DropdownMenuItem><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-                      <DropdownMenuItem><BarChart3 className="mr-2 h-4 w-4" />View Analytics</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <VideoFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        onSubmit={handleFormSubmit}
+        video={selectedVideo}
+        mode={modalMode}
+      />
 
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalVideos} videos</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>Previous</Button>
-          <Button variant="outline" size="sm">Next</Button>
-        </div>
-      </div>
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Video"
+        itemName={selectedVideo?.title}
+      />
     </div>
   )
 }

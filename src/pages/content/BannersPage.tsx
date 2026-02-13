@@ -1,77 +1,214 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import { Plus, Pencil, Trash2, Image, ExternalLink, GripVertical } from 'lucide-react'
-import { mockBanners } from '@/lib/mock-data'
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { BannerFormModal } from '@/components/banners/BannerFormModal'
+import { Plus, Image } from 'lucide-react'
+import { toast } from 'sonner'
+import { bannersService, Banner, BannerFormData } from '@/services/banners.service'
+import { useBannersColumns } from './BannersPage.columns'
 
 export function BannersPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // State
+  const [banners, setBanners] = useState<Banner[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
+  const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
+
+  // Fetch banners
+  const fetchBanners = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await bannersService.getAll({
+        page: currentPage,
+        limit: 20,
+        search: search || undefined,
+        is_active: statusFilter === 'all' ? null : statusFilter === 'active',
+      })
+
+      if (response.success && response.data) {
+        setBanners(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
+      }
+    } catch (error) {
+      toast.error('Failed to load banners')
+      setBanners([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, search, statusFilter])
+
+  useEffect(() => { fetchBanners() }, [fetchBanners])
+
+  // URL params sync
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (search) params.search = search
+    if (statusFilter !== 'all') params.status = statusFilter
+    if (currentPage > 1) params.page = currentPage.toString()
+    setSearchParams(params)
+  }, [search, statusFilter, currentPage, setSearchParams])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter])
+
+  // Handlers
+  const handleCreate = () => {
+    setModalMode('create')
+    setSelectedBanner(null)
+    setFormModalOpen(true)
+  }
+
+  const handleEdit = (banner: Banner) => {
+    setModalMode('edit')
+    setSelectedBanner(banner)
+    setFormModalOpen(true)
+  }
+
+  const handleDeleteClick = (banner: Banner) => {
+    setSelectedBanner(banner)
+    setDeleteModalOpen(true)
+  }
+
+  const handleFormSubmit = async (data: BannerFormData) => {
+    try {
+      if (modalMode === 'create') {
+        const response = await bannersService.create(data)
+        if (response.success) {
+          toast.success('Banner created successfully')
+          fetchBanners()
+        }
+      } else if (selectedBanner) {
+        const response = await bannersService.update(selectedBanner._id, data)
+        if (response.success) {
+          toast.success('Banner updated successfully')
+          fetchBanners()
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save banner')
+      throw error
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedBanner) return
+    try {
+      const response = await bannersService.delete(selectedBanner._id)
+      if (response.success) {
+        toast.success('Banner deleted successfully')
+        fetchBanners()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete banner')
+      throw error
+    }
+  }
+
+  // Filters
+  const filters: FilterConfig[] = [
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+      ],
+      placeholder: 'Filter by status',
+      defaultValue: 'all',
+    },
+  ]
+
+  const columns = useBannersColumns({
+    onEdit: handleEdit,
+    onDelete: handleDeleteClick,
+  })
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Banners"
         description="Manage homepage banners and promotions"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Banners' }]}
-        action={<Button><Plus className="mr-2 h-4 w-4" />Add Banner</Button>}
+        action={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />Add Banner
+          </Button>
+        }
       />
 
-      {/* Banner Cards Grid */}
-      <div className="grid grid-cols-2 gap-6">
-        {mockBanners.map((banner) => (
-          <Card key={banner._id} className="overflow-hidden">
-            <CardContent className="p-0">
-              {/* Image Placeholder */}
-              <div className="flex h-48 items-center justify-center bg-muted">
-                <Image className="h-12 w-12 text-muted-foreground" />
-              </div>
+      <SearchWithFilters
+        value={search}
+        onChange={setSearch}
+        placeholder="Search banners..."
+        filters={filters}
+        activeFilters={{ status: statusFilter }}
+        onFiltersChange={(f) => {
+          if (f.status !== undefined) setStatusFilter(f.status)
+        }}
+      />
 
-              {/* Banner Info */}
-              <div className="space-y-3 p-4">
-                {/* Header row with title and status */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold">{banner.title}</h3>
-                    <p className="text-xs text-muted-foreground">{banner.subtitle}</p>
-                  </div>
-                  <Badge variant={banner.is_active ? 'default' : 'outline'} className="shrink-0 text-[10px]">
-                    {banner.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
+      <DataTable
+        data={banners}
+        columns={columns}
+        isLoading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount,
+          onPageChange: setCurrentPage,
+        }}
+        emptyState={{
+          icon: Image,
+          title: search || statusFilter !== 'all'
+            ? 'No banners found matching your filters'
+            : 'No banners yet',
+          description: !search && statusFilter === 'all'
+            ? 'Get started by adding your first banner'
+            : undefined,
+          action: !search && statusFilter === 'all' ? (
+            <Button onClick={handleCreate} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />Add your first banner
+            </Button>
+          ) : undefined,
+        }}
+        getRowKey={(banner) => banner._id}
+      />
 
-                {/* Details */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium">Date Range:</span>
-                    <span>
-                      {new Date(banner.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      {' \u2013 '}
-                      {new Date(banner.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{banner.click_url}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <GripVertical className="h-3 w-3 shrink-0" />
-                    <span>Display Order: {banner.display_order}</span>
-                  </div>
-                </div>
+      <BannerFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        onSubmit={handleFormSubmit}
+        banner={selectedBanner}
+        mode={modalMode}
+      />
 
-                {/* Actions */}
-                <div className="flex gap-2 border-t border-border pt-3">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Pencil className="mr-2 h-3.5 w-3.5" />Edit
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1 text-red-600 hover:text-red-600">
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Banner"
+        itemName={selectedBanner?.title}
+      />
     </div>
   )
 }

@@ -96,7 +96,12 @@ export function DataTable<TData>({
                 return (
                   <TableRow
                     key={key}
-                    onClick={() => onRowClick?.(row)}
+                    onClick={(e) => {
+                      if (!onRowClick) return;
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button, [role="menuitem"], [role="switch"], input, a, [data-no-row-click]')) return;
+                      onRowClick(row);
+                    }}
                     className={cn(
                       'h-12',
                       isClickable && 'cursor-pointer'

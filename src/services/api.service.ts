@@ -1,7 +1,8 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { API_BASE_URL } from '@/lib/config';
 
 // Base URL configuration
-export const BASE_URL = 'http://localhost:5000/api/v1/';
+export const BASE_URL = API_BASE_URL;
 
 // API Response wrapper type
 export interface ApiResponse<T = any> {

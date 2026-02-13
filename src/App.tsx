@@ -8,8 +8,11 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { UsersPage } from '@/pages/users/UsersPage'
+import { UserDetailPage } from '@/pages/users/UserDetailPage'
 import { SubjectsPage } from '@/pages/content/SubjectsPage'
+import { SubjectDetailPage } from '@/pages/content/SubjectDetailPage'
 import { PackagesPage } from '@/pages/content/PackagesPage'
+import { PackageDetailPage } from '@/pages/content/PackageDetailPage'
 import { SeriesPage } from '@/pages/content/SeriesPage'
 import { ModulesPage } from '@/pages/content/ModulesPage'
 import { VideosPage } from '@/pages/content/VideosPage'
@@ -47,10 +50,13 @@ function App() {
 
               {/* Users */}
               <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/:userId" element={<UserDetailPage />} />
 
               {/* Content */}
               <Route path="/content/subjects" element={<SubjectsPage />} />
+              <Route path="/content/subjects/:subjectId" element={<SubjectDetailPage />} />
               <Route path="/content/packages" element={<PackagesPage />} />
+              <Route path="/content/packages/:packageId" element={<PackageDetailPage />} />
               <Route path="/content/series" element={<SeriesPage />} />
               <Route path="/content/modules" element={<ModulesPage />} />
               <Route path="/content/videos" element={<VideosPage />} />

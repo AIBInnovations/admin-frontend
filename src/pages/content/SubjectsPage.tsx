@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/common/DataTable';
@@ -14,6 +14,7 @@ import { FilterConfig } from '@/components/common/SearchBar';
 
 export function SubjectsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // State
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -181,6 +182,7 @@ export function SubjectsPage() {
 
   // Column definitions
   const columns = useSubjectsColumns({
+    onNavigate: (subject) => navigate(`/content/subjects/${subject._id}`),
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
@@ -242,6 +244,7 @@ export function SubjectsPage() {
             ) : undefined,
         }}
         getRowKey={(subject) => subject._id}
+        onRowClick={(subject) => navigate(`/content/subjects/${subject._id}`)}
       />
 
       {/* Form Modal */}

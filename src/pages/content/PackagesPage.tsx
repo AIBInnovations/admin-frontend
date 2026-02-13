@@ -1,170 +1,273 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Plus, Search, MoreVertical, Pencil, Trash2, BarChart3,
-  Tag, Package, CheckCircle, Percent,
-} from 'lucide-react'
-import { mockPackages } from '@/lib/mock-data'
-
-function formatDuration(days: number): string {
-  if (days >= 365) return `${Math.round(days / 365)} year`
-  if (days >= 30) return `${Math.round(days / 30)} months`
-  return `${days} days`
-}
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { PackageFormModal } from '@/components/packages/PackageFormModal'
+import { Plus, Package as PackageIcon } from 'lucide-react'
+import { toast } from 'sonner'
+import { packagesService, Package, PackageFormData } from '@/services/packages.service'
+import { subjectsService, Subject } from '@/services/subjects.service'
+import { usePackagesColumns } from './PackagesPage.columns'
 
 export function PackagesPage() {
-  const [search, setSearch] = useState('')
-  const [subjectFilter, setSubjectFilter] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
-  const filtered = mockPackages.filter((pkg) => {
-    const matchesSearch = !search || pkg.name.toLowerCase().includes(search.toLowerCase())
-    const matchesSubject = subjectFilter === 'all' || pkg.subject_name.toLowerCase() === subjectFilter.toLowerCase()
-    return matchesSearch && matchesSubject
+  // State
+  const [packages, setPackages] = useState<Package[]>([])
+  const [loading, setLoading] = useState(true)
+  const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
+  const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
+  const [saleFilter, setSaleFilter] = useState(searchParams.get('sale') || 'all')
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+
+  // Dropdown data
+  const [subjects, setSubjects] = useState<Subject[]>([])
+
+  // Modal states
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null)
+
+  // Fetch subjects for filter dropdown
+  useEffect(() => {
+    subjectsService.getSubjects({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
+      if (res.success && res.data) setSubjects(res.data.entities)
+    })
+  }, [])
+
+  // Fetch packages
+  const fetchPackages = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await packagesService.getAll({
+        page: currentPage,
+        limit: 20,
+        subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
+        is_active: activeFilter === 'all' ? null : activeFilter === 'active',
+        is_on_sale: saleFilter === 'all' ? null : saleFilter === 'on_sale',
+      })
+
+      if (response.success && response.data) {
+        setPackages(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
+      }
+    } catch (error) {
+      toast.error('Failed to load packages')
+      setPackages([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, subjectFilter, activeFilter, saleFilter])
+
+  useEffect(() => { fetchPackages() }, [fetchPackages])
+
+  // URL params sync
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (subjectFilter !== 'all') params.subject = subjectFilter
+    if (activeFilter !== 'all') params.status = activeFilter
+    if (saleFilter !== 'all') params.sale = saleFilter
+    if (currentPage > 1) params.page = currentPage.toString()
+    setSearchParams(params)
+  }, [subjectFilter, activeFilter, saleFilter, currentPage, setSearchParams])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [subjectFilter, activeFilter, saleFilter])
+
+  // Handlers
+  const handleCreate = () => {
+    setModalMode('create')
+    setSelectedPackage(null)
+    setFormModalOpen(true)
+  }
+
+  const handleEdit = (pkg: Package) => {
+    setModalMode('edit')
+    setSelectedPackage(pkg)
+    setFormModalOpen(true)
+  }
+
+  const handleDeleteClick = (pkg: Package) => {
+    setSelectedPackage(pkg)
+    setDeleteModalOpen(true)
+  }
+
+  const handleFormSubmit = async (data: PackageFormData) => {
+    try {
+      if (modalMode === 'create') {
+        const response = await packagesService.create(data)
+        if (response.success) {
+          toast.success('Package created successfully')
+          fetchPackages()
+        }
+      } else if (selectedPackage) {
+        const response = await packagesService.update(selectedPackage._id, data)
+        if (response.success) {
+          toast.success('Package updated successfully')
+          fetchPackages()
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save package')
+      throw error
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedPackage) return
+    try {
+      const response = await packagesService.delete(selectedPackage._id)
+      if (response.success) {
+        toast.success('Package deleted successfully')
+        fetchPackages()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete package')
+      throw error
+    }
+  }
+
+  const handleToggleActive = async (pkg: Package) => {
+    try {
+      const response = await packagesService.toggleActive(pkg._id, !pkg.is_active)
+      if (response.success) {
+        toast.success(`Package ${!pkg.is_active ? 'activated' : 'deactivated'} successfully`)
+        fetchPackages()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update status')
+    }
+  }
+
+  // Filters
+  const filters: FilterConfig[] = [
+    {
+      key: 'subject',
+      label: 'Subject',
+      type: 'select',
+      options: [
+        { label: 'All Subjects', value: 'all' },
+        ...subjects.map((s) => ({ label: s.name, value: s._id })),
+      ],
+      placeholder: 'Filter by subject',
+      defaultValue: 'all',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+      ],
+      placeholder: 'Filter by status',
+      defaultValue: 'all',
+    },
+    {
+      key: 'sale',
+      label: 'Sale',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'On Sale', value: 'on_sale' },
+        { label: 'Not on Sale', value: 'not_on_sale' },
+      ],
+      placeholder: 'Filter by sale',
+      defaultValue: 'all',
+    },
+  ]
+
+  const handleNavigate = (pkg: Package) => {
+    navigate(`/content/packages/${pkg._id}`)
+  }
+
+  const columns = usePackagesColumns({
+    onNavigate: handleNavigate,
+    onEdit: handleEdit,
+    onDelete: handleDeleteClick,
+    onToggleActive: handleToggleActive,
   })
 
-  const totalPackages = mockPackages.length
-  const activePackages = mockPackages.filter((p) => p.is_active).length
-  const onSalePackages = mockPackages.filter((p) => p.is_on_sale).length
-
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Packages"
         description="Manage course packages, pricing, and enrollment"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Packages' }]}
-        action={<Button><Plus className="mr-2 h-4 w-4" />Add Package</Button>}
+        action={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />Add Package
+          </Button>
+        }
       />
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"><Package className="h-5 w-5 text-primary" /></div>
-          <div><p className="text-2xl font-bold">{totalPackages}</p><p className="text-xs text-muted-foreground">Total Packages</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10"><CheckCircle className="h-5 w-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold">{activePackages}</p><p className="text-xs text-muted-foreground">Active</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"><Percent className="h-5 w-5 text-amber-600" /></div>
-          <div><p className="text-2xl font-bold">{onSalePackages}</p><p className="text-xs text-muted-foreground">On Sale</p></div>
-        </CardContent></Card>
-      </div>
+      <SearchWithFilters
+        value=""
+        onChange={() => {}}
+        placeholder="Filter packages..."
+        filters={filters}
+        activeFilters={{ subject: subjectFilter, status: activeFilter, sale: saleFilter }}
+        onFiltersChange={(f) => {
+          if (f.subject !== undefined) setSubjectFilter(f.subject)
+          if (f.status !== undefined) setActiveFilter(f.status)
+          if (f.sale !== undefined) setSaleFilter(f.sale)
+        }}
+      />
 
-      {/* Filters */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search packages..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Subject" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Subjects</SelectItem>
-            <SelectItem value="anatomy">Anatomy</SelectItem>
-            <SelectItem value="physiology">Physiology</SelectItem>
-            <SelectItem value="biochemistry">Biochemistry</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <DataTable
+        data={packages}
+        columns={columns}
+        isLoading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount,
+          onPageChange: setCurrentPage,
+        }}
+        emptyState={{
+          icon: PackageIcon,
+          title: subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all'
+            ? 'No packages found matching your filters'
+            : 'No packages yet',
+          description: subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all'
+            ? 'Get started by creating your first package'
+            : undefined,
+          action: subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' ? (
+            <Button onClick={handleCreate} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />Create your first package
+            </Button>
+          ) : undefined,
+        }}
+        onRowClick={handleNavigate}
+        getRowKey={(pkg) => pkg._id}
+      />
 
-      {/* Table */}
-      <div className="rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Package</TableHead>
-              <TableHead>Subject</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Enrolled</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((pkg) => (
-              <TableRow key={pkg._id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                      {pkg.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{pkg.name}</p>
-                      <Badge variant="outline" className="mt-0.5 text-[10px]">{pkg.type_name}</Badge>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{pkg.subject_name}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    {pkg.is_on_sale ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-emerald-600">₹{pkg.sale_price?.toLocaleString('en-IN')}</span>
-                          <Badge className="bg-emerald-500/10 text-[10px] text-emerald-700 hover:bg-emerald-500/10">SALE</Badge>
-                        </div>
-                        <span className="text-xs text-muted-foreground line-through">₹{(pkg.original_price ?? pkg.price).toLocaleString('en-IN')}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-sm font-semibold">₹{pkg.price.toLocaleString('en-IN')}</span>
-                        {pkg.original_price && (
-                          <span className="text-xs text-muted-foreground line-through">₹{pkg.original_price.toLocaleString('en-IN')}</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{formatDuration(pkg.duration_days)}</TableCell>
-                <TableCell><Badge variant="secondary">{pkg.enrolled_count} students</Badge></TableCell>
-                <TableCell>
-                  <Badge variant={pkg.is_active ? 'default' : 'outline'} className="text-[10px]">
-                    {pkg.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-                      <DropdownMenuItem><BarChart3 className="mr-2 h-4 w-4" />View Analytics</DropdownMenuItem>
-                      <DropdownMenuItem><Tag className="mr-2 h-4 w-4" />Toggle Sale</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <PackageFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        onSubmit={handleFormSubmit}
+        pkg={selectedPackage}
+        mode={modalMode}
+      />
 
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Showing {filtered.length} of {totalPackages} packages</p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>Previous</Button>
-          <Button variant="outline" size="sm">Next</Button>
-        </div>
-      </div>
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Package"
+        itemName={selectedPackage?.name}
+      />
     </div>
   )
 }

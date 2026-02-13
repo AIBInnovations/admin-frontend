@@ -9,15 +9,18 @@ import {
 import { StatusToggle } from '@/components/common/StatusToggle';
 import { ColumnDef } from '@/components/common/DataTable';
 import { Subject } from '@/services/subjects.service';
-import { GripVertical, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { GripVertical, MoreVertical, Eye, Pencil, Trash2 } from 'lucide-react';
+import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface SubjectsColumnsProps {
+  onNavigate: (subject: Subject) => void;
   onEdit: (subject: Subject) => void;
   onDelete: (subject: Subject) => void;
   onToggleActive: (subject: Subject) => void;
 }
 
 export function useSubjectsColumns({
+  onNavigate,
   onEdit,
   onDelete,
   onToggleActive,
@@ -61,8 +64,8 @@ export function useSubjectsColumns({
       width: 'w-32',
       cell: (subject) => (
         <Badge variant="secondary">
-          {subject.packages_count || 0}{' '}
-          {subject.packages_count === 1 ? 'package' : 'packages'}
+          {subject.package_count || 0}{' '}
+          {subject.package_count === 1 ? 'package' : 'packages'}
         </Badge>
       ),
     },
@@ -71,11 +74,13 @@ export function useSubjectsColumns({
       header: 'Status',
       width: 'w-32',
       cell: (subject) => (
-        <StatusToggle
-          checked={subject.is_active}
-          onCheckedChange={() => onToggleActive(subject)}
-          size="sm"
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <StatusToggle
+            checked={subject.is_active}
+            onCheckedChange={() => onToggleActive(subject)}
+            size="sm"
+          />
+        </div>
       ),
     },
     {
@@ -97,6 +102,7 @@ export function useSubjectsColumns({
       header: '',
       width: 'w-10',
       cell: (subject) => (
+        <div onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -104,10 +110,15 @@ export function useSubjectsColumns({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onNavigate(subject)}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Details
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(subject)}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete(subject)}
               className="text-destructive"
@@ -117,6 +128,7 @@ export function useSubjectsColumns({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       ),
     },
   ];
