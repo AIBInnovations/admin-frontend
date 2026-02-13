@@ -102,10 +102,10 @@ export function DocumentsPage() {
     setDeleteModalOpen(true)
   }
 
-  const handleFormSubmit = async (data: DocumentFormData, file?: File) => {
+  const handleFormSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
     try {
       if (modalMode === 'create' && file) {
-        const response = await documentsService.upload(data, file)
+        const response = await documentsService.upload(data, file, onProgress)
         if (response.success) {
           toast.success('Document uploaded successfully')
           fetchDocuments()

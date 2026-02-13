@@ -41,7 +41,7 @@ type VideoFormValues = z.infer<typeof videoSchema>
 interface VideoFormModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: VideoFormData, file?: File) => Promise<void>
+  onSubmit: (data: VideoFormData, file?: File, onProgress?: (percent: number) => void) => Promise<void>
   video?: Video | null
   mode: 'create' | 'edit'
   defaultModuleId?: string
@@ -53,6 +53,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [availableTags, setAvailableTags] = useState<VideoTag[]>([])
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   const {
     register, handleSubmit, control,
@@ -116,6 +117,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
 
   const handleFormSubmit = async (data: VideoFormValues) => {
     if (mode === 'create' && !videoFile) return
+    setUploadProgress(null)
 
     try {
       const formData: VideoFormData = {
@@ -129,10 +131,12 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         transcript_url: data.transcript_url || undefined,
         tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       }
-      await onSubmit(formData, videoFile || undefined)
+      await onSubmit(formData, videoFile || undefined, (pct) => setUploadProgress(pct))
       onClose()
     } catch (error) {
       console.error('Form submission error:', error)
+    } finally {
+      setUploadProgress(null)
     }
   }
 
@@ -364,6 +368,22 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 }>
                   {video.processing_status}
                 </span>
+              </div>
+            </div>
+          )}
+
+          {/* Upload progress bar */}
+          {uploadProgress !== null && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{uploadProgress < 100 ? 'Uploading to cloud...' : 'Finalizing...'}</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
               </div>
             </div>
           )}

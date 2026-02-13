@@ -102,11 +102,11 @@ export function VideosPage() {
     setDeleteModalOpen(true)
   }
 
-  const handleFormSubmit = async (data: VideoFormData, file?: File) => {
+  const handleFormSubmit = async (data: VideoFormData, file?: File, onProgress?: (percent: number) => void) => {
     try {
       let videoId: string | undefined
       if (modalMode === 'create' && file) {
-        const response = await videosService.upload(data, file)
+        const response = await videosService.upload(data, file, onProgress)
         if (response.success) {
           videoId = response.data?.video_id
           toast.success('Video uploaded successfully — processing will begin shortly')

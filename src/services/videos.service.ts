@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef } from '@/types/api.types'
 
@@ -85,23 +86,49 @@ class VideosService {
   }
 
   /**
-   * Upload new video (multipart/form-data)
+   * Upload new video via presigned S3 URL (3-step flow):
+   * 1. Get presigned upload URL from backend
+   * 2. PUT file directly to S3
+   * 3. Confirm upload with backend to create DB record + trigger transcoding
    */
-  async upload(data: VideoFormData, videoFile: File): Promise<ApiResponse<any>> {
-    const formData = new FormData()
-    formData.append('video_file', videoFile)
-    formData.append('title', data.title)
-    formData.append('description', data.description)
-    formData.append('module_id', data.module_id)
-    if (data.faculty_id) formData.append('faculty_id', data.faculty_id)
-    if (data.is_free !== undefined) formData.append('is_free', String(data.is_free))
-    if (data.display_order !== undefined) formData.append('display_order', String(data.display_order))
-    if (data.subtitle_url) formData.append('subtitle_url', data.subtitle_url)
-    if (data.transcript_url) formData.append('transcript_url', data.transcript_url)
+  async upload(
+    data: VideoFormData,
+    videoFile: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<ApiResponse<{ video_id: string }>> {
+    const mimeType = videoFile.type || 'video/mp4'
 
-    return apiService.post<any>(this.basePath, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+      `${this.basePath}/upload-url`,
+      { mimeType },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key } = urlRes.data
+
+    // Step 2: Upload directly to S3 (raw axios, no auth header)
+    await axios.put(uploadUrl, videoFile, {
+      headers: { 'Content-Type': mimeType },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    // Step 3: Confirm upload with backend
+    return apiService.post<{ video_id: string }>(`${this.basePath}/confirm-upload`, {
+      s3Key,
+      title: data.title,
+      description: data.description,
+      module_id: data.module_id,
+      faculty_id: data.faculty_id || undefined,
+      is_free: data.is_free,
+      display_order: data.display_order,
+      fileSize: videoFile.size,
+      mimeType,
     })
   }
 

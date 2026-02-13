@@ -30,7 +30,7 @@ type DocumentFormValues = z.infer<typeof documentSchema>
 interface DocumentFormModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: DocumentFormData, file?: File) => Promise<void>
+  onSubmit: (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => Promise<void>
   document?: Document | null
   mode: 'create' | 'edit'
   defaultSeriesId?: string
@@ -39,6 +39,7 @@ interface DocumentFormModalProps {
 export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode, defaultSeriesId }: DocumentFormModalProps) {
   const [seriesList, setSeriesList] = useState<Series[]>([])
   const [docFile, setDocFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   const {
     register, handleSubmit, control,
@@ -84,6 +85,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
 
   const handleFormSubmit = async (data: DocumentFormValues) => {
     if (mode === 'create' && !docFile) return
+    setUploadProgress(null)
 
     try {
       const formData: DocumentFormData = {
@@ -93,10 +95,12 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
         is_free: data.is_free,
         display_order: data.display_order || undefined,
       }
-      await onSubmit(formData, docFile || undefined)
+      await onSubmit(formData, docFile || undefined, (pct) => setUploadProgress(pct))
       onClose()
     } catch (error) {
       console.error('Form submission error:', error)
+    } finally {
+      setUploadProgress(null)
     }
   }
 
@@ -198,6 +202,22 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
               />
             </div>
           </div>
+
+          {/* Upload progress bar */}
+          {uploadProgress !== null && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{uploadProgress < 100 ? 'Uploading to cloud...' : 'Finalizing...'}</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>

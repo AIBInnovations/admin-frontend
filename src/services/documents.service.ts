@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef } from '@/types/api.types'
 
@@ -67,19 +68,47 @@ class DocumentsService {
   }
 
   /**
-   * Upload new document (multipart/form-data)
+   * Upload new document via presigned S3 URL (3-step flow):
+   * 1. Get presigned upload URL from backend
+   * 2. PUT file directly to S3
+   * 3. Confirm upload with backend to create DB record
    */
-  async upload(data: DocumentFormData, file: File): Promise<ApiResponse<any>> {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('title', data.title)
-    formData.append('description', data.description)
-    formData.append('series_id', data.series_id)
-    if (data.is_free !== undefined) formData.append('is_free', String(data.is_free))
+  async upload(
+    data: DocumentFormData,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<ApiResponse<any>> {
+    const mimeType = file.type || 'application/pdf'
 
-    return apiService.post<any>(this.basePath, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+      `${this.basePath}/upload-url`,
+      { mimeType },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key } = urlRes.data
+
+    // Step 2: Upload directly to S3 (raw axios, no auth header)
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    // Step 3: Confirm upload with backend
+    return apiService.post<any>(`${this.basePath}/confirm-upload`, {
+      s3Key,
+      title: data.title,
+      description: data.description,
+      series_id: data.series_id,
+      is_free: data.is_free,
+      fileSize: file.size,
+      mimeType,
     })
   }
 

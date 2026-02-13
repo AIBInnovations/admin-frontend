@@ -193,10 +193,10 @@ export function PackageDetailPage() {
     }
   }
 
-  const handleVideoSubmit = async (data: VideoFormData, file?: File) => {
+  const handleVideoSubmit = async (data: VideoFormData, file?: File, onProgress?: (percent: number) => void) => {
     if (!file) return
     try {
-      const response = await videosService.upload(data, file)
+      const response = await videosService.upload(data, file, onProgress)
       if (response.success) {
         const videoId = response.data?.video_id
         if (videoId && data.tag_ids && data.tag_ids.length > 0) {
@@ -211,10 +211,10 @@ export function PackageDetailPage() {
     }
   }
 
-  const handleDocumentSubmit = async (data: DocumentFormData, file?: File) => {
+  const handleDocumentSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
     if (!file) return
     try {
-      const response = await documentsService.upload(data, file)
+      const response = await documentsService.upload(data, file, onProgress)
       if (response.success) {
         toast.success('Document uploaded successfully')
         fetchPackage()
