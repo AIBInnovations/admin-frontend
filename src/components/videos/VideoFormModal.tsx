@@ -161,7 +161,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-6 text-sm hover:bg-muted/50 hover:border-primary/30 transition-colors">
                   <Upload className="h-8 w-8 text-muted-foreground" />
                   <span className="font-medium text-muted-foreground">Click to choose video file</span>
-                  <span className="text-xs text-muted-foreground">MP4, MOV, AVI, MKV (max 500 MB)</span>
+                  <span className="text-xs text-muted-foreground">MP4, MOV, AVI, MKV, WebM (up to 10 GB)</span>
                   <input
                     type="file"
                     accept="video/*"
