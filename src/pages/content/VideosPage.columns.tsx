@@ -6,14 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Video } from '@/services/videos.service'
-import { MoreVertical, Pencil, Trash2, Clock, Eye } from 'lucide-react'
-
-function formatDuration(seconds: number): string {
-  if (!seconds) return '—'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
+import { MoreVertical, Pencil, Trash2, Eye } from 'lucide-react'
 
 function formatFileSize(mb: number): string {
   if (!mb) return '—'
@@ -68,17 +61,6 @@ export function useVideosColumns({
             ? video.faculty_id.name
             : '—'}
         </span>
-      ),
-    },
-    {
-      id: 'duration',
-      header: 'Duration',
-      width: 'w-24',
-      cell: (video) => (
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs">{formatDuration(video.duration_seconds)}</span>
-        </div>
       ),
     },
     {
