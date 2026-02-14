@@ -4,7 +4,8 @@ import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { Card, CardContent } from '@/components/ui/card'
-import { Bell, Send, Eye, AlertTriangle, Clock } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   notificationsService,
@@ -12,6 +13,7 @@ import {
   NotificationStats,
 } from '@/services/notifications.service'
 import { useNotificationsColumns } from './NotificationsPage.columns'
+import { SendNotificationTab } from './SendNotificationTab'
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -152,103 +154,122 @@ export function NotificationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Notifications"
-        description="View and manage all notifications sent to users"
+        description="Send push notifications and view notification history"
         breadcrumbs={[
           { label: 'Dashboard', href: '/' },
           { label: 'Notifications' },
         ]}
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Send className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.total?.toLocaleString('en-IN') ?? '—'}</p>
-              <p className="text-xs text-muted-foreground">Total Notifications</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-              <Eye className="h-5 w-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.read?.toLocaleString('en-IN') ?? '—'}</p>
-              <p className="text-xs text-muted-foreground">Read</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-              <Clock className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.pending?.toLocaleString('en-IN') ?? '—'}</p>
-              <p className="text-xs text-muted-foreground">Pending</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
-              <AlertTriangle className="h-5 w-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.failed?.toLocaleString('en-IN') ?? '—'}</p>
-              <p className="text-xs text-muted-foreground">Failed</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Tabs defaultValue="send" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="send" className="gap-2">
+            <Megaphone className="h-4 w-4" />
+            Send Push
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <Bell className="h-4 w-4" />
+            History
+          </TabsTrigger>
+        </TabsList>
 
-      <SearchWithFilters
-        value={search}
-        onChange={setSearch}
-        placeholder="Search notifications..."
-        filters={filters}
-        activeFilters={{ type: typeFilter, status: statusFilter, delivery: deliveryFilter }}
-        onFiltersChange={(f) => {
-          if (f.type !== undefined) setTypeFilter(f.type)
-          if (f.status !== undefined) setStatusFilter(f.status)
-          if (f.delivery !== undefined) setDeliveryFilter(f.delivery)
-        }}
-      />
+        <TabsContent value="send">
+          <SendNotificationTab />
+        </TabsContent>
 
-      <DataTable
-        data={filteredNotifications}
-        columns={columns}
-        isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
-        emptyState={{
-          icon: Bell,
-          title: search || typeFilter !== 'all' || statusFilter !== 'all' || deliveryFilter !== 'all'
-            ? 'No notifications found matching your filters'
-            : 'No notifications yet',
-          description: !search && typeFilter === 'all' && statusFilter === 'all' && deliveryFilter === 'all'
-            ? 'Notifications will appear here when they are sent to users'
-            : undefined,
-        }}
-        getRowKey={(n) => n._id}
-      />
+        <TabsContent value="history" className="space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Send className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.total?.toLocaleString('en-IN') ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground">Total Notifications</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <Eye className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.read?.toLocaleString('en-IN') ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground">Read</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+                  <Clock className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.pending?.toLocaleString('en-IN') ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.failed?.toLocaleString('en-IN') ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Notification"
-        itemName={selectedNotification?.title}
-      />
+          <SearchWithFilters
+            value={search}
+            onChange={setSearch}
+            placeholder="Search notifications..."
+            filters={filters}
+            activeFilters={{ type: typeFilter, status: statusFilter, delivery: deliveryFilter }}
+            onFiltersChange={(f) => {
+              if (f.type !== undefined) setTypeFilter(f.type)
+              if (f.status !== undefined) setStatusFilter(f.status)
+              if (f.delivery !== undefined) setDeliveryFilter(f.delivery)
+            }}
+          />
+
+          <DataTable
+            data={filteredNotifications}
+            columns={columns}
+            isLoading={loading}
+            pagination={{
+              currentPage,
+              totalPages,
+              totalCount,
+              onPageChange: setCurrentPage,
+            }}
+            emptyState={{
+              icon: Bell,
+              title: search || typeFilter !== 'all' || statusFilter !== 'all' || deliveryFilter !== 'all'
+                ? 'No notifications found matching your filters'
+                : 'No notifications yet',
+              description: !search && typeFilter === 'all' && statusFilter === 'all' && deliveryFilter === 'all'
+                ? 'Notifications will appear here when they are sent to users'
+                : undefined,
+            }}
+            getRowKey={(n) => n._id}
+          />
+
+          <DeleteModal
+            open={deleteModalOpen}
+            onClose={() => setDeleteModalOpen(false)}
+            onConfirm={handleDeleteConfirm}
+            title="Delete Notification"
+            itemName={selectedNotification?.title}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

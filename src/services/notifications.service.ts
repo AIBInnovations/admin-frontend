@@ -34,6 +34,11 @@ export interface NotificationsListParams extends BaseListParams {
   delivery_status?: string
 }
 
+export interface SendResult {
+  notifications_created: number
+  push_results: { success: number; failure: number }
+}
+
 class NotificationsService {
   private basePath = 'admin/notifications'
 
@@ -71,6 +76,18 @@ class NotificationsService {
 
   async delete(id: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${id}`)
+  }
+
+  async sendToAll(data: { title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-all`, data)
+  }
+
+  async sendToSubject(data: { subject_id: string; title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-subject`, data)
+  }
+
+  async sendToUsers(data: { user_ids: string[]; title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-users`, data)
   }
 }
 
