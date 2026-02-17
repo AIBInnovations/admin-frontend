@@ -31,7 +31,14 @@ export function useBooksColumns({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{book.title}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium truncate">{book.title}</p>
+              {book.ebook && (
+                <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0 bg-blue-500/10 text-blue-600 border-blue-200">
+                  E-Book
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{book.author}</p>
           </div>
         </div>

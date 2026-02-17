@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef } from '@/types/api.types'
 
@@ -23,6 +24,11 @@ export interface Book {
   publication_year: number | null
   pages: number | null
   display_order: number
+  ebook: boolean
+  ebook_file_url: string | null
+  ebook_s3_key: string | null
+  ebook_file_size_mb: number | null
+  ebook_file_format: 'pdf' | 'epub' | null
   createdAt: string
   updatedAt: string
 }
@@ -46,6 +52,7 @@ export interface BookFormData {
   publication_year?: number
   pages?: number
   display_order?: number
+  ebook?: boolean
 }
 
 export interface BooksListParams extends BaseListParams {
@@ -114,6 +121,43 @@ class BooksService {
 
   async getLowStock(threshold = 10): Promise<ApiResponse<ListResponse<Book>>> {
     return apiService.get<ListResponse<Book>>(`${this.basePath}/low-stock?threshold=${threshold}`)
+  }
+
+  /**
+   * Upload ebook file to S3 and confirm with backend.
+   * 3-step flow: get presigned URL → upload to S3 → confirm upload.
+   */
+  async uploadEbook(
+    bookId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<ApiResponse<{ book_id: string; ebook_file_url: string; ebook_file_size_mb: number; ebook_file_format: string }>> {
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+      `${this.basePath}/ebook-upload-url`,
+      { mimeType: file.type || 'application/pdf' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key } = urlRes.data
+
+    // Step 2: Upload directly to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'application/pdf' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    // Step 3: Confirm upload with backend
+    return apiService.post(`${this.basePath}/${bookId}/ebook-confirm`, {
+      s3Key,
+      fileSize: file.size,
+      mimeType: file.type,
+    })
   }
 }
 

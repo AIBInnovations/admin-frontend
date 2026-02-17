@@ -1,17 +1,31 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
 import {
   Video, Users, Calendar, Clock, DollarSign, Settings,
   Monitor, Link as LinkIcon, UserCheck, Eye, Edit, Trash2,
-  CheckCircle, XCircle, AlertCircle, PlayCircle,
+  CheckCircle, XCircle, AlertCircle, PlayCircle, ExternalLink, Film,
+  Package, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { liveSessionsService, LiveSession, LiveSessionFormData } from '@/services/liveSessions.service'
+import { recordingsService, Recording } from '@/services/recordings.service'
+import { packageTypesService, PackageType } from '@/services/packageTypes.service'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 
@@ -23,6 +37,16 @@ export function SessionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [recordings, setRecordings] = useState<Recording[]>([])
+  const [loadingRecordings, setLoadingRecordings] = useState(true)
+
+  // Convert to package state
+  const [convertModalOpen, setConvertModalOpen] = useState(false)
+  const [convertLoading, setConvertLoading] = useState(false)
+  const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
+  const [selectedPackageTypeId, setSelectedPackageTypeId] = useState('')
+  const [convertPrice, setConvertPrice] = useState('0')
+  const [convertDuration, setConvertDuration] = useState('365')
 
   const fetchSession = useCallback(async () => {
     if (!sessionId) return
@@ -44,6 +68,23 @@ export function SessionDetailPage() {
   }, [sessionId, navigate])
 
   useEffect(() => { fetchSession() }, [fetchSession])
+
+  const fetchRecordings = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      setLoadingRecordings(true)
+      const response = await recordingsService.getAll({ session_id: sessionId, limit: 100 })
+      if (response.success && response.data) {
+        setRecordings(response.data.entities || [])
+      }
+    } catch (error) {
+      console.error('Failed to load recordings:', error)
+    } finally {
+      setLoadingRecordings(false)
+    }
+  }, [sessionId])
+
+  useEffect(() => { fetchRecordings() }, [fetchRecordings])
 
   const handleEdit = () => {
     setFormModalOpen(true)
@@ -92,6 +133,45 @@ export function SessionDetailPage() {
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel session')
     }
+  }
+
+  const handleOpenConvertModal = async () => {
+    setConvertModalOpen(true)
+    setSelectedPackageTypeId('')
+    setConvertPrice(session?.price?.toString() || '0')
+    setConvertDuration('365')
+    const res = await packageTypesService.getAllPublic()
+    if (res.success && res.data) setPackageTypes(res.data)
+  }
+
+  const handleConvertToPackage = async () => {
+    if (!sessionId || !selectedPackageTypeId) return
+    try {
+      setConvertLoading(true)
+      const response = await liveSessionsService.convertToPackage(sessionId, {
+        package_type_id: selectedPackageTypeId,
+        price: parseFloat(convertPrice) || 0,
+        duration_days: parseInt(convertDuration) || 365,
+      })
+      if (response.success && response.data) {
+        toast.success(`Package created with ${response.data.video_count} video(s)`)
+        setConvertModalOpen(false)
+        navigate(`/content/packages/${response.data.package_id}`)
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to convert session to package')
+    } finally {
+      setConvertLoading(false)
+    }
+  }
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`
+    const mins = Math.floor(seconds / 60)
+    if (mins < 60) return `${mins}m`
+    const hrs = Math.floor(mins / 60)
+    const remainMins = mins % 60
+    return remainMins > 0 ? `${hrs}h ${remainMins}m` : `${hrs}h`
   }
 
   // Loading skeleton
@@ -165,6 +245,12 @@ export function SessionDetailPage() {
         ]}
         action={
           <div className="flex items-center gap-2">
+            {recordings.length > 0 && (
+              <Button size="sm" onClick={handleOpenConvertModal}>
+                <Package className="mr-2 h-4 w-4" />
+                Convert to Package
+              </Button>
+            )}
             {session.status === 'scheduled' && (
               <Button variant="outline" size="sm" onClick={handleCancel}>
                 <XCircle className="mr-2 h-4 w-4" />
@@ -514,6 +600,102 @@ export function SessionDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Session Recordings */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Film className="h-4 w-4" />
+            Session Recordings
+            <Badge variant="secondary" className="text-[10px] ml-1">
+              {recordings.length}
+            </Badge>
+          </CardTitle>
+          <Link to="/content/recordings">
+            <Button variant="outline" size="sm">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Manage Recordings
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {loadingRecordings ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : recordings.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              <Film className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p>No recordings assigned to this session yet</p>
+              <Link to="/content/recordings">
+                <Button variant="link" size="sm" className="mt-2">
+                  Go to Recordings page to upload and assign
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead className="w-24">Duration</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead className="w-24">Size</TableHead>
+                  <TableHead className="w-32">Added</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recordings.map((recording) => (
+                  <TableRow key={recording._id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-sm">{recording.title}</p>
+                        {recording.description && (
+                          <p className="text-xs text-muted-foreground truncate max-w-md">
+                            {recording.description}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {recording.duration_seconds > 0
+                        ? formatDuration(recording.duration_seconds)
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs capitalize ${
+                          recording.processing_status === 'ready'
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                            : recording.processing_status === 'failed'
+                              ? 'bg-red-500/10 text-red-600 border-red-200'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-200'
+                        }`}
+                      >
+                        {recording.processing_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {recording.file_size_mb > 0
+                        ? `${recording.file_size_mb.toFixed(1)} MB`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(recording.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Edit Modal */}
       <SessionFormModal
         open={formModalOpen}
@@ -531,6 +713,105 @@ export function SessionDetailPage() {
         title="Delete Session"
         itemName={session.title}
       />
+
+      {/* Convert to Package Modal */}
+      <Dialog open={convertModalOpen} onOpenChange={(open) => !convertLoading && setConvertModalOpen(open)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Convert Session to Package</DialogTitle>
+            <DialogDescription>
+              This will create a new package with the session recordings as videos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+              <p><span className="font-medium">Package:</span> {session.title}</p>
+              <p><span className="font-medium">Subject:</span> {typeof session.subject_id === 'object' ? session.subject_id.name : '—'}</p>
+              <p>
+                <span className="font-medium">Will create:</span>{' '}
+                1 series, 1 module, {recordings.length} video{recordings.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            {/* Package Type */}
+            <div className="space-y-2">
+              <Label>
+                Package Type <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={selectedPackageTypeId}
+                onValueChange={setSelectedPackageTypeId}
+                disabled={convertLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select package type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {packageTypes.map((pt) => (
+                    <SelectItem key={pt._id} value={pt._id}>
+                      {pt.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Price & Duration */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="convert-price">Price (INR)</Label>
+                <Input
+                  id="convert-price"
+                  type="number"
+                  min={0}
+                  value={convertPrice}
+                  onChange={(e) => setConvertPrice(e.target.value)}
+                  disabled={convertLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="convert-duration">Duration (days)</Label>
+                <Input
+                  id="convert-duration"
+                  type="number"
+                  min={1}
+                  value={convertDuration}
+                  onChange={(e) => setConvertDuration(e.target.value)}
+                  disabled={convertLoading}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConvertModalOpen(false)}
+              disabled={convertLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConvertToPackage}
+              disabled={convertLoading || !selectedPackageTypeId}
+            >
+              {convertLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                <>
+                  <Package className="mr-2 h-4 w-4" />
+                  Create Package
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -34,6 +34,7 @@ import { BooksPage } from '@/pages/content/BooksPage'
 import { BannersPage } from '@/pages/content/BannersPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
+import { RecordingsPage } from '@/pages/content/RecordingsPage'
 
 function App() {
   return (
@@ -64,6 +65,7 @@ function App() {
               <Route path="/content/modules" element={<ModulesPage />} />
               <Route path="/content/videos" element={<VideosPage />} />
               <Route path="/content/documents" element={<DocumentsPage />} />
+              <Route path="/content/recordings" element={<RecordingsPage />} />
               <Route path="/content/video-tags" element={<VideoTagsPage />} />
               <Route path="/content/books" element={<BooksPage />} />
               <Route path="/content/banners" element={<BannersPage />} />

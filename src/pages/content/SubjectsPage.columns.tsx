@@ -53,9 +53,9 @@ export function useSubjectsColumns({
       id: 'description',
       header: 'Description',
       cell: (subject) => (
-        <span className="max-w-xs truncate text-sm text-muted-foreground">
+        <p className="max-w-xs truncate text-sm text-muted-foreground">
           {subject.description || '—'}
-        </span>
+        </p>
       ),
     },
     {

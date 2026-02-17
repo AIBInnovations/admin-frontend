@@ -6,6 +6,7 @@ export interface Subject {
   name: string;
   description: string | null;
   icon_url?: string;
+  whatsapp_community_link?: string | null;
   display_order: number;
   is_active: boolean;
   package_count?: number;
@@ -34,6 +35,7 @@ export interface SubjectDetail extends Subject {
 export interface SubjectFormData {
   name: string;
   description?: string;
+  whatsapp_community_link?: string;
   display_order?: number;
   is_active: boolean;
 }

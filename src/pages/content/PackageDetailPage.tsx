@@ -453,66 +453,43 @@ export function PackageDetailPage() {
       </div>
 
       {/* Content Structure */}
-      {isTheory ? (
-        /* Theory packages: Tabbed layout with Videos and Documents */
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Content Structure
-              <Badge variant="secondary" className="text-[10px] ml-1">
-                {pkg.series_count} series
-              </Badge>
-            </CardTitle>
-            <Button variant="outline" size="sm" onClick={() => setSeriesModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Series
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="videos">
-              <TabsList>
-                <TabsTrigger value="videos" className="gap-1.5">
-                  <Film className="h-3.5 w-3.5" />
-                  Videos
-                  <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalVideos}</Badge>
-                </TabsTrigger>
-                <TabsTrigger value="documents" className="gap-1.5">
-                  <FileText className="h-3.5 w-3.5" />
-                  Documents
-                  <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalDocuments}</Badge>
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="videos" className="mt-4">
-                {videoHierarchyContent}
-              </TabsContent>
-              <TabsContent value="documents" className="mt-4">
-                {documentHierarchyContent}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      ) : (
-        /* Practical packages: Flat video hierarchy (existing layout) */
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Content Structure
-              <Badge variant="secondary" className="text-[10px] ml-1">
-                {pkg.series_count} series
-              </Badge>
-            </CardTitle>
-            <Button variant="outline" size="sm" onClick={() => setSeriesModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Series
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {videoHierarchyContent}
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Content Structure
+            <Badge variant="secondary" className="text-[10px] ml-1">
+              {pkg.series_count} series
+            </Badge>
+          </CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setSeriesModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Series
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="videos">
+            <TabsList>
+              <TabsTrigger value="videos" className="gap-1.5">
+                <Film className="h-3.5 w-3.5" />
+                Videos
+                <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalVideos}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="documents" className="gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                Documents
+                <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalDocuments}</Badge>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="videos" className="mt-4">
+              {videoHierarchyContent}
+            </TabsContent>
+            <TabsContent value="documents" className="mt-4">
+              {documentHierarchyContent}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Modals */}
       <PackageFormModal

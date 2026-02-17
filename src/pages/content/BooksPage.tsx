@@ -35,7 +35,7 @@ export function BooksPage() {
       setLoading(true)
       const response = await booksService.getAll({
         page: 1,
-        limit: 1000,
+        limit: 100,
         is_available: availabilityFilter === 'all' ? null : availabilityFilter === 'available',
       })
 
@@ -94,21 +94,30 @@ export function BooksPage() {
     setDeleteModalOpen(true)
   }
 
-  const handleFormSubmit = async (data: BookFormData) => {
+  const handleFormSubmit = async (data: BookFormData, ebookFile?: File, onProgress?: (pct: number) => void) => {
     try {
+      let bookId: string | undefined
       if (modalMode === 'create') {
         const response = await booksService.create(data)
-        if (response.success) {
+        if (response.success && response.data) {
+          bookId = response.data._id
           toast.success('Book created successfully')
-          fetchBooks()
         }
       } else if (selectedBook) {
         const response = await booksService.update(selectedBook._id, data)
         if (response.success) {
+          bookId = selectedBook._id
           toast.success('Book updated successfully')
-          fetchBooks()
         }
       }
+
+      // Upload ebook file if provided
+      if (bookId && ebookFile) {
+        await booksService.uploadEbook(bookId, ebookFile, onProgress)
+        toast.success('E-book file uploaded successfully')
+      }
+
+      fetchBooks()
     } catch (error: any) {
       toast.error(error.message || 'Failed to save book')
       throw error

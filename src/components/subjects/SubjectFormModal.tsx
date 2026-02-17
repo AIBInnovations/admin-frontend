@@ -22,7 +22,8 @@ import { Subject, SubjectFormData } from '@/services/subjects.service';
 const subjectSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be at most 100 characters'),
   description: z.string().max(500, 'Description must be at most 500 characters').optional().or(z.literal('')),
-  display_order: z.number().int().positive().optional().or(z.nan()),
+  whatsapp_community_link: z.string().url('Invalid URL format').optional().or(z.literal('')),
+  display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
 });
 
@@ -49,6 +50,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
     defaultValues: {
       name: '',
       description: '',
+      whatsapp_community_link: '',
       display_order: undefined,
       is_active: true,
     },
@@ -63,6 +65,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
         reset({
           name: subject.name,
           description: subject.description || '',
+          whatsapp_community_link: subject.whatsapp_community_link || '',
           display_order: subject.display_order,
           is_active: subject.is_active,
         });
@@ -70,6 +73,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
         reset({
           name: '',
           description: '',
+          whatsapp_community_link: '',
           display_order: undefined,
           is_active: true,
         });
@@ -82,7 +86,8 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
       const formData: SubjectFormData = {
         name: data.name,
         description: data.description || undefined,
-        display_order: data.display_order || undefined,
+        whatsapp_community_link: data.whatsapp_community_link || undefined,
+        display_order: data.display_order != null && !isNaN(data.display_order) ? data.display_order : undefined,
         is_active: data.is_active,
       };
 
@@ -144,6 +149,24 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
             )}
           </div>
 
+          {/* WhatsApp Community Link Field */}
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp_community_link">WhatsApp Community Link</Label>
+            <Input
+              id="whatsapp_community_link"
+              type="url"
+              placeholder="https://chat.whatsapp.com/..."
+              disabled={isSubmitting}
+              {...register('whatsapp_community_link')}
+            />
+            {errors.whatsapp_community_link && (
+              <p className="text-sm text-red-500">{errors.whatsapp_community_link.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Optional: Link to WhatsApp community group for this subject
+            </p>
+          </div>
+
           {/* Display Order Field */}
           <div className="space-y-2">
             <Label htmlFor="display_order">Display Order</Label>
@@ -151,7 +174,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
               id="display_order"
               type="number"
               placeholder="Auto-assigned if left empty"
-              min={1}
+              min={0}
               disabled={isSubmitting}
               {...register('display_order', { valueAsNumber: true })}
             />
