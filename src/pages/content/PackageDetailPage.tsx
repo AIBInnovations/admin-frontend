@@ -12,7 +12,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Package, BookOpen, Calendar, Hash, Pencil, Plus, ChevronRight,
-  Layers, Film, Clock, Eye, IndianRupee, Tag, FileText, Download,
+  Layers, Film, Clock, Eye, IndianRupee, Tag, FileText, Download, BarChart3,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -383,7 +383,14 @@ export function PackageDetailPage() {
                     <IndianRupee className="h-3.5 w-3.5" /> Price
                   </p>
                   <p className="mt-0.5 font-medium">
-                    {pkg.is_on_sale ? (
+                    {pkg.tiers && pkg.tiers.length > 0 ? (
+                      <>
+                        From ₹{Math.min(...pkg.tiers.map(t => t.price)).toLocaleString('en-IN')}
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          {pkg.tiers.length} {pkg.tiers.length === 1 ? 'tier' : 'tiers'}
+                        </Badge>
+                      </>
+                    ) : pkg.is_on_sale ? (
                       <>
                         <span className="text-emerald-600">₹{pkg.sale_price?.toLocaleString('en-IN')}</span>
                         <span className="ml-2 text-xs text-muted-foreground line-through">
@@ -399,7 +406,16 @@ export function PackageDetailPage() {
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5" /> Duration
                   </p>
-                  <p className="mt-0.5 font-medium">{pkg.duration_days} days</p>
+                  <p className="mt-0.5 font-medium">
+                    {pkg.tiers && pkg.tiers.length > 0 ? (
+                      (() => {
+                        const durations = pkg.tiers!.map(t => t.duration_days).sort((a, b) => a - b)
+                        return `${durations[0]} – ${durations[durations.length - 1]} days`
+                      })()
+                    ) : (
+                      `${pkg.duration_days} days`
+                    )}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -451,6 +467,64 @@ export function PackageDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pricing Tiers */}
+      {pkg.tiers && pkg.tiers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Pricing Tiers
+              {pkg.is_on_sale && pkg.sale_discount_percent && (
+                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 text-[10px]">
+                  {pkg.sale_discount_percent}% Sale Discount
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-10 text-xs">#</TableHead>
+                  <TableHead className="text-xs">Tier Name</TableHead>
+                  <TableHead className="w-28 text-xs">Duration</TableHead>
+                  <TableHead className="w-28 text-xs">Price</TableHead>
+                  {pkg.is_on_sale && pkg.sale_discount_percent && (
+                    <TableHead className="w-28 text-xs">Sale Price</TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...pkg.tiers]
+                  .sort((a, b) => a.display_order - b.display_order)
+                  .map((tier, idx) => {
+                    const salePrice = pkg.is_on_sale && pkg.sale_discount_percent
+                      ? Math.round(tier.price * (1 - pkg.sale_discount_percent / 100))
+                      : null
+                    return (
+                      <TableRow key={idx} className="hover:bg-muted/30">
+                        <TableCell className="text-xs text-muted-foreground">
+                          {tier.display_order}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">{tier.name}</TableCell>
+                        <TableCell className="text-sm">{tier.duration_days} days</TableCell>
+                        <TableCell className={`text-sm ${salePrice ? 'text-muted-foreground line-through' : 'font-semibold'}`}>
+                          ₹{tier.price.toLocaleString('en-IN')}
+                        </TableCell>
+                        {salePrice !== null && (
+                          <TableCell className="text-sm font-semibold text-emerald-600">
+                            ₹{salePrice.toLocaleString('en-IN')}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Content Structure */}
       <Card>

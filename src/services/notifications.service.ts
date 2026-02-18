@@ -39,6 +39,12 @@ export interface SendResult {
   push_results: { success: number; failure: number }
 }
 
+export interface ImageUploadResult {
+  uploadUrl: string
+  s3Key: string
+  imageUrl: string
+}
+
 class NotificationsService {
   private basePath = 'admin/notifications'
 
@@ -78,15 +84,19 @@ class NotificationsService {
     return apiService.delete<void>(`${this.basePath}/${id}`)
   }
 
-  async sendToAll(data: { title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+  async getImageUploadUrl(mimeType: string): Promise<ApiResponse<ImageUploadResult>> {
+    return apiService.post<ImageUploadResult>(`${this.basePath}/upload-image`, { mimeType })
+  }
+
+  async sendToAll(data: { title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-all`, data)
   }
 
-  async sendToSubject(data: { subject_id: string; title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToSubject(data: { subject_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-subject`, data)
   }
 
-  async sendToUsers(data: { user_ids: string[]; title: string; message: string; click_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToUsers(data: { user_ids: string[]; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-users`, data)
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Send, Users, BookOpen, UserCheck, X, Search, Loader2 } from 'lucide-react'
+import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { notificationsService } from '@/services/notifications.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
@@ -28,6 +28,13 @@ export function SendNotificationTab() {
   const [message, setMessage] = useState('')
   const [clickUrl, setClickUrl] = useState('')
   const [sending, setSending] = useState(false)
+
+  // Image upload state
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Subjects
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -65,7 +72,6 @@ export function SendNotificationTab() {
     try {
       const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
       if (res.success && res.data) {
-        // Filter out already selected users
         const selectedIds = new Set(selectedUsers.map((u) => u._id))
         setUserResults((res.data.entities || []).filter((u) => !selectedIds.has(u._id)))
       }
@@ -91,6 +97,72 @@ export function SendNotificationTab() {
     setSelectedUsers((prev) => prev.filter((u) => u._id !== userId))
   }
 
+  // Image upload handlers
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+      toast.error('Only JPEG and PNG images are supported')
+      return
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB')
+      return
+    }
+
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setImageUrl(null) // Reset the uploaded URL since it's a new file
+  }
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile) return imageUrl
+    if (imageUrl) return imageUrl // Already uploaded
+
+    setUploadingImage(true)
+    try {
+      // Get presigned URL
+      const urlRes = await notificationsService.getImageUploadUrl(imageFile.type)
+      if (!urlRes.success || !urlRes.data) {
+        toast.error('Failed to get upload URL')
+        return null
+      }
+
+      const { uploadUrl, imageUrl: publicUrl } = urlRes.data
+
+      // Upload to S3 directly
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: imageFile,
+        headers: { 'Content-Type': imageFile.type },
+      })
+
+      setImageUrl(publicUrl)
+      return publicUrl
+    } catch {
+      toast.error('Failed to upload image')
+      return null
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const removeImage = () => {
+    setImageFile(null)
+    setImageUrl(null)
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview)
+      setImagePreview(null)
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const resetForm = () => {
     setTitle('')
     setMessage('')
@@ -99,6 +171,7 @@ export function SendNotificationTab() {
     setSelectedUsers([])
     setUserSearch('')
     setUserResults([])
+    removeImage()
   }
 
   const canSend = () => {
@@ -113,10 +186,21 @@ export function SendNotificationTab() {
 
     setSending(true)
     try {
+      // Upload image first if one is selected
+      let finalImageUrl: string | null = null
+      if (imageFile) {
+        finalImageUrl = await uploadImage()
+        if (imageFile && !finalImageUrl) {
+          setSending(false)
+          return // Upload failed
+        }
+      }
+
       const payload = {
         title: title.trim(),
         message: message.trim(),
         ...(clickUrl.trim() && { click_url: clickUrl.trim() }),
+        ...(finalImageUrl && { image_url: finalImageUrl }),
       }
 
       let response
@@ -345,6 +429,51 @@ export function SendNotificationTab() {
               <p className="text-xs text-muted-foreground">{message.length}/1000</p>
             </div>
 
+            {/* Image Upload */}
+            <div className="space-y-2">
+              <Label>Image <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              {imagePreview ? (
+                <div className="relative inline-block">
+                  <img
+                    src={imagePreview}
+                    alt="Notification preview"
+                    className="h-32 w-auto rounded-lg border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                  {uploadingImage && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+                      <Loader2 className="h-6 w-6 animate-spin text-white" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-32 w-48 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                >
+                  <ImagePlus className="h-8 w-8" />
+                  <span className="text-xs">Click to upload</span>
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/jpg"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown as a rich image in the push notification. Max 5MB, JPEG or PNG.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="notif-url">Click URL <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input
@@ -377,7 +506,7 @@ export function SendNotificationTab() {
               {sending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
+                  {uploadingImage ? 'Uploading image...' : 'Sending...'}
                 </>
               ) : (
                 <>

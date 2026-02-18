@@ -63,7 +63,23 @@ export function usePackagesColumns({
       header: 'Price',
       cell: (pkg) => (
         <div className="flex flex-col gap-0.5">
-          {pkg.is_on_sale ? (
+          {pkg.tiers && pkg.tiers.length > 0 ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">
+                  From ₹{Math.min(...pkg.tiers.map(t => t.price)).toLocaleString('en-IN')}
+                </span>
+                <Badge variant="outline" className="text-[10px]">
+                  {pkg.tiers.length} {pkg.tiers.length === 1 ? 'tier' : 'tiers'}
+                </Badge>
+              </div>
+              {pkg.is_on_sale && pkg.sale_discount_percent && (
+                <Badge className="w-fit bg-emerald-500/10 text-[10px] text-emerald-700 hover:bg-emerald-500/10">
+                  {pkg.sale_discount_percent}% OFF
+                </Badge>
+              )}
+            </>
+          ) : pkg.is_on_sale ? (
             <>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-emerald-600">
@@ -94,7 +110,17 @@ export function usePackagesColumns({
       id: 'duration',
       header: 'Duration',
       width: 'w-28',
-      cell: (pkg) => <span className="text-sm">{formatDuration(pkg.duration_days)}</span>,
+      cell: (pkg) => {
+        if (pkg.tiers && pkg.tiers.length > 0) {
+          const durations = pkg.tiers.map(t => t.duration_days).sort((a, b) => a - b)
+          return (
+            <span className="text-sm">
+              {formatDuration(durations[0])} – {formatDuration(durations[durations.length - 1])}
+            </span>
+          )
+        }
+        return <span className="text-sm">{formatDuration(pkg.duration_days)}</span>
+      },
     },
     {
       id: 'status',

@@ -3,6 +3,13 @@ import { apiService, ApiResponse } from './api.service'
 import type { BaseListParams, PopulatedRef } from '@/types/api.types'
 
 // Types
+export interface PackageTier {
+  name: string
+  duration_days: number
+  price: number
+  display_order: number
+}
+
 export interface Package {
   _id: string
   subject_id: PopulatedRef
@@ -14,12 +21,14 @@ export interface Package {
   is_on_sale: boolean
   sale_price: number | null
   sale_end_date: string | null
+  sale_discount_percent: number | null
   duration_days: number
   trailer_video_id: string | null
   thumbnail_url: string | null
   features: string
   is_active: boolean
   display_order: number
+  tiers: PackageTier[]
   series_count?: number
   createdAt: string
   updatedAt: string
@@ -100,12 +109,14 @@ export interface PackageFormData {
   is_on_sale?: boolean
   sale_price?: number | null
   sale_end_date?: string | null
+  sale_discount_percent?: number | null
   duration_days: number
   trailer_video_id?: string | null
   thumbnail_url?: string | null
   features?: string
   display_order?: number
   is_active?: boolean
+  tiers?: PackageTier[]
 }
 
 export interface PackagesListParams extends BaseListParams {
@@ -124,7 +135,7 @@ class PackagesService extends BaseCrudService<Package, PackageFormData, Packages
     if (response.success && response.data) {
       return { ...response, data: response.data[this.entityKey] }
     }
-    return response as ApiResponse<PackageDetail>
+    return response as unknown as ApiResponse<PackageDetail>
   }
 }
 
