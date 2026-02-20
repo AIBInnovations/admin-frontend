@@ -108,6 +108,7 @@ export function PaymentsPage() {
         { label: 'Package', value: 'package' },
         { label: 'Session', value: 'session' },
         { label: 'Book', value: 'book' },
+        { label: 'eBook', value: 'ebook' },
       ],
       placeholder: 'Filter by type',
       defaultValue: 'all',

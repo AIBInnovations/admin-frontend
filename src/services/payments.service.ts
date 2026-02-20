@@ -4,7 +4,7 @@ import type { ListResponse, BaseListParams } from '@/types/api.types'
 // Types
 export interface Transaction {
   transaction_id: string
-  purchase_type: 'package' | 'session' | 'book'
+  purchase_type: 'package' | 'session' | 'book' | 'ebook'
   user: {
     _id: string
     name: string
@@ -39,12 +39,14 @@ export interface ReconciliationData {
     packages: { count: number; total_amount: number }
     sessions: { count: number; total_amount: number }
     books: { count: number; total_amount: number }
+    ebooks: { count: number; total_amount: number }
     total: { count: number; total_amount: number }
   }
   failed_payments: {
     packages: number
     sessions: number
     books: number
+    ebooks: number
     total: number
   }
 }

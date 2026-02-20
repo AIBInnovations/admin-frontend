@@ -13,6 +13,7 @@ const typeColors: Record<string, string> = {
   package: 'bg-blue-500/10 text-blue-600 border-blue-200',
   session: 'bg-violet-500/10 text-violet-600 border-violet-200',
   book: 'bg-orange-500/10 text-orange-600 border-orange-200',
+  ebook: 'bg-green-500/10 text-green-600 border-green-200',
 }
 
 export function usePaymentsColumns(): ColumnDef<Transaction>[] {

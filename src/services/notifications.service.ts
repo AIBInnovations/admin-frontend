@@ -45,6 +45,24 @@ export interface ImageUploadResult {
   imageUrl: string
 }
 
+export interface AttachmentUploadResult {
+  uploadUrl: string
+  s3Key: string
+  fileUrl: string
+  filename: string
+}
+
+export interface EmailAttachment {
+  url: string
+  filename: string
+}
+
+export interface SendEmailResult {
+  sent: number
+  failed: number
+  total: number
+}
+
 class NotificationsService {
   private basePath = 'admin/notifications'
 
@@ -98,6 +116,34 @@ class NotificationsService {
 
   async sendToUsers(data: { user_ids: string[]; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-users`, data)
+  }
+
+  async getAttachmentUploadUrl(mimeType: string, filename: string): Promise<ApiResponse<AttachmentUploadResult>> {
+    return apiService.post<AttachmentUploadResult>(`${this.basePath}/upload-attachment`, { mimeType, filename })
+  }
+
+  async sendEmailToAll(data: { subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-all`, data)
+  }
+
+  async sendEmailToSubject(data: { subject_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-subject`, data)
+  }
+
+  async sendEmailToUsers(data: { user_ids: string[]; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-users`, data)
+  }
+
+  async sendSmsToAll(data: { message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-all`, data)
+  }
+
+  async sendSmsToSubject(data: { subject_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-subject`, data)
+  }
+
+  async sendSmsToUsers(data: { user_ids: string[]; message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-users`, data)
   }
 }
 

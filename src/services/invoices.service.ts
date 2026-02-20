@@ -6,7 +6,7 @@ export interface Invoice {
   _id: string
   purchase_id: string | null
   user_id: { _id: string; name: string; email: string; phone_number: string } | string
-  purchase_type: 'package' | 'session' | 'book'
+  purchase_type: 'package' | 'session' | 'book' | 'ebook'
   zoho_invoice_id: string | null
   invoice_number: string
   invoice_url: string | null

@@ -5,7 +5,7 @@ import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone } from 'lucide-react'
+import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone, Mail, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   notificationsService,
@@ -14,6 +14,8 @@ import {
 } from '@/services/notifications.service'
 import { useNotificationsColumns } from './NotificationsPage.columns'
 import { SendNotificationTab } from './SendNotificationTab'
+import { SendEmailTab } from './SendEmailTab'
+import { SendSmsTab } from './SendSmsTab'
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -154,7 +156,7 @@ export function NotificationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Notifications"
-        description="Send push notifications and view notification history"
+        description="Send push notifications, emails, SMS, and view notification history"
         breadcrumbs={[
           { label: 'Dashboard', href: '/' },
           { label: 'Notifications' },
@@ -167,6 +169,14 @@ export function NotificationsPage() {
             <Megaphone className="h-4 w-4" />
             Send Push
           </TabsTrigger>
+          <TabsTrigger value="email" className="gap-2">
+            <Mail className="h-4 w-4" />
+            Send Email
+          </TabsTrigger>
+          <TabsTrigger value="sms" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Send SMS
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <Bell className="h-4 w-4" />
             History
@@ -175,6 +185,14 @@ export function NotificationsPage() {
 
         <TabsContent value="send">
           <SendNotificationTab />
+        </TabsContent>
+
+        <TabsContent value="email">
+          <SendEmailTab />
+        </TabsContent>
+
+        <TabsContent value="sms">
+          <SendSmsTab />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
