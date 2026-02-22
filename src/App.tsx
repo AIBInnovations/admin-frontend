@@ -35,6 +35,7 @@ import { BannersPage } from '@/pages/content/BannersPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
+import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
           {/* Protected Routes */}
