@@ -36,6 +36,7 @@ import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
+import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
           {/* Protected Routes */}
