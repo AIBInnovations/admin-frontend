@@ -3,10 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { Users } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Users, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { usersService, User } from '@/services/users.service'
+import { usersService, User, CreateUserData } from '@/services/users.service'
 import { useUsersColumns } from './UsersPage.columns'
+import { UserFormModal } from '@/components/users/UserFormModal'
 
 export function UsersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -20,6 +22,7 @@ export function UsersPage() {
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   // Fetch users
   const fetchUsers = useCallback(async () => {
@@ -90,6 +93,19 @@ export function UsersPage() {
     }
   }
 
+  const handleCreateUser = async (data: CreateUserData) => {
+    try {
+      const response = await usersService.createUser(data)
+      if (response.success) {
+        toast.success('User created successfully')
+        fetchUsers()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create user')
+      throw error
+    }
+  }
+
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -117,6 +133,12 @@ export function UsersPage() {
         title="Users"
         description="View and manage registered users"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Users' }]}
+        action={
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
+        }
       />
 
       <SearchWithFilters
@@ -150,6 +172,13 @@ export function UsersPage() {
         getRowKey={(user) => user._id}
       />
 
+      {/* Create User Modal */}
+      <UserFormModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreateUser}
+        mode="create"
+      />
     </div>
   )
 }

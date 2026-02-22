@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import { BaseCrudService } from './base.service'
 import type { BaseListParams } from '@/types/api.types'
@@ -9,6 +10,7 @@ export interface Faculty {
   email: string
   phone: string | null
   photo_url: string | null
+  photo_s3_key: string | null
   bio: string | null
   qualifications: string | null
   experience_years: number | null
@@ -28,6 +30,7 @@ export interface FacultyFormData {
   email?: string
   phone?: string
   photo_url?: string
+  photo_s3_key?: string
   bio?: string
   qualifications?: string
   experience_years?: number
@@ -73,6 +76,37 @@ class FacultyService extends BaseCrudService<Faculty, FacultyFormData, FacultyLi
     if (params?.end_date) query.append('end_date', params.end_date)
     const str = query.toString()
     return apiService.get(`${this.basePath}/${facultyId}/schedule${str ? `?${str}` : ''}`)
+  }
+
+  /**
+   * Upload faculty photo to S3.
+   * 3-step flow: get presigned URL -> upload to S3 -> return photo URL & s3 key.
+   */
+  async uploadPhoto(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ photoUrl: string; s3Key: string }> {
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; photoUrl: string }>(
+      `${this.basePath}/photo-upload-url`,
+      { mimeType: file.type || 'image/jpeg' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, photoUrl } = urlRes.data
+
+    // Step 2: Upload directly to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { photoUrl, s3Key }
   }
 }
 

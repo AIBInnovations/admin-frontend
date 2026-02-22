@@ -54,6 +54,8 @@ export interface User {
   student_id: string | null
   ug_college: string | null
   pg_college: string | null
+  affiliated_organisation: string | null
+  current_designation: string | null
   timezone: string
   profile_completion_percentage: number
   last_login: string | null
@@ -65,6 +67,41 @@ export interface User {
   active_purchases_count?: number
   createdAt: string
   updatedAt: string
+}
+
+export interface CreateUserData {
+  phone_number: string
+  name?: string
+  email?: string
+  gender?: 'male' | 'female' | 'other'
+  date_of_birth?: string
+  address?: string
+  ug_college?: string
+  pg_college?: string
+  affiliated_organisation?: string
+  current_designation?: string
+  skip_onboarding?: boolean
+}
+
+export interface UpdateUserData {
+  name?: string
+  email?: string
+  phone_number?: string
+  gender?: 'male' | 'female' | 'other'
+  date_of_birth?: string
+  address?: string
+  ug_college?: string
+  pg_college?: string
+  affiliated_organisation?: string
+  current_designation?: string
+}
+
+export interface GrantPackageData {
+  package_id: string
+  duration_days: number
+  tier_index?: number
+  reason?: string
+  notes?: string
 }
 
 export interface UsersListParams extends BaseListParams {
@@ -158,6 +195,74 @@ class UsersService {
    */
   async unblockUser(userId: string): Promise<ApiResponse<{ user_id: string; is_active: boolean; message: string }>> {
     return apiService.put(`${this.basePath}/${userId}/unblock`)
+  }
+
+  /**
+   * Create new user (admin)
+   */
+  async createUser(
+    data: CreateUserData
+  ): Promise<
+    ApiResponse<{
+      user_id: string
+      phone_number: string
+      name: string
+      email: string
+      student_id: string
+      is_active: boolean
+      onboarding_completed: boolean
+      message: string
+    }>
+  > {
+    return apiService.post(`${this.basePath}`, data)
+  }
+
+  /**
+   * Update user profile (admin)
+   */
+  async updateUser(
+    userId: string,
+    data: UpdateUserData
+  ): Promise<
+    ApiResponse<{
+      user_id: string
+      phone_number: string
+      name: string
+      email: string
+      student_id: string
+      profile_completion_percentage: number
+      message: string
+    }>
+  > {
+    return apiService.put(`${this.basePath}/${userId}`, data)
+  }
+
+  /**
+   * Grant package access to user (complimentary)
+   */
+  async grantPackageAccess(
+    userId: string,
+    data: GrantPackageData
+  ): Promise<
+    ApiResponse<{
+      user_id: string
+      user_name: string
+      user_phone: string
+      purchase_id: string
+      package_id: string
+      package_name: string
+      subject_name: string
+      tier_name: string
+      duration_days: number
+      amount_paid: number
+      purchased_at: string
+      expires_at: string
+      reason: string
+      notes: string
+      message: string
+    }>
+  > {
+    return apiService.post(`${this.basePath}/${userId}/grant-package`, data)
   }
 }
 

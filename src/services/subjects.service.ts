@@ -168,6 +168,48 @@ class SubjectsService {
   async toggleActive(subjectId: string, isActive: boolean): Promise<ApiResponse<Subject>> {
     return this.updateSubject(subjectId, { is_active: isActive } as SubjectFormData);
   }
+
+  /**
+   * Upload icon image to Cloudinary
+   */
+  async uploadIcon(subjectId: string, file: File): Promise<ApiResponse<Subject>> {
+    const formData = new FormData()
+    formData.append('icon', file)
+
+    const response = await apiService.post<{ subject: Subject }>(
+      `admin/subjects/${subjectId}/icon`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    )
+
+    if (response.success && response.data) {
+      return {
+        ...response,
+        data: response.data.subject,
+      }
+    }
+    return response as any
+  }
+
+  /**
+   * Delete icon from subject
+   */
+  async deleteIcon(subjectId: string): Promise<ApiResponse<Subject>> {
+    const response = await apiService.delete<{ subject: Subject }>(
+      `admin/subjects/${subjectId}/icon`
+    )
+    if (response.success && response.data) {
+      return {
+        ...response,
+        data: response.data.subject,
+      }
+    }
+    return response as any
+  }
 }
 
 // Export singleton instance

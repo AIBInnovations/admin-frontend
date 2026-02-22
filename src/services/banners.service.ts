@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams } from '@/types/api.types'
 
@@ -7,6 +8,7 @@ export interface Banner {
   title: string
   subtitle: string | null
   image_url: string
+  image_s3_key: string | null
   click_url: string | null
   display_order: number
   is_active: boolean
@@ -20,6 +22,7 @@ export interface BannerFormData {
   title: string
   subtitle?: string
   image_url: string
+  image_s3_key?: string
   click_url?: string
   display_order?: number
   is_active?: boolean
@@ -55,7 +58,7 @@ class BannersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.banner }
     }
-    return response as ApiResponse<Banner>
+    return response as unknown as ApiResponse<Banner>
   }
 
   async create(data: BannerFormData): Promise<ApiResponse<Banner>> {
@@ -63,7 +66,7 @@ class BannersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.banner }
     }
-    return response as ApiResponse<Banner>
+    return response as unknown as ApiResponse<Banner>
   }
 
   async update(bannerId: string, data: Partial<BannerFormData>): Promise<ApiResponse<Banner>> {
@@ -71,11 +74,42 @@ class BannersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.banner }
     }
-    return response as ApiResponse<Banner>
+    return response as unknown as ApiResponse<Banner>
   }
 
   async delete(bannerId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${bannerId}`)
+  }
+
+  /**
+   * Upload banner image to S3.
+   * 3-step flow: get presigned URL -> upload to S3 -> return image URL & s3 key.
+   */
+  async uploadImage(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ imageUrl: string; s3Key: string }> {
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; imageUrl: string }>(
+      `${this.basePath}/image-upload-url`,
+      { mimeType: file.type || 'image/jpeg' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, imageUrl } = urlRes.data
+
+    // Step 2: Upload directly to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { imageUrl, s3Key }
   }
 }
 

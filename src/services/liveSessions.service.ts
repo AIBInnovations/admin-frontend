@@ -130,7 +130,7 @@ class LiveSessionsService {
   async convertToPackage(
     sessionId: string,
     data: { package_type_id: string; price?: number; duration_days?: number },
-  ): Promise<ApiResponse<{ package_id: string; package_name: string; series_count: number; module_count: number; video_count: number }>> {
+  ): Promise<ApiResponse<{ package_id: string; package_name: string; series_count: number; module_count: number; video_count: number; purchases_migrated: number }>> {
     return apiService.post(`${this.basePath}/${sessionId}/convert-to-package`, data)
   }
 }

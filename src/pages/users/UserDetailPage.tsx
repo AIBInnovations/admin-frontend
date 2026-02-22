@@ -12,7 +12,7 @@ import {
   UserCircle, ShieldBan, ShieldCheck, Loader2,
   Phone, Mail, MapPin, Calendar, GraduationCap, Globe, Smartphone,
   Monitor, Tablet, CreditCard, Package, Settings, BookOpen,
-  Video, ShoppingBag, Truck,
+  Video, ShoppingBag, Truck, Edit, Gift,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -22,7 +22,11 @@ import {
   SessionPurchase,
   BookOrder,
   DeviceSession,
+  UpdateUserData,
+  GrantPackageData,
 } from '@/services/users.service'
+import { UserFormModal } from '@/components/users/UserFormModal'
+import { GrantPackageModal } from '@/components/users/GrantPackageModal'
 
 export function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
@@ -31,6 +35,8 @@ export function UserDetailPage() {
   const [user, setUser] = useState<UserDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [blocking, setBlocking] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showGrantModal, setShowGrantModal] = useState(false)
 
   const fetchUser = useCallback(async () => {
     if (!userId) return
@@ -68,6 +74,34 @@ export function UserDetailPage() {
       toast.error(error.message || 'Failed to update user status')
     } finally {
       setBlocking(false)
+    }
+  }
+
+  const handleUpdateUser = async (data: UpdateUserData) => {
+    if (!user) return
+    try {
+      const response = await usersService.updateUser(user._id, data)
+      if (response.success) {
+        toast.success('User updated successfully')
+        fetchUser()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user')
+      throw error
+    }
+  }
+
+  const handleGrantPackage = async (data: GrantPackageData) => {
+    if (!user) return
+    try {
+      const response = await usersService.grantPackageAccess(user._id, data)
+      if (response.success) {
+        toast.success('Package access granted successfully')
+        fetchUser()
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to grant package access')
+      throw error
     }
   }
 
@@ -165,21 +199,31 @@ export function UserDetailPage() {
           { label: user.name || user.phone_number },
         ]}
         action={
-          <Button
-            variant={user.is_active ? 'destructive' : 'default'}
-            size="sm"
-            onClick={handleBlockToggle}
-            disabled={blocking}
-          >
-            {blocking ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : user.is_active ? (
-              <ShieldBan className="mr-2 h-4 w-4" />
-            ) : (
-              <ShieldCheck className="mr-2 h-4 w-4" />
-            )}
-            {user.is_active ? 'Block User' : 'Unblock User'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowGrantModal(true)}>
+              <Gift className="mr-2 h-4 w-4" />
+              Grant Package
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+            <Button
+              variant={user.is_active ? 'destructive' : 'default'}
+              size="sm"
+              onClick={handleBlockToggle}
+              disabled={blocking}
+            >
+              {blocking ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : user.is_active ? (
+                <ShieldBan className="mr-2 h-4 w-4" />
+              ) : (
+                <ShieldCheck className="mr-2 h-4 w-4" />
+              )}
+              {user.is_active ? 'Block User' : 'Unblock User'}
+            </Button>
+          </div>
         }
       />
 
@@ -582,6 +626,26 @@ export function UserDetailPage() {
         </Card>
       )}
 
+      {/* Edit User Modal */}
+      {user && (
+        <UserFormModal
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSubmit={handleUpdateUser}
+          user={user}
+          mode="edit"
+        />
+      )}
+
+      {/* Grant Package Modal */}
+      {user && (
+        <GrantPackageModal
+          open={showGrantModal}
+          onClose={() => setShowGrantModal(false)}
+          onSubmit={handleGrantPackage}
+          userName={user.name || user.phone_number}
+        />
+      )}
     </div>
   )
 }

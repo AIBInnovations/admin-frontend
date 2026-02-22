@@ -30,13 +30,18 @@ import {
   Trash2,
   Eye,
   Send,
+  Package,
+  Layers,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { notificationsService, type EmailAttachment } from '@/services/notifications.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
+import { packagesService, type Package as PackageType } from '@/services/packages.service'
+import { seriesService, type Series } from '@/services/series.service'
 import { usersService, type User } from '@/services/users.service'
 
 type TargetAudience = 'all' | 'subject' | 'specific'
+type SubjectScope = 'subscribers' | 'package' | 'series'
 
 interface PendingAttachment {
   file: File
@@ -51,6 +56,15 @@ export function SendEmailTab() {
   const [subjectId, setSubjectId] = useState('')
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loadingSubjects, setLoadingSubjects] = useState(false)
+
+  // Subject scope (depth targeting)
+  const [subjectScope, setSubjectScope] = useState<SubjectScope>('subscribers')
+  const [packageId, setPackageId] = useState('')
+  const [seriesId, setSeriesId] = useState('')
+  const [packages, setPackages] = useState<PackageType[]>([])
+  const [series, setSeries] = useState<Series[]>([])
+  const [loadingPackages, setLoadingPackages] = useState(false)
+  const [loadingSeries, setLoadingSeries] = useState(false)
 
   // User search
   const [userSearch, setUserSearch] = useState('')
@@ -87,6 +101,38 @@ export function SendEmailTab() {
         .finally(() => setLoadingSubjects(false))
     }
   }, [target, subjects.length])
+
+  // Load packages when subject is selected and scope is package or series
+  useEffect(() => {
+    if (subjectId && (subjectScope === 'package' || subjectScope === 'series')) {
+      setLoadingPackages(true)
+      setPackageId('')
+      setSeriesId('')
+      setSeries([])
+      packagesService
+        .getAll({ subject_id: subjectId, is_active: true, limit: 100 })
+        .then((res) => {
+          if (res.success && res.data) setPackages(res.data.entities || [])
+        })
+        .catch(() => toast.error('Failed to load packages'))
+        .finally(() => setLoadingPackages(false))
+    }
+  }, [subjectId, subjectScope])
+
+  // Load series when package is selected and scope is series
+  useEffect(() => {
+    if (packageId && subjectScope === 'series') {
+      setLoadingSeries(true)
+      setSeriesId('')
+      seriesService
+        .getAll({ package_id: packageId, is_active: true, limit: 100 })
+        .then((res) => {
+          if (res.success && res.data) setSeries(res.data.entities || [])
+        })
+        .catch(() => toast.error('Failed to load series'))
+        .finally(() => setLoadingSeries(false))
+    }
+  }, [packageId, subjectScope])
 
   // ── User search ──────────────────────────────────────────────────────────
   const searchUsers = useCallback(
@@ -197,7 +243,11 @@ export function SendEmailTab() {
   // ── Validation ────────────────────────────────────────────────────────────
   const canSend = () => {
     if (!emailSubject.trim() || !body.trim()) return false
-    if (target === 'subject' && !subjectId) return false
+    if (target === 'subject') {
+      if (!subjectId) return false
+      if (subjectScope === 'package' && !packageId) return false
+      if (subjectScope === 'series' && !seriesId) return false
+    }
     if (target === 'specific' && selectedUsers.length === 0) return false
     return true
   }
@@ -250,7 +300,13 @@ export function SendEmailTab() {
       if (target === 'all') {
         response = await notificationsService.sendEmailToAll(payload)
       } else if (target === 'subject') {
-        response = await notificationsService.sendEmailToSubject({ ...payload, subject_id: subjectId })
+        if (subjectScope === 'package') {
+          response = await notificationsService.sendEmailToPackage({ ...payload, package_id: packageId })
+        } else if (subjectScope === 'series') {
+          response = await notificationsService.sendEmailToSeries({ ...payload, series_id: seriesId })
+        } else {
+          response = await notificationsService.sendEmailToSubject({ ...payload, subject_id: subjectId })
+        }
       } else {
         response = await notificationsService.sendEmailToUsers({
           ...payload,
@@ -279,6 +335,11 @@ export function SendEmailTab() {
     setFooter('')
     setAttachments([])
     setSubjectId('')
+    setSubjectScope('subscribers')
+    setPackageId('')
+    setSeriesId('')
+    setPackages([])
+    setSeries([])
     setSelectedUsers([])
     setUserSearch('')
     setUserResults([])
@@ -335,28 +396,117 @@ export function SendEmailTab() {
             </div>
           </div>
 
-          {/* ── Subject selector ── */}
+          {/* ── Subject selector + Scope ── */}
           {target === 'subject' && (
-            <div className="space-y-2">
-              <Label>Subject</Label>
-              {loadingSubjects ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading subjects…
-                </div>
-              ) : (
-                <Select value={subjectId} onValueChange={setSubjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subjects.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.name}
-                      </SelectItem>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Subject</Label>
+                {loadingSubjects ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading subjects…
+                  </div>
+                ) : (
+                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setSubjectScope('subscribers'); setPackageId(''); setSeriesId('') }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjects.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Target Scope within Subject */}
+              {subjectId && (
+                <div className="space-y-2">
+                  <Label>Target Scope</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: 'subscribers' as const, icon: Users, label: 'All Subscribers', desc: 'All subject subscribers' },
+                      { value: 'package' as const, icon: Package, label: 'Package', desc: 'Package purchasers' },
+                      { value: 'series' as const, icon: Layers, label: 'Series', desc: 'Series subscribers' },
+                    ]).map(({ value, icon: Icon, label, desc }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => { setSubjectScope(value); setPackageId(''); setSeriesId('') }}
+                        className={`flex items-center gap-2 rounded-lg border p-3 text-left transition-colors ${
+                          subjectScope === value
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-muted-foreground/30'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 shrink-0 ${subjectScope === value ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <div>
+                          <p className="text-xs font-medium">{label}</p>
+                          <p className="text-[10px] text-muted-foreground">{desc}</p>
+                        </div>
+                      </button>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* Package Selector */}
+              {subjectId && (subjectScope === 'package' || subjectScope === 'series') && (
+                <div className="space-y-2">
+                  <Label>Package</Label>
+                  {loadingPackages ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading packages…
+                    </div>
+                  ) : packages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No packages found for this subject</p>
+                  ) : (
+                    <Select value={packageId} onValueChange={(v) => { setPackageId(v); setSeriesId('') }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a package" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {packages.map((p) => (
+                          <SelectItem key={p._id} value={p._id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
+              {/* Series Selector */}
+              {subjectId && subjectScope === 'series' && packageId && (
+                <div className="space-y-2">
+                  <Label>Series</Label>
+                  {loadingSeries ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading series…
+                    </div>
+                  ) : series.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No series found for this package</p>
+                  ) : (
+                    <Select value={seriesId} onValueChange={setSeriesId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a series" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {series.map((s) => (
+                          <SelectItem key={s._id} value={s._id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -563,8 +713,12 @@ export function SendEmailTab() {
           <div className="flex items-center justify-between border-t pt-6">
             <p className="text-sm text-muted-foreground">
               {target === 'all' && 'Will be sent to all active users with an email address'}
-              {target === 'subject' && subjectId && 'Sending to users subscribed to the selected subject'}
               {target === 'subject' && !subjectId && 'Select a subject first'}
+              {target === 'subject' && subjectId && subjectScope === 'subscribers' && 'Sending to all subscribers of the selected subject'}
+              {target === 'subject' && subjectId && subjectScope === 'package' && !packageId && 'Select a package'}
+              {target === 'subject' && subjectId && subjectScope === 'package' && packageId && 'Sending to active purchasers of the selected package'}
+              {target === 'subject' && subjectId && subjectScope === 'series' && !seriesId && 'Select a package and series'}
+              {target === 'subject' && subjectId && subjectScope === 'series' && seriesId && 'Sending to users with access to the selected series'}
               {target === 'specific' &&
                 selectedUsers.length > 0 &&
                 `Sending to ${selectedUsers.length} selected user${selectedUsers.length > 1 ? 's' : ''}`}

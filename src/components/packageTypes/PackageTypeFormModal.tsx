@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,14 +9,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { FileUpload } from '@/components/common/FileUpload'
+import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
 import { Loader2 } from 'lucide-react'
-import { PackageType, PackageTypeFormData } from '@/services/packageTypes.service'
+import { PackageType, PackageTypeFormData, packageTypesService } from '@/services/packageTypes.service'
+import { toast } from 'sonner'
 
 const packageTypeSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   description: z.string().min(2, 'Description is required').max(500),
-  trailer_video_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
-  thumbnail_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
 })
 
 type PackageTypeFormValues = z.infer<typeof packageTypeSchema>
@@ -30,6 +31,10 @@ interface PackageTypeFormModalProps {
 }
 
 export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mode }: PackageTypeFormModalProps) {
+  const [trailerFile, setTrailerFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+
   const {
     register, handleSubmit,
     formState: { errors, isSubmitting },
@@ -37,22 +42,23 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
   } = useForm<PackageTypeFormValues>({
     resolver: zodResolver(packageTypeSchema),
     defaultValues: {
-      name: '', description: '', trailer_video_url: '', thumbnail_url: '',
+      name: '', description: '',
     },
   })
 
   // Reset form
   useEffect(() => {
     if (open) {
+      setTrailerFile(null)
+      setThumbnailFile(null)
+      setUploadProgress(null)
       if (mode === 'edit' && packageType) {
         reset({
           name: packageType.name,
           description: packageType.description,
-          trailer_video_url: packageType.trailer_video_url || '',
-          thumbnail_url: packageType.thumbnail_url || '',
         })
       } else {
-        reset({ name: '', description: '', trailer_video_url: '', thumbnail_url: '' })
+        reset({ name: '', description: '' })
       }
     }
   }, [open, mode, packageType, reset])
@@ -62,13 +68,33 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
       const formData: PackageTypeFormData = {
         name: data.name,
         description: data.description,
-        trailer_video_url: data.trailer_video_url || null,
-        thumbnail_url: data.thumbnail_url || null,
       }
+
+      // First create/update the package type
       await onSubmit(formData)
+
+      // Then upload trailer and thumbnail if provided
+      if (packageType?._id || mode === 'edit') {
+        const typeId = packageType!._id
+
+        if (trailerFile) {
+          setUploadProgress(0)
+          await packageTypesService.uploadTrailer(typeId, trailerFile, setUploadProgress)
+          toast.success('Trailer uploaded successfully')
+        }
+
+        if (thumbnailFile) {
+          await packageTypesService.uploadThumbnail(typeId, thumbnailFile)
+          toast.success('Thumbnail uploaded successfully')
+        }
+      }
+
       onClose()
     } catch (error) {
       console.error('Form submission error:', error)
+      toast.error('Failed to save package type')
+    } finally {
+      setUploadProgress(null)
     }
   }
 
@@ -76,7 +102,7 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Package Type' : 'Edit Package Type'}</DialogTitle>
           <DialogDescription>
@@ -101,25 +127,57 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
             {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
           </div>
 
-          {/* Trailer Video URL */}
-          <div className="space-y-2">
-            <Label htmlFor="trailer_video_url">Trailer Video URL</Label>
-            <Input id="trailer_video_url" placeholder="https://..." disabled={isSubmitting} {...register('trailer_video_url')} />
-            {errors.trailer_video_url && <p className="text-sm text-red-500">{errors.trailer_video_url.message}</p>}
-          </div>
+          {/* Trailer Video Upload */}
+          {mode === 'edit' && (
+            <div className="space-y-2">
+              <Label>Trailer Video (Optional)</Label>
+              <FileUpload
+                accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
+                maxSize={500 * 1024 * 1024}
+                maxFiles={1}
+                value={trailerFile ? [trailerFile] : []}
+                onChange={(files) => setTrailerFile(files[0] || null)}
+                label="Upload trailer video"
+                description="Max 500MB. Drag & drop or click to browse."
+                disabled={isSubmitting}
+              />
+              {uploadProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
+              {packageType?.trailer_video_url && !trailerFile && (
+                <p className="text-xs text-muted-foreground">
+                  Current: {packageType.trailer_video_url.substring(0, 50)}...
+                </p>
+              )}
+            </div>
+          )}
 
-          {/* Thumbnail URL */}
-          <div className="space-y-2">
-            <Label htmlFor="thumbnail_url">Thumbnail URL</Label>
-            <Input id="thumbnail_url" placeholder="https://..." disabled={isSubmitting} {...register('thumbnail_url')} />
-            {errors.thumbnail_url && <p className="text-sm text-red-500">{errors.thumbnail_url.message}</p>}
-          </div>
+          {/* Thumbnail Upload with Crop */}
+          {mode === 'edit' && (
+            <div className="space-y-2">
+              <Label>Thumbnail (Optional)</Label>
+              <ImageUploadWithCrop
+                value={thumbnailFile}
+                onChange={setThumbnailFile}
+                aspectRatio={16 / 9}
+                maxSize={5 * 1024 * 1024}
+                label="Upload thumbnail image"
+                description="16:9 aspect ratio. Max 5MB."
+                disabled={isSubmitting}
+                currentImageUrl={packageType?.thumbnail_url}
+              />
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? 'Creating...' : 'Updating...'}</>
+            <Button type="submit" disabled={isSubmitting || uploadProgress !== null}>
+              {isSubmitting || uploadProgress !== null ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {uploadProgress !== null ? `Uploading ${uploadProgress}%` : mode === 'create' ? 'Creating...' : 'Updating...'}
+                </>
               ) : (
                 <>{mode === 'create' ? 'Create Type' : 'Update Type'}</>
               )}

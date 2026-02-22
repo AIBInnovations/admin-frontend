@@ -145,6 +145,32 @@ class NotificationsService {
   async sendSmsToUsers(data: { user_ids: string[]; message: string }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-users`, data)
   }
+
+  // ── Package & Series Targeting ──
+
+  async sendToPackage(data: { package_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-package`, data)
+  }
+
+  async sendToSeries(data: { series_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-series`, data)
+  }
+
+  async sendEmailToPackage(data: { package_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-package`, data)
+  }
+
+  async sendEmailToSeries(data: { series_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-series`, data)
+  }
+
+  async sendSmsToPackage(data: { package_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-package`, data)
+  }
+
+  async sendSmsToSeries(data: { series_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-series`, data)
+  }
 }
 
 export const notificationsService = new NotificationsService()

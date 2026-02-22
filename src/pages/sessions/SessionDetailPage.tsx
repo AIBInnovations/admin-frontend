@@ -154,7 +154,9 @@ export function SessionDetailPage() {
         duration_days: parseInt(convertDuration) || 365,
       })
       if (response.success && response.data) {
-        toast.success(`Package created with ${response.data.video_count} video(s)`)
+        const migrated = response.data.purchases_migrated
+        const migratedMsg = migrated ? ` ${migrated} session buyer(s) granted package access.` : ''
+        toast.success(`Package created with ${response.data.video_count} video(s).${migratedMsg}`)
         setConvertModalOpen(false)
         navigate(`/content/packages/${response.data.package_id}`)
       }
@@ -495,24 +497,7 @@ export function SessionDetailPage() {
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                {session.allow_waitlist ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-zinc-400" />
-                )}
-                <span className="text-xs">Allow Waitlist</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {session.guaranteed_seats_for_paid ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-zinc-400" />
-                )}
-                <span className="text-xs">Guaranteed Seats for Paid Users</span>
-              </div>
-            </div>
+            {/* Waitlist and guaranteed seats are always enabled */}
           </CardContent>
         </Card>
 

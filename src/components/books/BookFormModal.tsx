@@ -10,8 +10,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
+import { FileUpload } from '@/components/common/FileUpload'
+import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, Upload, FileText, X } from 'lucide-react'
-import { Book, BookFormData } from '@/services/books.service'
+import { Book, BookFormData, booksService } from '@/services/books.service'
+import { toast } from 'sonner'
+
+/** Book thumbnail aspect ratio: 3:4 (standard book cover portrait) */
+const BOOK_THUMBNAIL_ASPECT_RATIO = 3 / 4
 
 const bookSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -67,10 +74,31 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
   const [ebookFile, setEbookFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
+  // Thumbnail state
+  const [thumbnailFile, setThumbnailFile] = useState<File[]>([])
+  const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string | null>(null)
+  const [existingThumbnailS3Key, setExistingThumbnailS3Key] = useState<string | null>(null)
+  const [thumbnailUploadProgress, setThumbnailUploadProgress] = useState<number | null>(null)
+  const [cropperFile, setCropperFile] = useState<File | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null)
+
+  // Manage preview URL for cropped thumbnail
+  useEffect(() => {
+    if (thumbnailFile.length > 0) {
+      const url = URL.createObjectURL(thumbnailFile[0])
+      setThumbnailPreviewUrl(url)
+      return () => URL.revokeObjectURL(url)
+    }
+    setThumbnailPreviewUrl(null)
+  }, [thumbnailFile])
+
   useEffect(() => {
     if (open) {
       setEbookFile(null)
       setUploadProgress(null)
+      setThumbnailFile([])
+      setThumbnailUploadProgress(null)
       if (mode === 'edit' && book) {
         reset({
           title: book.title, author: book.author,
@@ -82,6 +110,8 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           publication_year: book.publication_year ?? NaN,
           pages: book.pages ?? NaN, weight_grams: book.weight_grams,
         })
+        setExistingThumbnailUrl(book.thumbnail_url)
+        setExistingThumbnailS3Key(book.thumbnail_s3_key)
       } else {
         reset({
           title: '', author: '', description: '', isbn: '',
@@ -89,6 +119,8 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           ebook: false, category: '', stock_quantity: 0, is_available: true,
           publisher: '', publication_year: NaN, pages: NaN, weight_grams: 500,
         })
+        setExistingThumbnailUrl(null)
+        setExistingThumbnailS3Key(null)
       }
     }
   }, [open, mode, book, reset])
@@ -96,12 +128,33 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
   const handleFormSubmit = async (data: BookFormValues) => {
     try {
       setUploadProgress(null)
+
+      let thumbnailUrl = existingThumbnailUrl || undefined
+      let thumbnailS3Key = existingThumbnailS3Key || undefined
+
+      // Upload new thumbnail if selected
+      if (thumbnailFile.length > 0) {
+        setThumbnailUploadProgress(0)
+        try {
+          const result = await booksService.uploadThumbnail(thumbnailFile[0], setThumbnailUploadProgress)
+          thumbnailUrl = result.thumbnailUrl
+          thumbnailS3Key = result.s3Key
+        } catch (err: any) {
+          toast.error(err.message || 'Failed to upload thumbnail')
+          setThumbnailUploadProgress(null)
+          return
+        }
+        setThumbnailUploadProgress(null)
+      }
+
       const formData: BookFormData = {
         title: data.title, author: data.author,
         description: data.description || undefined, isbn: data.isbn || undefined,
         price: data.price, original_price: data.original_price || undefined,
         is_on_sale: data.is_on_sale,
         sale_price: data.is_on_sale ? data.sale_price || undefined : undefined,
+        thumbnail_url: thumbnailUrl,
+        thumbnail_s3_key: thumbnailS3Key,
         ebook: data.ebook,
         category: data.category || undefined,
         stock_quantity: data.stock_quantity || 0,
@@ -117,14 +170,40 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
       console.error('Form submission error:', error)
     } finally {
       setUploadProgress(null)
+      setThumbnailUploadProgress(null)
     }
   }
 
-  const handleClose = () => { if (!isSubmitting) onClose() }
+  const handleClose = () => { if (!isSubmitting && thumbnailUploadProgress === null) onClose() }
+
+  const handleRemoveExistingThumbnail = () => {
+    setExistingThumbnailUrl(null)
+    setExistingThumbnailS3Key(null)
+  }
+
+  const handleThumbnailSelected = (files: File[]) => {
+    if (files.length > 0) {
+      setCropperFile(files[0])
+      setShowCropper(true)
+    }
+  }
+
+  const handleCropComplete = (croppedFile: File) => {
+    setThumbnailFile([croppedFile])
+    setShowCropper(false)
+    setCropperFile(null)
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setCropperFile(null)
+  }
 
   const hasExistingEbook = mode === 'edit' && book?.ebook_file_url
+  const isThumbnailUploading = thumbnailUploadProgress !== null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -138,34 +217,91 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
-              <Input id="title" placeholder="Book title" disabled={isSubmitting} {...register('title')} />
+              <Input id="title" placeholder="Book title" disabled={isSubmitting || isThumbnailUploading} {...register('title')} />
               {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="author">Author <span className="text-red-500">*</span></Label>
-              <Input id="author" placeholder="Author name" disabled={isSubmitting} {...register('author')} />
+              <Input id="author" placeholder="Author name" disabled={isSubmitting || isThumbnailUploading} {...register('author')} />
               {errors.author && <p className="text-sm text-red-500">{errors.author.message}</p>}
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" rows={2} disabled={isSubmitting} {...register('description')} />
+            <Textarea id="description" rows={2} disabled={isSubmitting || isThumbnailUploading} {...register('description')} />
+          </div>
+
+          {/* Thumbnail Upload */}
+          <div className="space-y-2">
+            <Label>Book Thumbnail</Label>
+            {thumbnailFile.length > 0 && thumbnailPreviewUrl ? (
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <img src={thumbnailPreviewUrl} alt="Cropped thumbnail" className="rounded-md object-cover border" style={{ width: 72, height: 96 }} />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-1 -right-1 h-5 w-5 rounded-full"
+                    onClick={() => setThumbnailFile([])}
+                    disabled={isSubmitting || isThumbnailUploading}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Cropped thumbnail ready. Click X to choose a different one.</p>
+              </div>
+            ) : existingThumbnailUrl ? (
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <img src={existingThumbnailUrl} alt="Book thumbnail" className="rounded-md object-cover border" style={{ width: 72, height: 96 }} />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-1 -right-1 h-5 w-5 rounded-full"
+                    onClick={handleRemoveExistingThumbnail}
+                    disabled={isSubmitting || isThumbnailUploading}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Upload a new thumbnail to replace.</p>
+              </div>
+            ) : (
+              <FileUpload
+                accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }}
+                maxSize={5 * 1024 * 1024}
+                maxFiles={1}
+                value={[]}
+                onChange={handleThumbnailSelected}
+                disabled={isSubmitting || isThumbnailUploading}
+                label="Upload book thumbnail"
+                description="JPEG, PNG, or WebP. Max 5MB. Will be cropped to 3:4 book cover ratio."
+              />
+            )}
+            {thumbnailUploadProgress !== null && (
+              <div className="space-y-1">
+                <Progress value={thumbnailUploadProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground">Uploading thumbnail... {thumbnailUploadProgress}%</p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="price">Price (INR) <span className="text-red-500">*</span></Label>
-              <Input id="price" type="number" min={0} disabled={isSubmitting} {...register('price', { valueAsNumber: true })} />
+              <Input id="price" type="number" min={0} disabled={isSubmitting || isThumbnailUploading} {...register('price', { valueAsNumber: true })} />
               {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="original_price">Original Price</Label>
-              <Input id="original_price" type="number" min={0} disabled={isSubmitting} {...register('original_price', { valueAsNumber: true })} />
+              <Input id="original_price" type="number" min={0} disabled={isSubmitting || isThumbnailUploading} {...register('original_price', { valueAsNumber: true })} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="stock_quantity">Stock</Label>
-              <Input id="stock_quantity" type="number" min={0} disabled={isSubmitting} {...register('stock_quantity', { valueAsNumber: true })} />
+              <Input id="stock_quantity" type="number" min={0} disabled={isSubmitting || isThumbnailUploading} {...register('stock_quantity', { valueAsNumber: true })} />
             </div>
           </div>
 
@@ -174,7 +310,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
               <Label htmlFor="is_on_sale" className="text-base">On Sale</Label>
               <p className="text-sm text-muted-foreground">{isOnSale ? 'Sale pricing active' : 'No sale'}</p>
             </div>
-            <Switch id="is_on_sale" checked={isOnSale} onCheckedChange={(c) => { setValue('is_on_sale', c); if (!c) setValue('sale_price', null) }} disabled={isSubmitting} />
+            <Switch id="is_on_sale" checked={isOnSale} onCheckedChange={(c) => { setValue('is_on_sale', c); if (!c) setValue('sale_price', null) }} disabled={isSubmitting || isThumbnailUploading} />
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -182,7 +318,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
               <Label htmlFor="ebook" className="text-base">E-Book Available</Label>
               <p className="text-sm text-muted-foreground">{isEbook ? 'Available in physical & digital format' : 'Physical copy only'}</p>
             </div>
-            <Switch id="ebook" checked={isEbook} onCheckedChange={(c) => { setValue('ebook', c); if (!c) setEbookFile(null) }} disabled={isSubmitting} />
+            <Switch id="ebook" checked={isEbook} onCheckedChange={(c) => { setValue('ebook', c); if (!c) setEbookFile(null) }} disabled={isSubmitting || isThumbnailUploading} />
           </div>
 
           {isEbook && (
@@ -219,14 +355,14 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                     size="icon"
                     className="h-6 w-6 shrink-0"
                     onClick={() => setEbookFile(null)}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isThumbnailUploading}
                   >
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
               ) : (
                 <label
-                  className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors hover:border-primary/50 hover:bg-muted/50 ${isSubmitting ? 'pointer-events-none opacity-50' : ''}`}
+                  className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors hover:border-primary/50 hover:bg-muted/50 ${isSubmitting || isThumbnailUploading ? 'pointer-events-none opacity-50' : ''}`}
                 >
                   <Upload className="h-8 w-8 text-muted-foreground" />
                   <div className="text-center">
@@ -238,7 +374,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                     className="hidden"
                     accept=".pdf,.epub,application/pdf,application/epub+zip"
                     onChange={(e) => setEbookFile(e.target.files?.[0] || null)}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isThumbnailUploading}
                   />
                 </label>
               )}
@@ -263,7 +399,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           {isOnSale && (
             <div className="space-y-2">
               <Label htmlFor="sale_price">Sale Price (INR) <span className="text-red-500">*</span></Label>
-              <Input id="sale_price" type="number" min={0} disabled={isSubmitting} {...register('sale_price', { valueAsNumber: true })} />
+              <Input id="sale_price" type="number" min={0} disabled={isSubmitting || isThumbnailUploading} {...register('sale_price', { valueAsNumber: true })} />
               {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
             </div>
           )}
@@ -271,30 +407,30 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="isbn">ISBN</Label>
-              <Input id="isbn" disabled={isSubmitting} {...register('isbn')} />
+              <Input id="isbn" disabled={isSubmitting || isThumbnailUploading} {...register('isbn')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
-              <Input id="category" disabled={isSubmitting} {...register('category')} />
+              <Input id="category" disabled={isSubmitting || isThumbnailUploading} {...register('category')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="publisher">Publisher</Label>
-              <Input id="publisher" disabled={isSubmitting} {...register('publisher')} />
+              <Input id="publisher" disabled={isSubmitting || isThumbnailUploading} {...register('publisher')} />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="pages">Pages</Label>
-              <Input id="pages" type="number" min={1} disabled={isSubmitting} {...register('pages', { valueAsNumber: true })} />
+              <Input id="pages" type="number" min={1} disabled={isSubmitting || isThumbnailUploading} {...register('pages', { valueAsNumber: true })} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="publication_year">Year</Label>
-              <Input id="publication_year" type="number" disabled={isSubmitting} {...register('publication_year', { valueAsNumber: true })} />
+              <Input id="publication_year" type="number" disabled={isSubmitting || isThumbnailUploading} {...register('publication_year', { valueAsNumber: true })} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="weight_grams">Weight (g)</Label>
-              <Input id="weight_grams" type="number" min={0} disabled={isSubmitting} {...register('weight_grams', { valueAsNumber: true })} />
+              <Input id="weight_grams" type="number" min={0} disabled={isSubmitting || isThumbnailUploading} {...register('weight_grams', { valueAsNumber: true })} />
             </div>
           </div>
 
@@ -303,14 +439,14 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
               <Label htmlFor="is_available" className="text-sm">Available</Label>
               <p className="text-xs text-muted-foreground">{isAvailable ? 'Book is listed' : 'Book is hidden'}</p>
             </div>
-            <Switch id="is_available" checked={isAvailable} onCheckedChange={(c) => setValue('is_available', c)} disabled={isSubmitting} />
+            <Switch id="is_available" checked={isAvailable} onCheckedChange={(c) => setValue('is_available', c)} disabled={isSubmitting || isThumbnailUploading} />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? 'Creating...' : 'Updating...'}</>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting || isThumbnailUploading}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting || isThumbnailUploading}>
+              {isSubmitting || isThumbnailUploading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isThumbnailUploading ? 'Uploading...' : mode === 'create' ? 'Creating...' : 'Updating...'}</>
               ) : (
                 <>{mode === 'create' ? 'Add Book' : 'Update Book'}</>
               )}
@@ -319,5 +455,17 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Thumbnail Cropper Dialog */}
+    <ImageCropper
+      file={cropperFile}
+      open={showCropper}
+      onClose={handleCropCancel}
+      onCropComplete={handleCropComplete}
+      aspectRatio={BOOK_THUMBNAIL_ASPECT_RATIO}
+      title="Crop Book Thumbnail"
+      description="Adjust the crop area for the book cover (3:4 portrait ratio)."
+    />
+    </>
   )
 }

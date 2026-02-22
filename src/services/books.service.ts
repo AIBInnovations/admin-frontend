@@ -14,6 +14,7 @@ export interface Book {
   is_on_sale: boolean
   sale_price: number | null
   thumbnail_url: string | null
+  thumbnail_s3_key: string | null
   images: string[]
   category: string | null
   subject_id: PopulatedRef | string | null
@@ -43,6 +44,7 @@ export interface BookFormData {
   is_on_sale?: boolean
   sale_price?: number
   thumbnail_url?: string
+  thumbnail_s3_key?: string
   category?: string
   subject_id?: string
   stock_quantity?: number
@@ -158,6 +160,37 @@ class BooksService {
       fileSize: file.size,
       mimeType: file.type,
     })
+  }
+
+  /**
+   * Upload book thumbnail to S3.
+   * 2-step flow: get presigned URL → upload to S3 → return thumbnail URL & s3 key.
+   */
+  async uploadThumbnail(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ thumbnailUrl: string; s3Key: string }> {
+    // Step 1: Get presigned upload URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType: file.type || 'image/jpeg' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    // Step 2: Upload directly to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { thumbnailUrl, s3Key }
   }
 }
 

@@ -130,7 +130,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
         capacity_mode: data.capacity_mode,
         max_attendees: data.capacity_mode === 'limited' ? (data.max_attendees || undefined) : undefined,
         is_free: data.is_free, price: data.is_free ? 0 : (data.price || undefined),
-        allow_waitlist: data.allow_waitlist, guaranteed_seats_for_paid: data.guaranteed_seats_for_paid,
+        allow_waitlist: true, guaranteed_seats_for_paid: true,
       }
       await onSubmit(formData)
       onClose()
@@ -275,23 +275,6 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
               {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
             </div>
           )}
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg border px-4 py-3">
-              <div>
-                <Label htmlFor="allow_waitlist" className="text-sm font-medium">Allow Waitlist</Label>
-                <p className="text-xs text-muted-foreground">Allow users to join waitlist when full</p>
-              </div>
-              <Switch id="allow_waitlist" checked={watch('allow_waitlist')} onCheckedChange={(c) => setValue('allow_waitlist', c)} disabled={isSubmitting} />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border px-4 py-3">
-              <div>
-                <Label htmlFor="guaranteed_seats" className="text-sm font-medium">Guaranteed Seats for Paid</Label>
-                <p className="text-xs text-muted-foreground">Reserve seats for paid users first</p>
-              </div>
-              <Switch id="guaranteed_seats" checked={watch('guaranteed_seats_for_paid')} onCheckedChange={(c) => setValue('guaranteed_seats_for_paid', c)} disabled={isSubmitting} />
-            </div>
-          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>

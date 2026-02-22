@@ -7,6 +7,7 @@ export interface PackageTier {
   name: string
   duration_days: number
   price: number
+  original_price?: number | null
   display_order: number
 }
 
@@ -136,6 +137,125 @@ class PackagesService extends BaseCrudService<Package, PackageFormData, Packages
       return { ...response, data: response.data[this.entityKey] }
     }
     return response as unknown as ApiResponse<PackageDetail>
+  }
+
+  /**
+   * Upload trailer video using S3 presigned URL
+   */
+  async uploadTrailer(
+    packageId: string,
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<ApiResponse<Package>> {
+    try {
+      // 1. Get presigned URL
+      const urlResponse = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+        `${this.basePath}/${packageId}/trailer-upload-url`,
+        { mimeType: file.type }
+      )
+
+      if (!urlResponse.success || !urlResponse.data) {
+        throw new Error('Failed to get upload URL')
+      }
+
+      const { uploadUrl, s3Key } = urlResponse.data
+
+      // 2. Upload to S3 directly
+      const xhr = new XMLHttpRequest()
+      const uploadPromise = new Promise<void>((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable && onProgress) {
+            onProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        })
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            resolve()
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        })
+
+        xhr.addEventListener('error', () => reject(new Error('Upload failed')))
+        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')))
+
+        xhr.open('PUT', uploadUrl)
+        xhr.setRequestHeader('Content-Type', file.type)
+        xhr.send(file)
+      })
+
+      await uploadPromise
+
+      // 3. Confirm upload
+      const confirmResponse = await apiService.post<Record<string, Package>>(
+        `${this.basePath}/${packageId}/trailer-confirm`,
+        {
+          s3Key,
+          title: `Trailer - ${packageId}`,
+          description: 'Package trailer video',
+          fileSize: file.size,
+        }
+      )
+
+      if (confirmResponse.success && confirmResponse.data) {
+        return { ...confirmResponse, data: confirmResponse.data[this.entityKey] }
+      }
+
+      return confirmResponse as unknown as ApiResponse<Package>
+    } catch (error) {
+      console.error('Trailer upload error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete trailer video from package
+   */
+  async deleteTrailer(packageId: string): Promise<ApiResponse<Package>> {
+    const response = await apiService.delete<Record<string, Package>>(
+      `${this.basePath}/${packageId}/trailer`
+    )
+    if (response.success && response.data) {
+      return { ...response, data: response.data[this.entityKey] }
+    }
+    return response as unknown as ApiResponse<Package>
+  }
+
+  /**
+   * Upload thumbnail image to Cloudinary
+   */
+  async uploadThumbnail(packageId: string, file: File): Promise<ApiResponse<Package>> {
+    const formData = new FormData()
+    formData.append('thumbnail', file)
+
+    const response = await apiService.post<Record<string, Package>>(
+      `${this.basePath}/${packageId}/thumbnail`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    )
+
+    if (response.success && response.data) {
+      return { ...response, data: response.data[this.entityKey] }
+    }
+    return response as unknown as ApiResponse<Package>
+  }
+
+  /**
+   * Delete thumbnail from package
+   */
+  async deleteThumbnail(packageId: string): Promise<ApiResponse<Package>> {
+    const response = await apiService.delete<Record<string, Package>>(
+      `${this.basePath}/${packageId}/thumbnail`
+    )
+    if (response.success && response.data) {
+      return { ...response, data: response.data[this.entityKey] }
+    }
+    return response as unknown as ApiResponse<Package>
   }
 }
 

@@ -21,6 +21,7 @@ const seriesSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(200),
   description: z.string().min(10, 'Description must be at least 10 characters').max(2000),
   package_id: z.string().min(1, 'Package is required'),
+  thumbnail_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
 })
@@ -47,7 +48,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
     resolver: zodResolver(seriesSchema),
     defaultValues: {
       name: '', description: '', package_id: '',
-      display_order: 0, is_active: true,
+      thumbnail_url: '', display_order: 0, is_active: true,
     },
   })
 
@@ -70,13 +71,14 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
           name: series.name,
           description: series.description,
           package_id: typeof series.package_id === 'object' ? series.package_id._id : series.package_id,
+          thumbnail_url: series.thumbnail_url || '',
           display_order: series.display_order,
           is_active: series.is_active,
         })
       } else {
         reset({
           name: '', description: '', package_id: defaultPackageId || '',
-          display_order: 0, is_active: true,
+          thumbnail_url: '', display_order: 0, is_active: true,
         })
       }
     }
@@ -88,6 +90,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
         name: data.name,
         description: data.description,
         package_id: data.package_id,
+        thumbnail_url: data.thumbnail_url || null,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
       }
@@ -142,6 +145,13 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
               )}
             />
             {errors.package_id && <p className="text-sm text-red-500">{errors.package_id.message}</p>}
+          </div>
+
+          {/* Thumbnail URL */}
+          <div className="space-y-2">
+            <Label htmlFor="thumbnail_url">Thumbnail URL</Label>
+            <Input id="thumbnail_url" placeholder="https://..." disabled={isSubmitting} {...register('thumbnail_url')} />
+            {errors.thumbnail_url && <p className="text-sm text-red-500">{errors.thumbnail_url.message}</p>}
           </div>
 
           {/* Display Order */}

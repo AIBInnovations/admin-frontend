@@ -22,6 +22,7 @@ const tierSchema = z.object({
   name: z.string().min(1, 'Name required').max(100),
   duration_days: z.number({ error: 'Required' }).int().min(1, 'Min 1 day'),
   price: z.number({ error: 'Required' }).min(0, 'Min 0'),
+  original_price: z.number().min(0).optional().nullable().or(z.nan()),
   display_order: z.number().int().min(0).optional().or(z.nan()),
 })
 
@@ -31,10 +32,10 @@ const packageSchema = z.object({
   subject_id: z.string().min(1, 'Subject is required'),
   package_type_id: z.string().min(1, 'Package type is required'),
   price: z.number({ error: 'Price is required' }).min(0, 'Price must be non-negative'),
-  original_price: z.number().min(0).optional().nullable(),
+  original_price: z.number().min(0).optional().nullable().or(z.nan()),
   is_on_sale: z.boolean(),
-  sale_price: z.number().min(0).optional().nullable(),
-  sale_discount_percent: z.number().min(0).max(100).optional().nullable(),
+  sale_price: z.number().min(0).optional().nullable().or(z.nan()),
+  sale_discount_percent: z.number().min(0).max(100).optional().nullable().or(z.nan()),
   sale_end_date: z.string().optional().or(z.literal('')),
   duration_days: z.number({ error: 'Duration is required' }).int().min(1, 'Minimum 1 day'),
   features: z.string().max(2000).optional().or(z.literal('')),
@@ -115,6 +116,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           name: t.name,
           duration_days: t.duration_days,
           price: t.price,
+          original_price: t.original_price ?? null,
           display_order: t.display_order ?? i,
         }))
         reset({
@@ -161,7 +163,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
         display_order: data.display_order || undefined,
         is_active: data.is_active,
         tiers: data.tiers.length > 0
-          ? data.tiers.map((t, i) => ({ ...t, display_order: t.display_order || i }))
+          ? data.tiers.map((t, i) => ({ ...t, original_price: t.original_price || null, display_order: t.display_order || i }))
           : [],
       }
 
@@ -191,7 +193,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const handleClose = () => { if (!isSubmitting) onClose() }
 
   const addTier = () => {
-    appendTier({ name: '', duration_days: 90, price: 0, display_order: tierFields.length })
+    appendTier({ name: '', duration_days: 90, price: 0, original_price: null, display_order: tierFields.length })
   }
 
   return (
@@ -311,7 +313,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-5 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
                     <Input
@@ -344,6 +346,15 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                     {errors.tiers?.[index]?.price && (
                       <p className="text-xs text-red-500">{errors.tiers[index].price?.message}</p>
                     )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Compare At</Label>
+                    <Input
+                      type="number" min={0}
+                      placeholder="MRP"
+                      disabled={isSubmitting}
+                      {...register(`tiers.${index}.original_price`, { valueAsNumber: true })}
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Order</Label>
