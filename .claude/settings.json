@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/PGME/Admin/**)",
+      "Read(//d/PGME/**)"
+    ],
+    "additionalDirectories": [
+      "D:\\PGME\\backend\\src\\models",
+      "D:\\PGME\\backend\\src\\validators",
+      "D:\\PGME\\backend\\src\\services",
+      "D:\\PGME\\backend\\src\\controllers"
+    ]
+  }
+}
