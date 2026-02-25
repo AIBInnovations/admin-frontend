@@ -3,6 +3,9 @@ import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams } from '@/types/api.types'
 
 // Types
+export type BannerType = 'generic' | 'theory_package' | 'practical_package'
+export type LinkType = 'internal' | 'external' | 'none'
+
 export interface Banner {
   _id: string
   title: string
@@ -10,6 +13,9 @@ export interface Banner {
   image_url: string
   image_s3_key: string | null
   click_url: string | null
+  link_type: LinkType
+  banner_type: BannerType
+  target_package_id: string | null
   display_order: number
   is_active: boolean
   start_date: string
@@ -24,6 +30,9 @@ export interface BannerFormData {
   image_url: string
   image_s3_key?: string
   click_url?: string
+  link_type?: LinkType
+  banner_type?: BannerType
+  target_package_id?: string | null
   display_order?: number
   is_active?: boolean
   start_date: string

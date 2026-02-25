@@ -10,14 +10,20 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, X } from 'lucide-react'
-import { Banner, BannerFormData, bannersService } from '@/services/banners.service'
+import { Banner, BannerFormData, BannerType, bannersService } from '@/services/banners.service'
+import { Package, packagesService } from '@/services/packages.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: full-width x 140px on phone (~360px wide) ≈ 18:7 */
 const BANNER_ASPECT_RATIO = 18 / 7
+
+type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package'
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -39,6 +45,14 @@ interface BannerFormModalProps {
   mode: 'create' | 'edit'
 }
 
+/** Derive the link action from a banner's stored fields */
+function deriveLinkAction(banner: Banner): LinkAction {
+  if (banner.banner_type === 'theory_package') return 'theory_package'
+  if (banner.banner_type === 'practical_package') return 'practical_package'
+  if (banner.click_url && banner.link_type === 'external') return 'external_url'
+  return 'none'
+}
+
 export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: BannerFormModalProps) {
   const [imageFile, setImageFile] = useState<File[]>([])
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
@@ -48,6 +62,13 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [cropperFile, setCropperFile] = useState<File | null>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // Link action state
+  const [linkAction, setLinkAction] = useState<LinkAction>('none')
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('')
+  const [packages, setPackages] = useState<Package[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [packageError, setPackageError] = useState<string | null>(null)
 
   // Manage preview URL for cropped image
   useEffect(() => {
@@ -73,11 +94,43 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
 
   const isActive = watch('is_active')
 
+  // Fetch packages when modal opens
+  useEffect(() => {
+    if (open) {
+      fetchPackages()
+    }
+  }, [open])
+
+  const fetchPackages = async () => {
+    try {
+      setPackagesLoading(true)
+      const response = await packagesService.getAll({ is_active: true, limit: 200 })
+      if (response.success && response.data) {
+        setPackages(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch packages')
+    } finally {
+      setPackagesLoading(false)
+    }
+  }
+
+  // Filter packages by type
+  const theoryPackages = packages.filter(
+    (p) => p.package_type_id?.name?.toLowerCase() === 'theory'
+  )
+  const practicalPackages = packages.filter(
+    (p) => p.package_type_id?.name?.toLowerCase() === 'practical'
+  )
+
+  const relevantPackages = linkAction === 'theory_package' ? theoryPackages : practicalPackages
+
   useEffect(() => {
     if (open) {
       setImageFile([])
       setUploadProgress(null)
       setImageError(null)
+      setPackageError(null)
       if (mode === 'edit' && banner) {
         reset({
           title: banner.title,
@@ -90,6 +143,8 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         })
         setExistingImageUrl(banner.image_url)
         setExistingS3Key(banner.image_s3_key)
+        setLinkAction(deriveLinkAction(banner))
+        setSelectedPackageId(banner.target_package_id || '')
       } else {
         reset({
           title: '', subtitle: '', click_url: '',
@@ -98,11 +153,14 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         })
         setExistingImageUrl(null)
         setExistingS3Key(null)
+        setLinkAction('none')
+        setSelectedPackageId('')
       }
     }
   }, [open, mode, banner, reset])
 
   const hasImage = imageFile.length > 0 || !!existingImageUrl
+  const isPackageAction = linkAction === 'theory_package' || linkAction === 'practical_package'
 
   const handleFormSubmit = async (data: BannerFormValues) => {
     // Validate image
@@ -111,6 +169,13 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       return
     }
     setImageError(null)
+
+    // Validate package selection for package banner types
+    if (isPackageAction && !selectedPackageId) {
+      setPackageError('Please select a package')
+      return
+    }
+    setPackageError(null)
 
     try {
       let imageUrl = existingImageUrl || ''
@@ -131,12 +196,35 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setUploadProgress(null)
       }
 
+      // Build form data based on link action
+      let bannerType: BannerType = 'generic'
+      let clickUrl: string | undefined = undefined
+      let linkType: 'internal' | 'external' | 'none' = 'none'
+      let targetPackageId: string | null = null
+
+      if (linkAction === 'external_url') {
+        bannerType = 'generic'
+        linkType = 'external'
+        clickUrl = data.click_url || undefined
+      } else if (linkAction === 'theory_package') {
+        bannerType = 'theory_package'
+        linkType = 'internal'
+        targetPackageId = selectedPackageId
+      } else if (linkAction === 'practical_package') {
+        bannerType = 'practical_package'
+        linkType = 'internal'
+        targetPackageId = selectedPackageId
+      }
+
       const formData: BannerFormData = {
         title: data.title,
         subtitle: data.subtitle || undefined,
         image_url: imageUrl,
         image_s3_key: imageS3Key,
-        click_url: data.click_url || undefined,
+        click_url: clickUrl,
+        link_type: linkType,
+        banner_type: bannerType,
+        target_package_id: targetPackageId,
         display_order: data.display_order && !isNaN(data.display_order) ? data.display_order : undefined,
         is_active: data.is_active,
         start_date: data.start_date,
@@ -174,6 +262,12 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const handleCropCancel = () => {
     setShowCropper(false)
     setCropperFile(null)
+  }
+
+  const handleLinkActionChange = (value: LinkAction) => {
+    setLinkAction(value)
+    setSelectedPackageId('')
+    setPackageError(null)
   }
 
   const isUploading = uploadProgress !== null
@@ -259,11 +353,78 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
             {imageError && <p className="text-sm text-red-500">{imageError}</p>}
           </div>
 
+          {/* Link Action */}
           <div className="space-y-2">
-            <Label htmlFor="click_url">Click URL</Label>
-            <Input id="click_url" placeholder="https://..." disabled={isSubmitting || isUploading} {...register('click_url')} />
-            {errors.click_url && <p className="text-sm text-red-500">{errors.click_url.message}</p>}
+            <Label>Banner Click Action</Label>
+            <Select
+              value={linkAction}
+              onValueChange={(v) => handleLinkActionChange(v as LinkAction)}
+              disabled={isSubmitting || isUploading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select action..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Action</SelectItem>
+                <SelectItem value="external_url">External URL</SelectItem>
+                <SelectItem value="theory_package">Theory Package</SelectItem>
+                <SelectItem value="practical_package">Practical Package</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {linkAction === 'none' && 'Banner will be display-only, no navigation on tap.'}
+              {linkAction === 'external_url' && 'Opens an external URL in the browser when tapped.'}
+              {linkAction === 'theory_package' && 'Navigates to the selected theory package screen when tapped.'}
+              {linkAction === 'practical_package' && 'Navigates to the selected practical package screen when tapped.'}
+            </p>
           </div>
+
+          {/* External URL input - shown only for external_url action */}
+          {linkAction === 'external_url' && (
+            <div className="space-y-2">
+              <Label htmlFor="click_url">Click URL <span className="text-red-500">*</span></Label>
+              <Input id="click_url" placeholder="https://..." disabled={isSubmitting || isUploading} {...register('click_url')} />
+              {errors.click_url && <p className="text-sm text-red-500">{errors.click_url.message}</p>}
+            </div>
+          )}
+
+          {/* Package selector - shown for theory/practical package actions */}
+          {isPackageAction && (
+            <div className="space-y-2">
+              <Label>
+                Select {linkAction === 'theory_package' ? 'Theory' : 'Practical'} Package{' '}
+                <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={selectedPackageId}
+                onValueChange={(v) => { setSelectedPackageId(v); setPackageError(null) }}
+                disabled={isSubmitting || isUploading || packagesLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    packagesLoading
+                      ? 'Loading packages...'
+                      : `Select a ${linkAction === 'theory_package' ? 'theory' : 'practical'} package`
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {relevantPackages.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No {linkAction === 'theory_package' ? 'theory' : 'practical'} packages found
+                    </div>
+                  ) : (
+                    relevantPackages.map((pkg) => (
+                      <SelectItem key={pkg._id} value={pkg._id}>
+                        {pkg.name}
+                        {pkg.subject_id?.name ? ` (${pkg.subject_id.name})` : ''}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {packageError && <p className="text-sm text-red-500">{packageError}</p>}
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">

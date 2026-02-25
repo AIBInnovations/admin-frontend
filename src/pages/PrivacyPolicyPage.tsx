@@ -290,8 +290,7 @@ export function PrivacyPolicyPage() {
         <p className="text-gray-700 mb-3">If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:</p>
         <div className="text-gray-700 mb-6">
           <p className="font-semibold">PGME (Post Graduate Medical Education)</p>
-          <p>Email: [your-support-email@pgme.com]</p>
-          <p>Address: [Your Registered Business Address]</p>
+          <p>Email: <a href="mailto:support@pgmemedicalteaching.com" className="text-blue-600 hover:underline">support@pgmemedicalteaching.com</a></p>
         </div>
 
         <hr className="my-8 border-gray-200" />

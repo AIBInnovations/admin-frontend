@@ -224,8 +224,7 @@ The App itself does not use browser cookies. However, our integrated WebView-bas
 If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
 
 **PGME (Post Graduate Medical Education)**
-Email: [your-support-email@pgme.com]
-Address: [Your Registered Business Address]
+Email: support@pgmemedicalteaching.com
 
 ---
 

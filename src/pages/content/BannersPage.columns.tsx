@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Banner } from '@/services/banners.service'
-import { MoreVertical, Pencil, Trash2, Image, ExternalLink } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, Image, ExternalLink, BookOpen, FlaskConical } from 'lucide-react'
 
 interface BannersColumnsProps {
   onEdit: (banner: Banner) => void
@@ -41,23 +41,38 @@ export function useBannersColumns({
     },
     {
       id: 'link',
-      header: 'Link',
-      width: 'w-32',
-      cell: (banner) => (
-        banner.click_url ? (
-          <a
-            href={banner.click_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate max-w-[120px]"
-          >
-            <ExternalLink className="h-3 w-3 shrink-0" />
-            Link
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )
-      ),
+      header: 'Click Action',
+      width: 'w-36',
+      cell: (banner) => {
+        if (banner.banner_type === 'theory_package') {
+          return (
+            <Badge className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200">
+              <BookOpen className="mr-1 h-3 w-3" />Theory Package
+            </Badge>
+          )
+        }
+        if (banner.banner_type === 'practical_package') {
+          return (
+            <Badge className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-200">
+              <FlaskConical className="mr-1 h-3 w-3" />Practical Package
+            </Badge>
+          )
+        }
+        if (banner.click_url && banner.link_type === 'external') {
+          return (
+            <a
+              href={banner.click_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate max-w-[120px]"
+            >
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              External Link
+            </a>
+          )
+        }
+        return <span className="text-xs text-muted-foreground">No Action</span>
+      },
     },
     {
       id: 'order',

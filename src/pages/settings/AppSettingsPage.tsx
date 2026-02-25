@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Settings, Loader2, Save, Globe, Phone, Share2 } from 'lucide-react'
+import { Settings, Loader2, Save, Globe, Phone, Share2, Smartphone } from 'lucide-react'
 import { appSettingsService, AppSettingRecord } from '@/services/appSettings.service'
 import { toast } from 'sonner'
 
@@ -16,7 +16,21 @@ const SECTIONS = [
     title: 'General',
     description: 'Core application settings',
     icon: Settings,
-    keys: ['app_version', 'maintenance_mode', 'force_update_required'],
+    keys: ['maintenance_mode'],
+  },
+  {
+    id: 'android_version',
+    title: 'Android Version Control',
+    description: 'Manage minimum required version and force update for Android',
+    icon: Smartphone,
+    keys: ['android_min_version', 'android_store_url', 'android_force_update'],
+  },
+  {
+    id: 'ios_version',
+    title: 'iOS Version Control',
+    description: 'Manage minimum required version and force update for iOS',
+    icon: Smartphone,
+    keys: ['ios_min_version', 'ios_store_url', 'ios_force_update'],
   },
   {
     id: 'social',
@@ -35,16 +49,20 @@ const SECTIONS = [
 ]
 
 // Keys that should render as boolean toggles
-const BOOLEAN_KEYS = new Set(['maintenance_mode', 'force_update_required'])
+const BOOLEAN_KEYS = new Set(['maintenance_mode', 'android_force_update', 'ios_force_update'])
 
 // All known keys (to detect "other" settings)
 const KNOWN_KEYS = new Set(SECTIONS.flatMap((s) => s.keys))
 
 // Human-readable labels
 const KEY_LABELS: Record<string, string> = {
-  app_version: 'App Version',
   maintenance_mode: 'Maintenance Mode',
-  force_update_required: 'Force Update Required',
+  android_min_version: 'Minimum Version',
+  android_store_url: 'Play Store URL',
+  android_force_update: 'Force Update',
+  ios_min_version: 'Minimum Version',
+  ios_store_url: 'App Store URL',
+  ios_force_update: 'Force Update',
   instagram_url: 'Instagram URL',
   youtube_url: 'YouTube URL',
   twitter_url: 'X (Twitter) URL',
@@ -56,9 +74,13 @@ const KEY_LABELS: Record<string, string> = {
 
 // Default descriptions for keys not yet in DB
 const KEY_DESCRIPTIONS: Record<string, string> = {
-  app_version: 'Current application version',
   maintenance_mode: 'Flag to enable/disable maintenance mode',
-  force_update_required: 'Flag to force users to update the app',
+  android_min_version: 'Minimum required Android app version (e.g. 1.6.5). Users below this version will be blocked.',
+  android_store_url: 'Google Play Store listing URL for the app',
+  android_force_update: 'When enabled, Android users below the minimum version cannot use the app',
+  ios_min_version: 'Minimum required iOS app version (e.g. 1.6.5). Users below this version will be blocked.',
+  ios_store_url: 'Apple App Store listing URL for the app',
+  ios_force_update: 'When enabled, iOS users below the minimum version cannot use the app',
   instagram_url: 'Instagram profile URL',
   youtube_url: 'YouTube channel URL',
   twitter_url: 'X (Twitter) profile URL',
