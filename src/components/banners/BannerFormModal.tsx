@@ -18,6 +18,7 @@ import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, X } from 'lucide-react'
 import { Banner, BannerFormData, BannerType, bannersService } from '@/services/banners.service'
 import { Package, packagesService } from '@/services/packages.service'
+import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: full-width x 140px on phone (~360px wide) ≈ 18:7 */
@@ -67,6 +68,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [linkAction, setLinkAction] = useState<LinkAction>('none')
   const [selectedPackageId, setSelectedPackageId] = useState<string>('')
   const [packages, setPackages] = useState<Package[]>([])
+  const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
   const [packagesLoading, setPackagesLoading] = useState(false)
   const [packageError, setPackageError] = useState<string | null>(null)
 
@@ -94,34 +96,64 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
 
   const isActive = watch('is_active')
 
-  // Fetch packages when modal opens
+  // Fetch packages and package types when modal opens
   useEffect(() => {
     if (open) {
-      fetchPackages()
+      fetchPackagesAndTypes()
     }
   }, [open])
 
-  const fetchPackages = async () => {
+  const fetchPackagesAndTypes = async () => {
+    setPackagesLoading(true)
+
+    // Fetch packages (admin API — always populates package_type_id)
     try {
-      setPackagesLoading(true)
-      const response = await packagesService.getAll({ is_active: true, limit: 200 })
-      if (response.success && response.data) {
-        setPackages(response.data.entities || [])
+      const pkgResponse = await packagesService.getAll({ is_active: true, limit: 200 })
+      if (pkgResponse.success && pkgResponse.data) {
+        setPackages(pkgResponse.data.entities || [])
       }
     } catch {
       console.error('Failed to fetch packages')
-    } finally {
-      setPackagesLoading(false)
     }
+
+    // Fetch package types as fallback for filtering
+    try {
+      const typesResponse = await packageTypesService.getAllPublic()
+      if (typesResponse.success && typesResponse.data) {
+        setPackageTypes(typesResponse.data)
+      }
+    } catch {
+      console.error('Failed to fetch package types')
+    }
+
+    setPackagesLoading(false)
   }
 
-  // Filter packages by type
-  const theoryPackages = packages.filter(
-    (p) => p.package_type_id?.name?.toLowerCase() === 'theory'
-  )
-  const practicalPackages = packages.filter(
-    (p) => p.package_type_id?.name?.toLowerCase() === 'practical'
-  )
+  // Filter packages by type name from the populated package_type_id
+  const getTypeName = (pkg: Package): string => {
+    const ref = pkg.package_type_id
+    if (typeof ref === 'object' && ref !== null && 'name' in ref) {
+      return (ref as { name: string }).name.toLowerCase()
+    }
+    return ''
+  }
+
+  // Primary: match by populated name. Fallback: match by type ID lookup.
+  const matchesType = (pkg: Package, typeName: string): boolean => {
+    // Try populated name first
+    const name = getTypeName(pkg)
+    if (name) return name === typeName
+
+    // Fallback: match via package types list
+    const typeId = packageTypes.find((t) => t.name.toLowerCase() === typeName)?._id
+    if (!typeId) return false
+    const ref = pkg.package_type_id
+    const pkgTypeId = typeof ref === 'object' && ref !== null ? ref._id : (ref as unknown as string)
+    return pkgTypeId === typeId
+  }
+
+  const theoryPackages = packages.filter((p) => matchesType(p, 'theory'))
+  const practicalPackages = packages.filter((p) => matchesType(p, 'practical'))
 
   const relevantPackages = linkAction === 'theory_package' ? theoryPackages : practicalPackages
 
