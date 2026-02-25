@@ -108,7 +108,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
 
     // Fetch packages (admin API — always populates package_type_id)
     try {
-      const pkgResponse = await packagesService.getAll({ is_active: true, limit: 200 })
+      const pkgResponse = await packagesService.getAll({ is_active: true, limit: 100 })
       if (pkgResponse.success && pkgResponse.data) {
         setPackages(pkgResponse.data.entities || [])
       }
