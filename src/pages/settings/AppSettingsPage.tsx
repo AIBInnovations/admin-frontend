@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Settings, Loader2, Save, Globe, Phone, Share2, Smartphone } from 'lucide-react'
+import { Settings, Loader2, Save, Globe, Phone, Share2, Smartphone, Shield } from 'lucide-react'
 import { appSettingsService, AppSettingRecord } from '@/services/appSettings.service'
 import { toast } from 'sonner'
 
@@ -33,6 +33,22 @@ const SECTIONS = [
     keys: ['ios_min_version', 'ios_store_url', 'ios_force_update'],
   },
   {
+    id: 'ios_display',
+    title: 'iOS Display Config',
+    description: 'Control payment button visibility, text, and price display on iOS for App Store compliance',
+    icon: Shield,
+    keys: [
+      'ios_payments_enabled',
+      'ios_show_prices',
+      'ios_package_button_visible',
+      'ios_package_button_text',
+      'ios_session_button_visible',
+      'ios_session_button_text',
+      'ios_ebook_button_visible',
+      'ios_ebook_button_text',
+    ],
+  },
+  {
     id: 'social',
     title: 'Social Media Links',
     description: 'Social media profile URLs displayed in the app',
@@ -49,7 +65,16 @@ const SECTIONS = [
 ]
 
 // Keys that should render as boolean toggles
-const BOOLEAN_KEYS = new Set(['maintenance_mode', 'android_force_update', 'ios_force_update'])
+const BOOLEAN_KEYS = new Set([
+  'maintenance_mode',
+  'android_force_update',
+  'ios_force_update',
+  'ios_payments_enabled',
+  'ios_show_prices',
+  'ios_package_button_visible',
+  'ios_session_button_visible',
+  'ios_ebook_button_visible',
+])
 
 // All known keys (to detect "other" settings)
 const KNOWN_KEYS = new Set(SECTIONS.flatMap((s) => s.keys))
@@ -70,6 +95,14 @@ const KEY_LABELS: Record<string, string> = {
   whatsapp_support_url: 'WhatsApp Support URL',
   support_email: 'Support Email',
   support_phone: 'Support Phone',
+  ios_payments_enabled: 'Payments Enabled',
+  ios_show_prices: 'Show Prices',
+  ios_package_button_visible: 'Package Button Visible',
+  ios_package_button_text: 'Package Button Text',
+  ios_session_button_visible: 'Session Button Visible',
+  ios_session_button_text: 'Session Button Text',
+  ios_ebook_button_visible: 'Ebook Button Visible',
+  ios_ebook_button_text: 'Ebook Button Text',
 }
 
 // Default descriptions for keys not yet in DB
@@ -88,6 +121,14 @@ const KEY_DESCRIPTIONS: Record<string, string> = {
   whatsapp_support_url: 'WhatsApp support chat URL',
   support_email: 'Support email address',
   support_phone: 'Support phone number',
+  ios_payments_enabled: 'Master switch — when OFF, all payment buttons are hidden on iOS',
+  ios_show_prices: 'When ON, INR prices are shown for digital content on iOS',
+  ios_package_button_visible: 'Show or hide the package purchase button on iOS',
+  ios_package_button_text: 'Text displayed on the package purchase button on iOS (e.g. "Get Started")',
+  ios_session_button_visible: 'Show or hide the session purchase button on iOS',
+  ios_session_button_text: 'Text displayed on the session purchase button on iOS (e.g. "Enroll Now")',
+  ios_ebook_button_visible: 'Show or hide the ebook purchase button on iOS',
+  ios_ebook_button_text: 'Text displayed on the ebook purchase button on iOS (e.g. "Get Now")',
 }
 
 function getLabel(key: string): string {
