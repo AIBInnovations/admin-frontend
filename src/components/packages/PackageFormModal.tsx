@@ -14,9 +14,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
-import { Package, PackageFormData } from '@/services/packages.service'
+import { Package, PackageFormData, packagesService } from '@/services/packages.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
+import { FileUpload } from '@/components/common/FileUpload'
+import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
+import { toast } from 'sonner'
 
 const tierSchema = z.object({
   name: z.string().min(1, 'Name required').max(100),
@@ -70,6 +73,9 @@ interface PackageFormModalProps {
 export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSubjectId }: PackageFormModalProps) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
+  const [trailerFile, setTrailerFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   const {
     register, handleSubmit, control,
@@ -111,6 +117,9 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   // Reset form
   useEffect(() => {
     if (open) {
+      setTrailerFile(null)
+      setThumbnailFile(null)
+      setUploadProgress(null)
       if (mode === 'edit' && pkg) {
         const existingTiers = (pkg.tiers || []).map((t, i) => ({
           name: t.name,
@@ -184,6 +193,33 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       }
 
       await onSubmit(formData)
+
+      // Upload trailer and thumbnail if provided (edit mode only, since we need the package ID)
+      if (mode === 'edit' && pkg?._id) {
+        if (trailerFile) {
+          try {
+            setUploadProgress(0)
+            await packagesService.uploadTrailer(pkg._id, trailerFile, setUploadProgress)
+            toast.success('Trailer uploaded successfully')
+          } catch (err) {
+            console.error('Trailer upload error:', err)
+            toast.error('Failed to upload trailer video')
+          } finally {
+            setUploadProgress(null)
+          }
+        }
+
+        if (thumbnailFile) {
+          try {
+            await packagesService.uploadThumbnail(pkg._id, thumbnailFile)
+            toast.success('Thumbnail uploaded successfully')
+          } catch (err) {
+            console.error('Thumbnail upload error:', err)
+            toast.error('Failed to upload thumbnail')
+          }
+        }
+      }
+
       onClose()
     } catch (error) {
       console.error('Form submission error:', error)
@@ -448,11 +484,57 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
             </div>
           </div>
 
+          {/* Trailer Video Upload (edit mode only) */}
+          {mode === 'edit' && (
+            <div className="space-y-2">
+              <Label>Trailer Video (Optional)</Label>
+              <FileUpload
+                accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
+                maxSize={500 * 1024 * 1024}
+                maxFiles={1}
+                value={trailerFile ? [trailerFile] : []}
+                onChange={(files) => setTrailerFile(files[0] || null)}
+                label="Upload trailer video"
+                description="Max 500MB. Drag & drop or click to browse."
+                disabled={isSubmitting}
+              />
+              {uploadProgress !== null && (
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
+              {pkg?.trailer_video_id && !trailerFile && (
+                <p className="text-xs text-muted-foreground">
+                  Trailer video is already uploaded.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Thumbnail Upload with Crop (edit mode only) */}
+          {mode === 'edit' && (
+            <div className="space-y-2">
+              <Label>Thumbnail (Optional)</Label>
+              <ImageUploadWithCrop
+                value={thumbnailFile}
+                onChange={setThumbnailFile}
+                aspectRatio={16 / 9}
+                maxSize={5 * 1024 * 1024}
+                label="Upload thumbnail image"
+                description="16:9 aspect ratio. Max 5MB."
+                disabled={isSubmitting}
+                currentImageUrl={pkg?.thumbnail_url}
+              />
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? 'Creating...' : 'Updating...'}</>
+            <Button type="submit" disabled={isSubmitting || uploadProgress !== null}>
+              {isSubmitting || uploadProgress !== null ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {uploadProgress !== null ? `Uploading ${uploadProgress}%` : mode === 'create' ? 'Creating...' : 'Updating...'}
+                </>
               ) : (
                 <>{mode === 'create' ? 'Create Package' : 'Update Package'}</>
               )}
