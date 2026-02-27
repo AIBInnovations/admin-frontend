@@ -1,10 +1,10 @@
 # Privacy Policy
 
-**PGME (Post Graduate Medical Education)**
+**PGME (PGME Medical Education LLP)**
 **Effective Date: February 23, 2026**
 **Last Updated: February 23, 2026**
 
-PGME ("we," "our," or "us") operates the PGME mobile application (the "App"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our App. Please read this Privacy Policy carefully. By using the App, you agree to the collection and use of information in accordance with this policy.
+PGME Medical Education LLP ("PGME," "we," "our," or "us") operates the PGME platform, including our mobile application and website (collectively, the "Platform"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Platform. Please read this Privacy Policy carefully. By using the Platform, you agree to the collection and use of information in accordance with this policy.
 
 ---
 
@@ -23,7 +23,7 @@ When you register for an account or use our services, we may collect the followi
 
 ### 1.2 Device Information
 
-We automatically collect certain device information when you use the App:
+We automatically collect certain device information when you use the Platform:
 
 - **Device Identifiers**: Android ID or iOS Vendor Identifier
 - **Device Details**: Device brand, model, and operating system type
@@ -40,7 +40,7 @@ You can disable location access at any time through your device settings.
 
 ### 1.4 Usage Information
 
-We collect information about how you interact with the App:
+We collect information about how you interact with the Platform:
 
 - **Learning Activity**: Video watch progress, document reading progress, module and course completion status, time spent on content
 - **Session Activity**: Live session attendance, meeting participation records
@@ -70,7 +70,7 @@ We use the information we collect for the following purposes:
 - **Personalisation**: To recommend content and send notifications based on your selected subjects and preferences
 - **Device Management**: To manage active sessions across multiple devices and provide secure access
 - **Customer Support**: To respond to your inquiries and provide technical assistance
-- **App Improvement**: To analyse usage patterns and improve our services
+- **Platform Improvement**: To analyse usage patterns and improve our services
 
 ---
 
@@ -116,7 +116,7 @@ We integrate the following third-party services that may collect or process your
 - Your personal information is stored on secure cloud servers
 - Authentication tokens are stored in encrypted device storage (Android EncryptedSharedPreferences / iOS Keychain)
 - Downloaded content is stored locally on your device in a private application directory
-- All data transmission between the App and our servers is encrypted using HTTPS/TLS
+- All data transmission between the Platform and our servers is encrypted using HTTPS/TLS
 
 ### 4.2 Security Measures
 We implement appropriate technical and organisational measures to protect your personal information, including:
@@ -138,7 +138,7 @@ We implement appropriate technical and organisational measures to protect your p
 
 We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following circumstances:
 
-- **Service Providers**: With third-party service providers who assist us in operating the App (as listed in Section 3), strictly for the purposes described
+- **Service Providers**: With third-party service providers who assist us in operating the Platform (as listed in Section 3), strictly for the purposes described
 - **Payment Processing**: With Zoho Payments to process your transactions securely
 - **Legal Requirements**: When required by law, regulation, legal process, or governmental request
 - **Safety and Security**: To protect the rights, property, or safety of PGME, our users, or the public
@@ -148,7 +148,7 @@ We do not sell, trade, or rent your personal information to third parties. We ma
 
 ## 6. Permissions
 
-The App requests the following device permissions:
+The Platform requests the following device permissions:
 
 | Permission | Purpose |
 |-----------|---------|
@@ -169,66 +169,73 @@ All permissions are requested at the time of use and can be managed through your
 You have the following rights regarding your personal information:
 
 ### 7.1 Access and Update
-- You can view and update your profile information at any time through the Edit Profile section in the App
+You can view and update your profile information at any time through the Edit Profile section in the Platform.
 
 ### 7.2 Device Session Management
-- You can view all active sessions and remotely logout from any device through the App settings
+You can view all active sessions and remotely logout from any device through the Platform settings.
 
 ### 7.3 Notification Preferences
-- You can manage notification preferences within the App settings
+- You can manage notification preferences within the Platform settings
 - You can disable push notifications through your device settings
 
 ### 7.4 Location Access
-- You can enable or disable location access through your device settings at any time
+You can enable or disable location access through your device settings at any time.
 
 ### 7.5 Data Deletion
 - You may request complete deletion of your account and all associated personal data by contacting us at the email address provided below
 - Upon receiving a valid deletion request, we will delete your personal data within 30 days, except where retention is required by law
 
 ### 7.6 Data Download
-- You may request a copy of your personal data in a portable format by contacting us
+You may request a copy of your personal data in a portable format by contacting us.
 
 ---
 
 ## 8. Children's Privacy
 
-The App is not intended for use by individuals under the age of 18. We do not knowingly collect personal information from children under 18 years of age. If we become aware that we have collected personal information from a child under 18, we will take steps to delete such information promptly.
+The Platform is not intended for use by individuals under the age of 18. We do not knowingly collect personal information from children under 18 years of age. If we become aware that we have collected personal information from a child under 18, we will take steps to delete such information promptly.
 
 ---
 
 ## 9. Changes to This Privacy Policy
 
 We may update this Privacy Policy from time to time. We will notify you of any material changes by:
-- Posting the updated Privacy Policy within the App
+- Posting the updated Privacy Policy within the Platform
 - Sending a push notification about the update
 - Updating the "Last Updated" date at the top of this policy
 
-Your continued use of the App after any changes constitutes your acceptance of the updated Privacy Policy.
+Your continued use of the Platform after any changes constitutes your acceptance of the updated Privacy Policy.
 
 ---
 
 ## 10. Data Transfer
 
-Your information may be transferred to and processed on servers located outside your country of residence. By using the App, you consent to the transfer of your information to facilities maintained by us or our third-party service providers, where applicable data protection laws may differ from those in your jurisdiction.
+Your information may be transferred to and processed on servers located outside your country of residence. By using the Platform, you consent to the transfer of your information to facilities maintained by us or our third-party service providers, where applicable data protection laws may differ from those in your jurisdiction.
 
 ---
 
 ## 11. Cookies and Tracking
 
-The App itself does not use browser cookies. However, our integrated WebView-based payment gateway (Zoho Payments) may use cookies or similar technologies as necessary for secure payment processing.
+The Platform itself does not use browser cookies. However, our integrated WebView-based payment gateway (Zoho Payments) may use cookies or similar technologies as necessary for secure payment processing.
 
 ---
 
-## 12. Contact Us
+## 12. Governing Law & Jurisdiction
+
+This policy shall be governed by the laws of India.
+All disputes shall be subject to the exclusive jurisdiction of courts located in Jalandhar, Punjab.
+
+---
+
+## 13. Contact Us
 
 If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
 
-**PGME (Post Graduate Medical Education)**
+**PGME Medical Education LLP**
 Email: support@pgmemedicalteaching.com
 
 ---
 
-## 13. Grievance Officer
+## 14. Grievance Officer
 
 In accordance with applicable regulations, the details of the Grievance Officer are as follows:
 
