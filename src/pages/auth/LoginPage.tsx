@@ -1,21 +1,27 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2 } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2 } from "lucide-react";
 
 // Validation schema
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   remember_me: z.boolean().optional(),
 });
 
@@ -36,18 +42,20 @@ export function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: 'admin@pgme.com',
-      password: 'Admin@123',
+      // email: 'admin@pgme.com',
+      // password: 'Admin@123',
+      email: "",
+      password: "",
       remember_me: false,
     },
   });
 
-  const rememberMe = watch('remember_me');
+  const rememberMe = watch("remember_me");
 
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
-      navigate('/');
+      navigate("/");
     }
   }, [isAuthenticated, authLoading, navigate]);
 
@@ -60,7 +68,8 @@ export function LoginPage() {
       });
       // Navigation happens in the login function
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
+      const errorMessage =
+        err instanceof Error ? err.message : "Login failed. Please try again.";
       setError(errorMessage);
     }
   };
@@ -83,7 +92,9 @@ export function LoginPage() {
               <span className="text-2xl font-bold text-white">P</span>
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">PGME Admin</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            PGME Admin
+          </CardTitle>
           <CardDescription className="text-center">
             Sign in to your admin account
           </CardDescription>
@@ -106,7 +117,7 @@ export function LoginPage() {
                 placeholder="admin@pgme.com"
                 autoComplete="email"
                 disabled={isSubmitting}
-                {...register('email')}
+                {...register("email")}
               />
               {errors.email && (
                 <p className="text-sm text-red-500">{errors.email.message}</p>
@@ -122,10 +133,12 @@ export function LoginPage() {
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 disabled={isSubmitting}
-                {...register('password')}
+                {...register("password")}
               />
               {errors.password && (
-                <p className="text-sm text-red-500">{errors.password.message}</p>
+                <p className="text-sm text-red-500">
+                  {errors.password.message}
+                </p>
               )}
             </div>
 
@@ -134,7 +147,9 @@ export function LoginPage() {
               <Checkbox
                 id="remember_me"
                 checked={rememberMe}
-                onCheckedChange={(checked) => setValue('remember_me', checked as boolean)}
+                onCheckedChange={(checked) =>
+                  setValue("remember_me", checked as boolean)
+                }
                 disabled={isSubmitting}
               />
               <Label
@@ -146,18 +161,14 @@ export function LoginPage() {
             </div>
 
             {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isSubmitting}
-            >
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...
                 </>
               ) : (
-                'Sign in'
+                "Sign in"
               )}
             </Button>
           </form>
