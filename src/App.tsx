@@ -35,6 +35,7 @@ import { BannersPage } from '@/pages/content/BannersPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
+import { VideoReviewsPage } from '@/pages/content/VideoReviewsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
@@ -73,6 +74,7 @@ function App() {
               <Route path="/content/video-tags" element={<VideoTagsPage />} />
               <Route path="/content/books" element={<BooksPage />} />
               <Route path="/content/banners" element={<BannersPage />} />
+              <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
 
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />

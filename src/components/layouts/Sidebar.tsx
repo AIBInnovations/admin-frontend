@@ -65,6 +65,7 @@ const navigation: NavItem[] = [
       { name: 'Series', href: '/content/series' },
       { name: 'Modules', href: '/content/modules' },
       { name: 'Videos', href: '/content/videos' },
+      { name: 'Video Reviews', href: '/content/video-reviews' },
       { name: 'Video Tags', href: '/content/video-tags' },
       { name: 'Documents', href: '/content/documents' },
       { name: 'Recordings', href: '/content/recordings' },
