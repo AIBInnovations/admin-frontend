@@ -25,6 +25,7 @@ export interface Package {
   sale_discount_percent: number | null
   duration_days: number
   trailer_video_id: string | null
+  trailer_video_url: string | null
   thumbnail_url: string | null
   features: string
   is_active: boolean

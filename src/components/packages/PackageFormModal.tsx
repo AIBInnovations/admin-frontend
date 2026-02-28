@@ -488,25 +488,65 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           {mode === 'edit' && (
             <div className="space-y-2">
               <Label>Trailer Video (Optional)</Label>
-              <FileUpload
-                accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
-                maxSize={500 * 1024 * 1024}
-                maxFiles={1}
-                value={trailerFile ? [trailerFile] : []}
-                onChange={(files) => setTrailerFile(files[0] || null)}
-                label="Upload trailer video"
-                description="Max 500MB. Drag & drop or click to browse."
-                disabled={isSubmitting}
-              />
-              {uploadProgress !== null && (
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+              {pkg?.trailer_video_url && !trailerFile ? (
+                <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium text-green-600">✓</span>
+                    <a
+                      href={pkg.trailer_video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline truncate"
+                    >
+                      Trailer uploaded — click to preview
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button" variant="outline" size="sm"
+                      onClick={() => setTrailerFile(null as unknown as File)}
+                      disabled={isSubmitting}
+                      className="text-xs"
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      type="button" variant="ghost" size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      disabled={isSubmitting}
+                      onClick={async () => {
+                        if (!confirm('Delete the trailer video?')) return
+                        try {
+                          await packagesService.deleteTrailer(pkg._id)
+                          toast.success('Trailer deleted')
+                          pkg.trailer_video_url = null
+                        } catch {
+                          toast.error('Failed to delete trailer')
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              )}
-              {pkg?.trailer_video_id && !trailerFile && (
-                <p className="text-xs text-muted-foreground">
-                  Trailer video is already uploaded.
-                </p>
+              ) : (
+                <>
+                  <FileUpload
+                    accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
+                    maxSize={500 * 1024 * 1024}
+                    maxFiles={1}
+                    value={trailerFile ? [trailerFile] : []}
+                    onChange={(files) => setTrailerFile(files[0] || null)}
+                    label="Upload trailer video"
+                    description="Max 500MB. Drag & drop or click to browse."
+                    disabled={isSubmitting}
+                  />
+                  {uploadProgress !== null && (
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
