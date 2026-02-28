@@ -271,7 +271,7 @@ export function PackagesPage() {
 
       <PackageFormModal
         open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
+        onClose={() => { setFormModalOpen(false); fetchPackages() }}
         onSubmit={handleFormSubmit}
         pkg={selectedPackage}
         mode={modalMode}

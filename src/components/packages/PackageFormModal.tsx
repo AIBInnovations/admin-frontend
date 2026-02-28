@@ -76,6 +76,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const [trailerFile, setTrailerFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [isReplacingTrailer, setIsReplacingTrailer] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -120,6 +121,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       setTrailerFile(null)
       setThumbnailFile(null)
       setUploadProgress(null)
+      setIsReplacingTrailer(false)
       if (mode === 'edit' && pkg) {
         const existingTiers = (pkg.tiers || []).map((t, i) => ({
           name: t.name,
@@ -488,7 +490,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           {mode === 'edit' && (
             <div className="space-y-2">
               <Label>Trailer Video (Optional)</Label>
-              {pkg?.trailer_video_url && !trailerFile ? (
+              {pkg?.trailer_video_url && !isReplacingTrailer ? (
                 <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm font-medium text-green-600">✓</span>
@@ -504,7 +506,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
                       type="button" variant="outline" size="sm"
-                      onClick={() => setTrailerFile(null as unknown as File)}
+                      onClick={() => setIsReplacingTrailer(true)}
                       disabled={isSubmitting}
                       className="text-xs"
                     >

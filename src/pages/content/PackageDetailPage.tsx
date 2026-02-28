@@ -568,7 +568,7 @@ export function PackageDetailPage() {
       {/* Modals */}
       <PackageFormModal
         open={editPackageOpen}
-        onClose={() => setEditPackageOpen(false)}
+        onClose={() => { setEditPackageOpen(false); fetchPackage() }}
         onSubmit={handlePackageSubmit}
         pkg={pkg}
         mode="edit"
