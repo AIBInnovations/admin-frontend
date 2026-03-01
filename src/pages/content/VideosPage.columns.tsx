@@ -46,7 +46,7 @@ export function useVideosColumns({
           <div className="min-w-0">
             <p className="text-sm font-medium truncate">{video.title}</p>
             <p className="text-xs text-muted-foreground">
-              {typeof video.module_id === 'object' ? video.module_id.name : '—'}
+              {video.module_id && typeof video.module_id === 'object' ? video.module_id.name : '—'}
             </p>
           </div>
         </div>
