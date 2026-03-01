@@ -33,10 +33,12 @@ const recordingSchema = z.object({
 
 type RecordingFormValues = z.infer<typeof recordingSchema>
 
+export type RecordingUploadPhase = 'uploading' | 'completing' | 'confirming'
+
 interface RecordingFormModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void) => Promise<void>
+  onSubmit: (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: RecordingUploadPhase) => void) => Promise<void>
   recording?: Recording | null
   mode: 'create' | 'edit'
 }
@@ -45,6 +47,8 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadPhase, setUploadPhase] = useState<RecordingUploadPhase | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const {
     register,
@@ -75,6 +79,8 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
     if (open) {
       setVideoFile(null)
       setUploadProgress(null)
+      setUploadPhase(null)
+      setUploadError(null)
       if (mode === 'edit' && recording) {
         reset({
           title: recording.title,
@@ -94,6 +100,8 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
   const handleFormSubmit = async (data: RecordingFormValues) => {
     if (mode === 'create' && !videoFile) return
     setUploadProgress(null)
+    setUploadPhase(null)
+    setUploadError(null)
 
     try {
       const formData: RecordingFormData = {
@@ -101,12 +109,20 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
         description: data.description || '',
         session_id: data.session_id || undefined,
       }
-      await onSubmit(formData, videoFile || undefined, (pct) => setUploadProgress(pct))
-      onClose()
-    } catch (error) {
-      console.error('Form submission error:', error)
-    } finally {
+      await onSubmit(
+        formData,
+        videoFile || undefined,
+        (pct) => setUploadProgress(pct),
+        (phase) => setUploadPhase(phase),
+      )
       setUploadProgress(null)
+      setUploadPhase(null)
+      onClose()
+    } catch (error: any) {
+      console.error('Form submission error:', error)
+      setUploadError(error?.message || 'Upload failed. Please try again.')
+      setUploadProgress(null)
+      setUploadPhase(null)
     }
   }
 
@@ -266,18 +282,33 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
           )}
 
           {/* Upload progress bar */}
-          {uploadProgress !== null && (
+          {(uploadPhase !== null || uploadProgress !== null) && (
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{uploadProgress < 100 ? 'Uploading to cloud...' : 'Finalizing...'}</span>
-                <span>{uploadProgress}%</span>
+                <span>
+                  {uploadPhase === 'confirming'
+                    ? 'Saving record and starting processing...'
+                    : uploadPhase === 'completing'
+                      ? 'Assembling file on server...'
+                      : 'Uploading to cloud...'}
+                </span>
+                {uploadPhase === 'uploading' && <span>{uploadProgress ?? 0}%</span>}
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-primary rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
+                  className={`h-full bg-primary rounded-full transition-all duration-300${
+                    uploadPhase === 'completing' || uploadPhase === 'confirming' ? ' animate-pulse' : ''
+                  }`}
+                  style={{ width: uploadPhase === 'completing' || uploadPhase === 'confirming' ? '100%' : `${uploadProgress ?? 0}%` }}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Upload error message */}
+          {uploadError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+              {uploadError}
             </div>
           )}
 

@@ -87,6 +87,8 @@ class VideosService {
 
   private readonly MULTIPART_THRESHOLD = 100 * 1024 * 1024 // 100MB
   private readonly CONCURRENT_UPLOADS = 5
+  // Longer timeout for S3 assembly & DB confirmation (default 30s is too short for large files)
+  private readonly UPLOAD_API_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
   /**
    * Upload new video via presigned S3 URL.
@@ -98,28 +100,38 @@ class VideosService {
     data: VideoFormData,
     videoFile: File,
     onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
   ): Promise<ApiResponse<{ video_id: string }>> {
     const mimeType = videoFile.type || 'video/mp4'
     let s3Key: string
 
+    console.log('[upload] Starting video upload:', { fileName: videoFile.name, fileSize: videoFile.size, mimeType })
+
     if (videoFile.size <= this.MULTIPART_THRESHOLD) {
-      s3Key = await this.uploadSinglePart(videoFile, mimeType, onProgress)
+      s3Key = await this.uploadSinglePart(videoFile, mimeType, onProgress, onPhaseChange)
     } else {
-      s3Key = await this.uploadMultipart(videoFile, mimeType, onProgress)
+      s3Key = await this.uploadMultipart(videoFile, mimeType, onProgress, onPhaseChange)
     }
 
     // Confirm upload with backend (same for both paths)
-    return apiService.post<{ video_id: string }>(`${this.basePath}/confirm-upload`, {
-      s3Key,
-      title: data.title,
-      description: data.description,
-      module_id: data.module_id,
-      faculty_id: data.faculty_id || undefined,
-      is_free: data.is_free,
-      display_order: data.display_order,
-      fileSize: videoFile.size,
-      mimeType,
-    })
+    console.log('[upload] Confirming upload with backend:', { s3Key })
+    onPhaseChange?.('confirming')
+    try {
+      return await apiService.post<{ video_id: string }>(`${this.basePath}/confirm-upload`, {
+        s3Key,
+        title: data.title,
+        description: data.description,
+        module_id: data.module_id,
+        faculty_id: data.faculty_id || undefined,
+        is_free: data.is_free,
+        display_order: data.display_order,
+        fileSize: videoFile.size,
+        mimeType,
+      }, { timeout: this.UPLOAD_API_TIMEOUT })
+    } catch (error: any) {
+      console.error('[upload] Confirm-upload failed:', { s3Key, error: error.message })
+      throw new Error(`Upload failed while saving record: ${error.message}`)
+    }
   }
 
   /**
@@ -129,6 +141,7 @@ class VideosService {
     videoFile: File,
     mimeType: string,
     onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
   ): Promise<string> {
     const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
       `${this.basePath}/upload-url`,
@@ -139,14 +152,20 @@ class VideosService {
     }
     const { uploadUrl, s3Key } = urlRes.data
 
-    await axios.put(uploadUrl, videoFile, {
-      headers: { 'Content-Type': mimeType },
-      onUploadProgress: (e) => {
-        if (onProgress && e.total) {
-          onProgress(Math.round((e.loaded / e.total) * 100))
-        }
-      },
-    })
+    onPhaseChange?.('uploading')
+    try {
+      await axios.put(uploadUrl, videoFile, {
+        headers: { 'Content-Type': mimeType },
+        onUploadProgress: (e) => {
+          if (onProgress && e.total) {
+            onProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        },
+      })
+    } catch (error: any) {
+      console.error('[upload] Single-part upload failed:', { s3Key, error: error.message })
+      throw new Error(`Upload failed during upload: ${error.message}`)
+    }
 
     return s3Key
   }
@@ -159,6 +178,7 @@ class VideosService {
     videoFile: File,
     mimeType: string,
     onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
   ): Promise<string> {
     // Step 1: Initiate multipart upload
     const initRes = await apiService.post<{
@@ -175,8 +195,10 @@ class VideosService {
       throw new Error(initRes.message || 'Failed to initiate multipart upload')
     }
     const { uploadId, s3Key, partUrls, chunkSize } = initRes.data
+    console.log('[upload] Multipart upload initiated:', { s3Key, uploadId, totalParts: partUrls.length, chunkSize })
 
     // Step 2: Upload parts in parallel with progress tracking
+    onPhaseChange?.('uploading')
     const partProgress = new Array(partUrls.length).fill(0)
     const completedParts: { ETag: string; PartNumber: number }[] = []
 
@@ -193,22 +215,27 @@ class VideosService {
       const blob = videoFile.slice(start, end)
       const partSize = end - start
 
-      const response = await axios.put(partUrls[partIndex], blob, {
-        headers: { 'Content-Type': 'application/octet-stream' },
-        onUploadProgress: (e) => {
-          partProgress[partIndex] = Math.min(e.loaded, partSize)
-          updateProgress()
-        },
-      })
+      try {
+        const response = await axios.put(partUrls[partIndex], blob, {
+          headers: { 'Content-Type': 'application/octet-stream' },
+          onUploadProgress: (e) => {
+            partProgress[partIndex] = Math.min(e.loaded, partSize)
+            updateProgress()
+          },
+        })
 
-      const etag = response.headers['etag'] || response.headers['ETag']
-      if (!etag) {
-        throw new Error(
-          `S3 did not return ETag for part ${partIndex + 1}. ` +
-          'Ensure the S3 bucket CORS has "ETag" in ExposeHeaders.',
-        )
+        const etag = response.headers['etag'] || response.headers['ETag']
+        if (!etag) {
+          throw new Error(
+            `S3 did not return ETag for part ${partIndex + 1}. ` +
+            'Ensure the S3 bucket CORS has "ETag" in ExposeHeaders.',
+          )
+        }
+        completedParts.push({ ETag: etag, PartNumber: partIndex + 1 })
+      } catch (error: any) {
+        console.error(`[upload] Part ${partIndex + 1}/${partUrls.length} failed:`, { s3Key, error: error.message })
+        throw new Error(`Upload failed on part ${partIndex + 1} of ${partUrls.length}: ${error.message}`)
       }
-      completedParts.push({ ETag: etag, PartNumber: partIndex + 1 })
     }
 
     try {
@@ -221,22 +248,30 @@ class VideosService {
       }
 
       // Step 3: Complete multipart upload
-      await apiService.post(`${this.basePath}/upload-url/multipart/complete`, {
-        s3Key,
-        uploadId,
-        parts: completedParts,
-      })
+      console.log('[upload] All parts uploaded, completing multipart upload:', { s3Key, partCount: completedParts.length })
+      onPhaseChange?.('completing')
+      try {
+        await apiService.post(`${this.basePath}/upload-url/multipart/complete`, {
+          s3Key,
+          uploadId,
+          parts: completedParts,
+        }, { timeout: this.UPLOAD_API_TIMEOUT })
+      } catch (error: any) {
+        console.error('[upload] Complete multipart upload failed:', { s3Key, uploadId, error: error.message })
+        throw new Error(`Upload failed while assembling file: ${error.message}`)
+      }
 
       return s3Key
-    } catch (error) {
+    } catch (error: any) {
       // Abort on failure to clean up incomplete parts
       try {
         await apiService.post(`${this.basePath}/upload-url/multipart/abort`, {
           s3Key,
           uploadId,
         })
-      } catch {
-        // Ignore abort errors
+        console.log('[upload] Multipart upload aborted after failure:', { s3Key })
+      } catch (abortError: any) {
+        console.error('[upload] Failed to abort multipart upload:', { s3Key, uploadId, abortError: abortError.message })
       }
       throw error
     }

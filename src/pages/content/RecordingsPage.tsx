@@ -98,10 +98,10 @@ export function RecordingsPage() {
     setDeleteModalOpen(true)
   }
 
-  const handleFormSubmit = async (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void) => {
+  const handleFormSubmit = async (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void) => {
     try {
       if (modalMode === 'create' && file) {
-        const response = await recordingsService.upload(data, file, onProgress)
+        const response = await recordingsService.upload(data, file, onProgress, onPhaseChange)
         if (response.success) {
           toast.success('Recording uploaded successfully — processing will begin shortly')
         }
