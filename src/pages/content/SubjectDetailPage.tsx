@@ -39,8 +39,8 @@ export function SubjectDetailPage() {
         toast.error('Subject not found')
         navigate('/content/subjects')
       }
-    } catch {
-      toast.error('Failed to load subject details')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load subject details')
       navigate('/content/subjects')
     } finally {
       setLoading(false)
@@ -56,6 +56,9 @@ export function SubjectDetailPage() {
       if (response.success) {
         toast.success('Subject updated successfully')
         fetchSubject()
+      } else {
+        toast.error(response.message || 'Failed to update subject')
+        throw new Error(response.message || 'Failed to update subject')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update subject')
@@ -69,6 +72,9 @@ export function SubjectDetailPage() {
       if (response.success) {
         toast.success('Package created successfully')
         fetchSubject()
+      } else {
+        toast.error(response.message || 'Failed to create package')
+        throw new Error(response.message || 'Failed to create package')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create package')

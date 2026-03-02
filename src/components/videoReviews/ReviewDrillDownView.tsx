@@ -36,9 +36,11 @@ export function ReviewDrillDownView({ type, id, label, onBack }: ReviewDrillDown
         setReviews(res.data.reviews)
         setTotalPages(res.data.pagination.totalPages)
         setTotal(res.data.pagination.total)
+      } else {
+        toast.error(res.message || 'Failed to load reviews')
       }
-    } catch {
-      toast.error('Failed to load reviews')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load reviews')
     } finally {
       setLoading(false)
     }

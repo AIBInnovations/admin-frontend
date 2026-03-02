@@ -59,9 +59,12 @@ export function ModulesPage() {
         setModules(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load modules')
+        setModules([])
       }
-    } catch (error) {
-      toast.error('Failed to load modules')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load modules')
       setModules([])
     } finally {
       setLoading(false)
@@ -106,8 +109,11 @@ export function ModulesPage() {
       const response = await modulesService.getDeleteImpact(mod._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -121,12 +127,18 @@ export function ModulesPage() {
         if (response.success) {
           toast.success('Module created successfully')
           fetchModules()
+        } else {
+          toast.error(response.message || 'Failed to create module')
+          throw new Error(response.message || 'Failed to create module')
         }
       } else if (selectedModule) {
         const response = await modulesService.update(selectedModule._id, data)
         if (response.success) {
           toast.success('Module updated successfully')
           fetchModules()
+        } else {
+          toast.error(response.message || 'Failed to update module')
+          throw new Error(response.message || 'Failed to update module')
         }
       }
     } catch (error: any) {
@@ -142,6 +154,9 @@ export function ModulesPage() {
       if (response.success) {
         toast.success('Module deleted successfully')
         fetchModules()
+      } else {
+        toast.error(response.message || 'Failed to delete module')
+        throw new Error(response.message || 'Failed to delete module')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete module')
@@ -155,6 +170,8 @@ export function ModulesPage() {
       if (response.success) {
         toast.success(`Module ${!mod.is_active ? 'activated' : 'deactivated'} successfully`)
         fetchModules()
+      } else {
+        toast.error(response.message || 'Failed to update status')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update status')
@@ -167,6 +184,8 @@ export function ModulesPage() {
       if (response.success) {
         toast.success('Module statistics recalculated')
         fetchModules()
+      } else {
+        toast.error(response.message || 'Failed to recalculate statistics')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to recalculate statistics')
@@ -179,6 +198,7 @@ export function ModulesPage() {
       key: 'series',
       label: 'Series',
       type: 'select',
+      searchable: true,
       options: [
         { label: 'All Series', value: 'all' },
         ...seriesList.map((s) => ({ label: s.name, value: s._id })),

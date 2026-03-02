@@ -6,14 +6,18 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Module, ModuleFormData } from '@/services/modules.service'
 import { Series, seriesService } from '@/services/series.service'
 
@@ -38,6 +42,7 @@ interface ModuleFormModalProps {
 
 export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, defaultSeriesId }: ModuleFormModalProps) {
   const [seriesList, setSeriesList] = useState<Series[]>([])
+  const [seriesPopoverOpen, setSeriesPopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -131,14 +136,43 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
             <Controller
               name="series_id" control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}>
-                  <SelectTrigger><SelectValue placeholder="Select series" /></SelectTrigger>
-                  <SelectContent>
-                    {seriesList.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={seriesPopoverOpen} onOpenChange={setSeriesPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline" role="combobox"
+                      disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
+                      className="w-full justify-between font-normal h-9"
+                    >
+                      <span className="truncate">
+                        {field.value ? seriesList.find(s => s._id === field.value)?.name || 'Select series' : 'Select series'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search series..." />
+                      <CommandList>
+                        <CommandEmpty>No series found.</CommandEmpty>
+                        <CommandGroup>
+                          {seriesList.map((s) => (
+                            <CommandItem
+                              key={s._id}
+                              value={s.name}
+                              onSelect={() => {
+                                field.onChange(s._id)
+                                setSeriesPopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                              {s.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               )}
             />
             {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}

@@ -39,9 +39,12 @@ export function PackageTypesPage() {
         setPackageTypes(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load package types')
+        setPackageTypes([])
       }
-    } catch (error) {
-      toast.error('Failed to load package types')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load package types')
       setPackageTypes([])
     } finally {
       setLoading(false)
@@ -82,12 +85,18 @@ export function PackageTypesPage() {
         if (response.success) {
           toast.success('Package type created successfully')
           fetchPackageTypes()
+        } else {
+          toast.error(response.message || 'Failed to create package type')
+          throw new Error(response.message || 'Failed to create package type')
         }
       } else if (selectedType) {
         const response = await packageTypesService.update(selectedType._id, data)
         if (response.success) {
           toast.success('Package type updated successfully')
           fetchPackageTypes()
+        } else {
+          toast.error(response.message || 'Failed to update package type')
+          throw new Error(response.message || 'Failed to update package type')
         }
       }
     } catch (error: any) {
@@ -103,6 +112,9 @@ export function PackageTypesPage() {
       if (response.success) {
         toast.success('Package type deleted successfully')
         fetchPackageTypes()
+      } else {
+        toast.error(response.message || 'Failed to delete package type')
+        throw new Error(response.message || 'Failed to delete package type')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete package type')

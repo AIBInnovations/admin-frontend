@@ -49,9 +49,12 @@ export function SessionsPage() {
         setSessions(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load sessions')
+        setSessions([])
       }
-    } catch (error) {
-      toast.error('Failed to load sessions')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load sessions')
       setSessions([])
     } finally {
       setLoading(false)
@@ -101,8 +104,11 @@ export function SessionsPage() {
       const response = await liveSessionsService.getDeleteImpact(session._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -115,6 +121,8 @@ export function SessionsPage() {
       if (response.success) {
         toast.success('Session cancelled')
         fetchSessions()
+      } else {
+        toast.error(response.message || 'Failed to cancel session')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel session')
@@ -128,12 +136,18 @@ export function SessionsPage() {
         if (response.success) {
           toast.success('Session scheduled successfully')
           fetchSessions()
+        } else {
+          toast.error(response.message || 'Failed to schedule session')
+          throw new Error(response.message || 'Failed to schedule session')
         }
       } else if (selectedSession) {
         const response = await liveSessionsService.update(selectedSession._id, data)
         if (response.success) {
           toast.success('Session updated successfully')
           fetchSessions()
+        } else {
+          toast.error(response.message || 'Failed to update session')
+          throw new Error(response.message || 'Failed to update session')
         }
       }
     } catch (error: any) {
@@ -149,6 +163,9 @@ export function SessionsPage() {
       if (response.success) {
         toast.success('Session deleted successfully')
         fetchSessions()
+      } else {
+        toast.error(response.message || 'Failed to delete session')
+        throw new Error(response.message || 'Failed to delete session')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete session')

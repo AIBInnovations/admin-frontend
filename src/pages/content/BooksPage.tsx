@@ -44,9 +44,12 @@ export function BooksPage() {
 
       if (response.success && response.data) {
         setBooks(response.data.entities || [])
+      } else {
+        toast.error(response.message || 'Failed to load books')
+        setBooks([])
       }
-    } catch (error) {
-      toast.error('Failed to load books')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load books')
       setBooks([])
     } finally {
       setLoading(false)
@@ -101,8 +104,11 @@ export function BooksPage() {
       const response = await booksService.getDeleteImpact(book._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -117,12 +123,18 @@ export function BooksPage() {
         if (response.success && response.data) {
           bookId = response.data._id
           toast.success('Book created successfully')
+        } else {
+          toast.error(response.message || 'Failed to create book')
+          throw new Error(response.message || 'Failed to create book')
         }
       } else if (selectedBook) {
         const response = await booksService.update(selectedBook._id, data)
         if (response.success) {
           bookId = selectedBook._id
           toast.success('Book updated successfully')
+        } else {
+          toast.error(response.message || 'Failed to update book')
+          throw new Error(response.message || 'Failed to update book')
         }
       }
 
@@ -146,6 +158,9 @@ export function BooksPage() {
       if (response.success) {
         toast.success('Book deleted successfully')
         fetchBooks()
+      } else {
+        toast.error(response.message || 'Failed to delete book')
+        throw new Error(response.message || 'Failed to delete book')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete book')

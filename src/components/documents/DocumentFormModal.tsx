@@ -5,15 +5,15 @@ import { z } from 'zod'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Upload } from 'lucide-react'
+import { Loader2, Upload, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Document, DocumentFormData } from '@/services/documents.service'
 import { Series, seriesService } from '@/services/series.service'
 
@@ -38,6 +38,7 @@ interface DocumentFormModalProps {
 
 export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode, defaultSeriesId }: DocumentFormModalProps) {
   const [seriesList, setSeriesList] = useState<Series[]>([])
+  const [seriesPopoverOpen, setSeriesPopoverOpen] = useState(false)
   const [docFile, setDocFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
@@ -136,18 +137,50 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             <Label>Series <span className="text-red-500">*</span></Label>
             <Controller
               name="series_id" control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}>
-                  <SelectTrigger><SelectValue placeholder="Select series" /></SelectTrigger>
-                  <SelectContent>
-                    {seriesList.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.name}{typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              render={({ field }) => {
+                const selectedSeries = seriesList.find((s) => s._id === field.value)
+                return (
+                  <Popover open={seriesPopoverOpen} onOpenChange={setSeriesPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={seriesPopoverOpen}
+                        className="w-full justify-between font-normal"
+                        disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
+                      >
+                        {selectedSeries
+                          ? `${selectedSeries.name}${typeof selectedSeries.package_id === 'object' ? ` (${selectedSeries.package_id.name})` : ''}`
+                          : 'Select series'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search series..." />
+                        <CommandList>
+                          <CommandEmpty>No series found.</CommandEmpty>
+                          <CommandGroup>
+                            {seriesList.map((s) => (
+                              <CommandItem
+                                key={s._id}
+                                value={`${s.name}${typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}`}
+                                onSelect={() => {
+                                  field.onChange(s._id)
+                                  setSeriesPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                                {s.name}{typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
+              }}
             />
             {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}
           </div>

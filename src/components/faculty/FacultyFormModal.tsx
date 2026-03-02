@@ -184,7 +184,7 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
             {photoFile.length > 0 && previewUrl ? (
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <img src={previewUrl} alt="Cropped photo" className="h-16 w-16 rounded-full object-cover border" />
+                  <img src={previewUrl} alt="Cropped photo" className="h-16 w-16 rounded-lg object-cover border" />
                   <Button
                     type="button"
                     variant="destructive"
@@ -201,7 +201,7 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
             ) : existingPhotoUrl ? (
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <img src={existingPhotoUrl} alt="Faculty" className="h-16 w-16 rounded-full object-cover border" />
+                  <img src={existingPhotoUrl} alt="Faculty" className="h-16 w-16 rounded-lg object-cover border" />
                   <Button
                     type="button"
                     variant="destructive"
@@ -319,7 +319,6 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
       aspectRatio={1}
       title="Crop Faculty Photo"
       description="Adjust the crop area for the faculty profile photo (1:1 square)."
-      circularCrop
     />
     </>
   )

@@ -59,9 +59,12 @@ export function SeriesPage() {
         setSeriesList(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load series')
+        setSeriesList([])
       }
-    } catch (error) {
-      toast.error('Failed to load series')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load series')
       setSeriesList([])
     } finally {
       setLoading(false)
@@ -106,8 +109,11 @@ export function SeriesPage() {
       const response = await seriesService.getDeleteImpact(series._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -121,12 +127,18 @@ export function SeriesPage() {
         if (response.success) {
           toast.success('Series created successfully')
           fetchSeries()
+        } else {
+          toast.error(response.message || 'Failed to create series')
+          throw new Error(response.message || 'Failed to create series')
         }
       } else if (selectedSeries) {
         const response = await seriesService.update(selectedSeries._id, data)
         if (response.success) {
           toast.success('Series updated successfully')
           fetchSeries()
+        } else {
+          toast.error(response.message || 'Failed to update series')
+          throw new Error(response.message || 'Failed to update series')
         }
       }
     } catch (error: any) {
@@ -142,6 +154,9 @@ export function SeriesPage() {
       if (response.success) {
         toast.success('Series deleted successfully')
         fetchSeries()
+      } else {
+        toast.error(response.message || 'Failed to delete series')
+        throw new Error(response.message || 'Failed to delete series')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete series')
@@ -155,6 +170,8 @@ export function SeriesPage() {
       if (response.success) {
         toast.success(`Series ${!series.is_active ? 'activated' : 'deactivated'} successfully`)
         fetchSeries()
+      } else {
+        toast.error(response.message || 'Failed to update status')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update status')
@@ -167,6 +184,7 @@ export function SeriesPage() {
       key: 'package',
       label: 'Package',
       type: 'select',
+      searchable: true,
       options: [
         { label: 'All Packages', value: 'all' },
         ...packages.map((p) => ({ label: p.name, value: p._id })),

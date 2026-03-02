@@ -46,11 +46,11 @@ export function UserDetailPage() {
       if (response.success && response.data) {
         setUser(response.data)
       } else {
-        toast.error('User not found')
+        toast.error(response.message || 'User not found')
         navigate('/users')
       }
-    } catch {
-      toast.error('Failed to load user details')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load user details')
       navigate('/users')
     } finally {
       setLoading(false)
@@ -69,6 +69,8 @@ export function UserDetailPage() {
       if (response.success) {
         toast.success(user.is_active ? 'User blocked' : 'User unblocked')
         fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to update user status')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update user status')
@@ -84,6 +86,9 @@ export function UserDetailPage() {
       if (response.success) {
         toast.success('User updated successfully')
         fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to update user')
+        throw new Error(response.message || 'Failed to update user')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update user')
@@ -98,6 +103,9 @@ export function UserDetailPage() {
       if (response.success) {
         toast.success('Package access granted successfully')
         fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to grant package access')
+        throw new Error(response.message || 'Failed to grant package access')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to grant package access')

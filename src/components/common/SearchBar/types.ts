@@ -34,6 +34,8 @@ export interface FilterConfig {
   placeholder?: string;
   /** Default value */
   defaultValue?: string;
+  /** Enable search within the dropdown (useful for long lists like subjects) */
+  searchable?: boolean;
 }
 
 /**

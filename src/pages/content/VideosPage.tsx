@@ -61,9 +61,12 @@ export function VideosPage() {
         setVideos(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load videos')
+        setVideos([])
       }
-    } catch (error) {
-      toast.error('Failed to load videos')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load videos')
       setVideos([])
     } finally {
       setLoading(false)
@@ -109,8 +112,11 @@ export function VideosPage() {
       const response = await videosService.getDeleteImpact(video._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -125,12 +131,18 @@ export function VideosPage() {
         if (response.success) {
           videoId = response.data?.video_id
           toast.success('Video uploaded successfully — processing will begin shortly')
+        } else {
+          toast.error(response.message || 'Failed to upload video')
+          throw new Error(response.message || 'Failed to upload video')
         }
       } else if (selectedVideo) {
         const response = await videosService.update(selectedVideo._id, data)
         if (response.success) {
           videoId = selectedVideo._id
           toast.success('Video updated successfully')
+        } else {
+          toast.error(response.message || 'Failed to update video')
+          throw new Error(response.message || 'Failed to update video')
         }
       }
       // Assign tags if provided
@@ -151,6 +163,9 @@ export function VideosPage() {
       if (response.success) {
         toast.success('Video deleted successfully')
         fetchVideos()
+      } else {
+        toast.error(response.message || 'Failed to delete video')
+        throw new Error(response.message || 'Failed to delete video')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete video')
@@ -164,6 +179,7 @@ export function VideosPage() {
       key: 'module',
       label: 'Module',
       type: 'select',
+      searchable: true,
       options: [
         { label: 'All Modules', value: 'all' },
         ...modules.map((m) => ({ label: m.name, value: m._id })),

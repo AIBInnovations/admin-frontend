@@ -37,9 +37,12 @@ export function PurchasesPage() {
         setPurchases(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load purchases')
+        setPurchases([])
       }
-    } catch (error) {
-      toast.error('Failed to load purchases')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load purchases')
       setPurchases([])
     } finally {
       setLoading(false)

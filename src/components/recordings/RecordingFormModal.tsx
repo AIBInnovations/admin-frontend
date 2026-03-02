@@ -10,18 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Upload, X, FileVideo } from 'lucide-react'
+import { Loader2, Upload, X, FileVideo, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Recording, RecordingFormData } from '@/services/recordings.service'
 import { LiveSession, liveSessionsService } from '@/services/liveSessions.service'
 
@@ -45,6 +41,7 @@ interface RecordingFormModalProps {
 
 export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }: RecordingFormModalProps) {
   const [sessions, setSessions] = useState<LiveSession[]>([])
+  const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadPhase, setUploadPhase] = useState<RecordingUploadPhase | null>(null)
@@ -217,30 +214,65 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
             <Controller
               name="session_id"
               control={control}
-              render={({ field }) => (
-                <Select
-                  value={field.value || 'none'}
-                  onValueChange={(v) => field.onChange(v === 'none' ? '' : v)}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select session (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No session</SelectItem>
-                    {sessions.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.title}
-                        {s.scheduled_start_time && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ({new Date(s.scheduled_start_time).toLocaleDateString()})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              render={({ field }) => {
+                const selectedSession = sessions.find((s) => s._id === field.value)
+                return (
+                  <Popover open={sessionPopoverOpen} onOpenChange={setSessionPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={sessionPopoverOpen}
+                        className="w-full justify-between font-normal"
+                        disabled={isSubmitting}
+                      >
+                        {selectedSession
+                          ? `${selectedSession.title}${selectedSession.scheduled_start_time ? ` (${new Date(selectedSession.scheduled_start_time).toLocaleDateString()})` : ''}`
+                          : field.value ? 'Select session' : 'No session'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search sessions..." />
+                        <CommandList>
+                          <CommandEmpty>No sessions found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="No session"
+                              onSelect={() => {
+                                field.onChange('')
+                                setSessionPopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !field.value ? 'opacity-100' : 'opacity-0')} />
+                              No session
+                            </CommandItem>
+                            {sessions.map((s) => (
+                              <CommandItem
+                                key={s._id}
+                                value={`${s.title}${s.scheduled_start_time ? ` (${new Date(s.scheduled_start_time).toLocaleDateString()})` : ''}`}
+                                onSelect={() => {
+                                  field.onChange(s._id)
+                                  setSessionPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                                {s.title}
+                                {s.scheduled_start_time && (
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    ({new Date(s.scheduled_start_time).toLocaleDateString()})
+                                  </span>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
+              }}
             />
             <p className="text-xs text-muted-foreground">
               You can assign this recording to a session now or later

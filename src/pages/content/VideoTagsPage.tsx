@@ -52,9 +52,12 @@ export function VideoTagsPage() {
         setTags(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load video tags')
+        setTags([])
       }
-    } catch (error) {
-      toast.error('Failed to load video tags')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load video tags')
       setTags([])
     } finally {
       setLoading(false)
@@ -98,8 +101,11 @@ export function VideoTagsPage() {
       const response = await videoTagsService.getDeleteImpact(tag._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -113,12 +119,18 @@ export function VideoTagsPage() {
         if (response.success) {
           toast.success('Tag created successfully')
           fetchTags()
+        } else {
+          toast.error(response.message || 'Failed to create tag')
+          throw new Error(response.message || 'Failed to create tag')
         }
       } else if (selectedTag) {
         const response = await videoTagsService.update(selectedTag._id, data)
         if (response.success) {
           toast.success('Tag updated successfully')
           fetchTags()
+        } else {
+          toast.error(response.message || 'Failed to update tag')
+          throw new Error(response.message || 'Failed to update tag')
         }
       }
     } catch (error: any) {
@@ -134,6 +146,9 @@ export function VideoTagsPage() {
       if (response.success) {
         toast.success('Tag deleted successfully')
         fetchTags()
+      } else {
+        toast.error(response.message || 'Failed to delete tag')
+        throw new Error(response.message || 'Failed to delete tag')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete tag')

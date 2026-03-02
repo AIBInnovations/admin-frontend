@@ -56,9 +56,12 @@ export function NotificationsPage() {
         setNotifications(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load notifications')
+        setNotifications([])
       }
-    } catch {
-      toast.error('Failed to load notifications')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load notifications')
       setNotifications([])
     } finally {
       setLoading(false)
@@ -89,6 +92,9 @@ export function NotificationsPage() {
         notificationsService.getStats().then((res) => {
           if (res.success && res.data) setStats(res.data)
         })
+      } else {
+        toast.error(response.message || 'Failed to delete notification')
+        throw new Error(response.message || 'Failed to delete notification')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete notification')

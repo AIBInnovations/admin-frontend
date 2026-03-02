@@ -36,9 +36,12 @@ export function InvoicesPage() {
         setInvoices(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load invoices')
+        setInvoices([])
       }
-    } catch (error) {
-      toast.error('Failed to load invoices')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load invoices')
       setInvoices([])
     } finally {
       setLoading(false)
@@ -70,9 +73,11 @@ export function InvoicesPage() {
         const response = await invoicesService.getDownloadUrl(invoice._id)
         if (response.success && response.data?.download_url) {
           window.open(response.data.download_url, '_blank')
+        } else {
+          toast.error(response.message || 'Failed to get download link')
         }
-      } catch (error) {
-        toast.error('Failed to get download link')
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to get download link')
       }
     }
   }
@@ -83,6 +88,8 @@ export function InvoicesPage() {
       if (response.success) {
         toast.success('Invoice regenerated successfully')
         fetchInvoices()
+      } else {
+        toast.error(response.message || 'Failed to regenerate invoice')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to regenerate invoice')

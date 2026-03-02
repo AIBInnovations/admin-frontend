@@ -38,9 +38,12 @@ export function PaymentsPage() {
         setTransactions(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load transactions')
+        setTransactions([])
       }
-    } catch (error) {
-      toast.error('Failed to load transactions')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load transactions')
       setTransactions([])
     } finally {
       setLoading(false)

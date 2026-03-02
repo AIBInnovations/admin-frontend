@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { DashboardLayout } from '@/components/layouts'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { Toaster } from '@/components/ui/sonner'
 
 // Pages
 import { LoginPage } from '@/pages/auth/LoginPage'
@@ -45,6 +46,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Toaster position="top-right" richColors closeButton />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />

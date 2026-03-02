@@ -34,8 +34,8 @@ export function RevenuePage() {
         if (revenueRes.success && revenueRes.data) setRevenueByType(revenueRes.data)
         if (trendsRes.success && trendsRes.data) setTrends(trendsRes.data)
         if (topSellingRes.success && topSellingRes.data) setTopSelling(topSellingRes.data)
-      } catch (error) {
-        toast.error('Failed to load revenue data')
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to load revenue data')
       } finally {
         setLoading(false)
       }

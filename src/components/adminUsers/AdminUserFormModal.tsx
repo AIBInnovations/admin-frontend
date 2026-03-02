@@ -5,13 +5,13 @@ import { z } from 'zod'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { AdminUser, AdminUserFormData } from '@/services/adminUsers.service'
 import { AdminRole, adminRolesService } from '@/services/adminRoles.service'
 
@@ -35,6 +35,7 @@ interface AdminUserFormModalProps {
 
 export function AdminUserFormModal({ open, onClose, onSubmit, adminUser, mode }: AdminUserFormModalProps) {
   const [roles, setRoles] = useState<AdminRole[]>([])
+  const [rolePopoverOpen, setRolePopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -129,16 +130,48 @@ export function AdminUserFormModal({ open, onClose, onSubmit, adminUser, mode }:
               <Label>Role <span className="text-red-500">*</span></Label>
               <Controller
                 name="role_id" control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
-                    <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                    <SelectContent>
-                      {roles.map((r) => (
-                        <SelectItem key={r._id} value={r._id}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                render={({ field }) => {
+                  const selectedRole = roles.find((r) => r._id === field.value)
+                  return (
+                    <Popover open={rolePopoverOpen} onOpenChange={setRolePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={rolePopoverOpen}
+                          className="w-full justify-between font-normal"
+                          disabled={isSubmitting}
+                        >
+                          {selectedRole ? selectedRole.name : 'Select role'}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search roles..." />
+                          <CommandList>
+                            <CommandEmpty>No roles found.</CommandEmpty>
+                            <CommandGroup>
+                              {roles.map((r) => (
+                                <CommandItem
+                                  key={r._id}
+                                  value={r.name}
+                                  onSelect={() => {
+                                    field.onChange(r._id)
+                                    setRolePopoverOpen(false)
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', field.value === r._id ? 'opacity-100' : 'opacity-0')} />
+                                  {r.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )
+                }}
               />
               {errors.role_id && <p className="text-sm text-red-500">{errors.role_id.message}</p>}
             </div>

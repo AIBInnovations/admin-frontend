@@ -1,4 +1,5 @@
-import { Search } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Check, ChevronsUpDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -7,11 +8,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchWithFiltersProps } from './types';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { SearchWithFiltersProps, FilterConfig } from './types';
+
+/**
+ * SearchableFilter - Combobox-style filter with search
+ */
+function SearchableFilter({
+  filter,
+  value,
+  onChange,
+}: {
+  filter: FilterConfig;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedOption = filter.options.find((opt) => opt.value === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-[180px] justify-between font-normal"
+        >
+          <span className="truncate">
+            {selectedOption?.label || filter.placeholder || filter.label}
+          </span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[220px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`Search ${filter.label.toLowerCase()}...`} />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {filter.options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.label}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      value === option.value ? 'opacity-100' : 'opacity-0'
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * SearchWithFilters - Search input combined with filter dropdowns
- * Provides a unified toolbar for search and filtering
+ * Supports both regular selects and searchable combobox filters
  */
 export function SearchWithFilters({
   value,
@@ -45,24 +123,33 @@ export function SearchWithFilters({
       </div>
 
       {/* Filters */}
-      {filters.map((filter) => (
-        <Select
-          key={filter.key}
-          value={activeFilters[filter.key] || filter.defaultValue || ''}
-          onValueChange={(value) => handleFilterChange(filter.key, value)}
-        >
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder={filter.placeholder || filter.label} />
-          </SelectTrigger>
-          <SelectContent>
-            {filter.options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ))}
+      {filters.map((filter) =>
+        filter.searchable ? (
+          <SearchableFilter
+            key={filter.key}
+            filter={filter}
+            value={activeFilters[filter.key] || filter.defaultValue || ''}
+            onChange={(val) => handleFilterChange(filter.key, val)}
+          />
+        ) : (
+          <Select
+            key={filter.key}
+            value={activeFilters[filter.key] || filter.defaultValue || ''}
+            onValueChange={(value) => handleFilterChange(filter.key, value)}
+          >
+            <SelectTrigger className="h-9 w-[180px]">
+              <SelectValue placeholder={filter.placeholder || filter.label} />
+            </SelectTrigger>
+            <SelectContent>
+              {filter.options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      )}
 
       {/* Optional action */}
       {action}

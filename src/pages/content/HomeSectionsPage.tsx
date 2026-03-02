@@ -59,9 +59,12 @@ export function HomeSectionsPage() {
         setSections(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load home sections')
+        setSections([])
       }
-    } catch {
-      toast.error('Failed to load home sections')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load home sections')
       setSections([])
     } finally {
       setLoading(false)
@@ -110,8 +113,11 @@ export function HomeSectionsPage() {
       const response = await homeSectionsService.getDeleteImpact(section._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -125,12 +131,18 @@ export function HomeSectionsPage() {
         if (response.success) {
           toast.success('Home section created successfully')
           fetchSections()
+        } else {
+          toast.error(response.message || 'Failed to create home section')
+          throw new Error(response.message || 'Failed to create home section')
         }
       } else if (selectedSection) {
         const response = await homeSectionsService.update(selectedSection._id, data)
         if (response.success) {
           toast.success('Home section updated successfully')
           fetchSections()
+        } else {
+          toast.error(response.message || 'Failed to update home section')
+          throw new Error(response.message || 'Failed to update home section')
         }
       }
     } catch (error: any) {
@@ -146,6 +158,9 @@ export function HomeSectionsPage() {
       if (response.success) {
         toast.success('Home section deleted successfully')
         fetchSections()
+      } else {
+        toast.error(response.message || 'Failed to delete home section')
+        throw new Error(response.message || 'Failed to delete home section')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete home section')

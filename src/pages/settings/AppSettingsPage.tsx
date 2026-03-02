@@ -124,8 +124,8 @@ export function AppSettingsPage() {
         setEditValues(values)
         setHasChanges(false)
       }
-    } catch {
-      toast.error('Failed to load app settings')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load app settings')
     } finally {
       setLoading(false)
     }
@@ -164,10 +164,10 @@ export function AppSettingsPage() {
         toast.success('Settings saved successfully')
         await fetchSettings()
       } else {
-        toast.error('Failed to save settings')
+        toast.error(response.message || 'Failed to save settings')
       }
-    } catch {
-      toast.error('Failed to save settings')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save settings')
     } finally {
       setSaving(false)
     }

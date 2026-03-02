@@ -274,12 +274,10 @@ export function SendNotificationTab() {
         })
       }
 
-      if (response.success) {
-        const result = response.data
-        const successCount = result?.push_results?.success ?? 0
-        const failCount = result?.push_results?.failure ?? 0
+      if (response.success && response.data) {
+        const { sent, failed, total } = response.data
         toast.success(
-          `Notification sent! ${successCount} delivered, ${failCount} failed`
+          `Notification sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`
         )
         resetForm()
       } else {

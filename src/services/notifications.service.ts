@@ -35,8 +35,9 @@ export interface NotificationsListParams extends BaseListParams {
 }
 
 export interface SendResult {
-  notifications_created: number
-  push_results: { success: number; failure: number }
+  sent: number
+  failed: number
+  total: number
 }
 
 export interface ImageUploadResult {

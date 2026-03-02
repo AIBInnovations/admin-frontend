@@ -87,8 +87,8 @@ export function PackageDetailPage() {
         toast.error('Package not found')
         navigate('/content/packages')
       }
-    } catch {
-      toast.error('Failed to load package details')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load package details')
       navigate('/content/packages')
     } finally {
       setLoading(false)
@@ -160,6 +160,9 @@ export function PackageDetailPage() {
       if (response.success) {
         toast.success('Package updated successfully')
         fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to update package')
+        throw new Error(response.message || 'Failed to update package')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update package')
@@ -173,6 +176,9 @@ export function PackageDetailPage() {
       if (response.success) {
         toast.success('Series created successfully')
         fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to create series')
+        throw new Error(response.message || 'Failed to create series')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create series')
@@ -186,6 +192,9 @@ export function PackageDetailPage() {
       if (response.success) {
         toast.success('Module created successfully')
         fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to create module')
+        throw new Error(response.message || 'Failed to create module')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create module')
@@ -204,6 +213,9 @@ export function PackageDetailPage() {
         }
         toast.success('Video uploaded successfully')
         fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to upload video')
+        throw new Error(response.message || 'Failed to upload video')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to upload video')
@@ -218,6 +230,9 @@ export function PackageDetailPage() {
       if (response.success) {
         toast.success('Document uploaded successfully')
         fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to upload document')
+        throw new Error(response.message || 'Failed to upload document')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to upload document')

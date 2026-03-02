@@ -110,6 +110,8 @@ export function VideoReviewsPage() {
           setReviews(res.data.reviews)
           setTotalPages(res.data.pagination.totalPages)
           setTotal(res.data.pagination.total)
+        } else {
+          toast.error(res.message || 'Failed to load reviews')
         }
       } else if (viewMode === 'by-video') {
         const res = await videoReviewsService.getByVideo({ page, limit: 12, search: search || undefined })
@@ -117,6 +119,8 @@ export function VideoReviewsPage() {
           setVideoSummaries(res.data.videos)
           setTotalPages(res.data.pagination.totalPages)
           setTotal(res.data.pagination.total)
+        } else {
+          toast.error(res.message || 'Failed to load video summaries')
         }
       } else {
         const res = await videoReviewsService.getByTeacher({ page, limit: 12, search: search || undefined })
@@ -124,10 +128,12 @@ export function VideoReviewsPage() {
           setTeacherSummaries(res.data.teachers)
           setTotalPages(res.data.pagination.totalPages)
           setTotal(res.data.pagination.total)
+        } else {
+          toast.error(res.message || 'Failed to load teacher summaries')
         }
       }
-    } catch {
-      toast.error('Failed to load reviews')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load reviews')
     } finally {
       setLoading(false)
     }

@@ -8,12 +8,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Package, PackageFormData, packagesService } from '@/services/packages.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
@@ -77,6 +84,8 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [isReplacingTrailer, setIsReplacingTrailer] = useState(false)
+  const [subjectPopoverOpen, setSubjectPopoverOpen] = useState(false)
+  const [typePopoverOpen, setTypePopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -266,14 +275,43 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
               <Controller
                 name="subject_id" control={control}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || (mode === 'create' && !!defaultSubjectId)}>
-                    <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                    <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={subjectPopoverOpen} onOpenChange={setSubjectPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline" role="combobox"
+                        disabled={isSubmitting || (mode === 'create' && !!defaultSubjectId)}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        <span className="truncate">
+                          {field.value ? subjects.find(s => s._id === field.value)?.name || 'Select subject' : 'Select subject'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search subjects..." />
+                        <CommandList>
+                          <CommandEmpty>No subjects found.</CommandEmpty>
+                          <CommandGroup>
+                            {subjects.map((s) => (
+                              <CommandItem
+                                key={s._id}
+                                value={s.name}
+                                onSelect={() => {
+                                  field.onChange(s._id)
+                                  setSubjectPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                                {s.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
               />
               {errors.subject_id && <p className="text-sm text-red-500">{errors.subject_id.message}</p>}
@@ -283,14 +321,43 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
               <Controller
                 name="package_type_id" control={control}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
-                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                    <SelectContent>
-                      {packageTypes.map((t) => (
-                        <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={typePopoverOpen} onOpenChange={setTypePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline" role="combobox"
+                        disabled={isSubmitting}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        <span className="truncate">
+                          {field.value ? packageTypes.find(t => t._id === field.value)?.name || 'Select type' : 'Select type'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search types..." />
+                        <CommandList>
+                          <CommandEmpty>No types found.</CommandEmpty>
+                          <CommandGroup>
+                            {packageTypes.map((t) => (
+                              <CommandItem
+                                key={t._id}
+                                value={t.name}
+                                onSelect={() => {
+                                  field.onChange(t._id)
+                                  setTypePopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === t._id ? 'opacity-100' : 'opacity-0')} />
+                                {t.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
               />
               {errors.package_type_id && <p className="text-sm text-red-500">{errors.package_type_id.message}</p>}

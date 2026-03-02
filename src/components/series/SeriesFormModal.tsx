@@ -6,14 +6,18 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Series, SeriesFormData } from '@/services/series.service'
 import { Package, packagesService } from '@/services/packages.service'
 
@@ -39,6 +43,7 @@ interface SeriesFormModalProps {
 
 export function SeriesFormModal({ open, onClose, onSubmit, series, mode, defaultPackageId }: SeriesFormModalProps) {
   const [packages, setPackages] = useState<Package[]>([])
+  const [packagePopoverOpen, setPackagePopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -134,14 +139,43 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
             <Controller
               name="package_id" control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || (mode === 'create' && !!defaultPackageId)}>
-                  <SelectTrigger><SelectValue placeholder="Select package" /></SelectTrigger>
-                  <SelectContent>
-                    {packages.map((p) => (
-                      <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={packagePopoverOpen} onOpenChange={setPackagePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline" role="combobox"
+                      disabled={isSubmitting || (mode === 'create' && !!defaultPackageId)}
+                      className="w-full justify-between font-normal h-9"
+                    >
+                      <span className="truncate">
+                        {field.value ? packages.find(p => p._id === field.value)?.name || 'Select package' : 'Select package'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search packages..." />
+                      <CommandList>
+                        <CommandEmpty>No packages found.</CommandEmpty>
+                        <CommandGroup>
+                          {packages.map((p) => (
+                            <CommandItem
+                              key={p._id}
+                              value={p.name}
+                              onSelect={() => {
+                                field.onChange(p._id)
+                                setPackagePopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', field.value === p._id ? 'opacity-100' : 'opacity-0')} />
+                              {p.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               )}
             />
             {errors.package_id && <p className="text-sm text-red-500">{errors.package_id.message}</p>}

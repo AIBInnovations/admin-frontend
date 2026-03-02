@@ -38,9 +38,12 @@ export function UsersPage() {
         setUsers(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load users')
+        setUsers([])
       }
-    } catch (error) {
-      toast.error('Failed to load users')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load users')
       setUsers([])
     } finally {
       setLoading(false)
@@ -80,12 +83,16 @@ export function UsersPage() {
         if (response.success) {
           toast.success('User blocked successfully')
           fetchUsers()
+        } else {
+          toast.error(response.message || 'Failed to block user')
         }
       } else {
         const response = await usersService.unblockUser(user._id)
         if (response.success) {
           toast.success('User unblocked successfully')
           fetchUsers()
+        } else {
+          toast.error(response.message || 'Failed to unblock user')
         }
       }
     } catch (error: any) {
@@ -99,6 +106,9 @@ export function UsersPage() {
       if (response.success) {
         toast.success('User created successfully')
         fetchUsers()
+      } else {
+        toast.error(response.message || 'Failed to create user')
+        throw new Error(response.message || 'Failed to create user')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create user')

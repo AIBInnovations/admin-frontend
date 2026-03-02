@@ -50,9 +50,12 @@ export function SubjectsPage() {
         setSubjects(response.data.entities || []);
         setTotalPages(response.data.pagination?.totalPages || 1);
         setTotalCount(response.data.pagination?.total || 0);
+      } else {
+        toast.error(response.message || 'Failed to load subjects');
+        setSubjects([]);
       }
-    } catch (error) {
-      toast.error('Failed to load subjects');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load subjects');
       setSubjects([]);
     } finally {
       setLoading(false);
@@ -96,8 +99,11 @@ export function SubjectsPage() {
       const response = await subjectsService.getDeleteImpact(subject._id);
       if (response.success && response.data) {
         setDeleteImpact(response.data);
+      } else {
+        toast.error(response.message || 'Failed to check delete impact');
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact');
       setDeleteImpact(null);
     } finally {
       setLoadingDeleteImpact(false);
@@ -112,12 +118,18 @@ export function SubjectsPage() {
         if (response.success) {
           toast.success('Subject created successfully');
           fetchSubjects();
+        } else {
+          toast.error(response.message || 'Failed to create subject');
+          throw new Error(response.message || 'Failed to create subject');
         }
       } else if (selectedSubject) {
         const response = await subjectsService.updateSubject(selectedSubject._id, data);
         if (response.success) {
           toast.success('Subject updated successfully');
           fetchSubjects();
+        } else {
+          toast.error(response.message || 'Failed to update subject');
+          throw new Error(response.message || 'Failed to update subject');
         }
       }
     } catch (error: any) {
@@ -135,6 +147,9 @@ export function SubjectsPage() {
       if (response.success) {
         toast.success('Subject deleted successfully');
         fetchSubjects();
+      } else {
+        toast.error(response.message || 'Failed to delete subject');
+        throw new Error(response.message || 'Failed to delete subject');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete subject');
@@ -149,6 +164,8 @@ export function SubjectsPage() {
       if (response.success) {
         toast.success(`Subject ${!subject.is_active ? 'activated' : 'deactivated'} successfully`);
         fetchSubjects();
+      } else {
+        toast.error(response.message || 'Failed to update status');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update status');

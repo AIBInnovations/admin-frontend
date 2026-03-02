@@ -61,9 +61,12 @@ export function DocumentsPage() {
         setDocuments(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load documents')
+        setDocuments([])
       }
-    } catch (error) {
-      toast.error('Failed to load documents')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load documents')
       setDocuments([])
     } finally {
       setLoading(false)
@@ -109,8 +112,11 @@ export function DocumentsPage() {
       const response = await documentsService.getDeleteImpact(doc._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -124,12 +130,18 @@ export function DocumentsPage() {
         if (response.success) {
           toast.success('Document uploaded successfully')
           fetchDocuments()
+        } else {
+          toast.error(response.message || 'Failed to upload document')
+          throw new Error(response.message || 'Failed to upload document')
         }
       } else if (selectedDocument) {
         const response = await documentsService.update(selectedDocument._id, data)
         if (response.success) {
           toast.success('Document updated successfully')
           fetchDocuments()
+        } else {
+          toast.error(response.message || 'Failed to update document')
+          throw new Error(response.message || 'Failed to update document')
         }
       }
     } catch (error: any) {
@@ -145,6 +157,9 @@ export function DocumentsPage() {
       if (response.success) {
         toast.success('Document deleted successfully')
         fetchDocuments()
+      } else {
+        toast.error(response.message || 'Failed to delete document')
+        throw new Error(response.message || 'Failed to delete document')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete document')
@@ -158,6 +173,7 @@ export function DocumentsPage() {
       key: 'series',
       label: 'Series',
       type: 'select',
+      searchable: true,
       options: [
         { label: 'All Series', value: 'all' },
         ...seriesList.map((s) => ({ label: s.name, value: s._id })),

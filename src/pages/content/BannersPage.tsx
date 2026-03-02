@@ -51,9 +51,12 @@ export function BannersPage() {
         setBanners(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load banners')
+        setBanners([])
       }
-    } catch (error) {
-      toast.error('Failed to load banners')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load banners')
       setBanners([])
     } finally {
       setLoading(false)
@@ -98,8 +101,11 @@ export function BannersPage() {
       const response = await bannersService.getDeleteImpact(banner._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -113,12 +119,18 @@ export function BannersPage() {
         if (response.success) {
           toast.success('Banner created successfully')
           fetchBanners()
+        } else {
+          toast.error(response.message || 'Failed to create banner')
+          throw new Error(response.message || 'Failed to create banner')
         }
       } else if (selectedBanner) {
         const response = await bannersService.update(selectedBanner._id, data)
         if (response.success) {
           toast.success('Banner updated successfully')
           fetchBanners()
+        } else {
+          toast.error(response.message || 'Failed to update banner')
+          throw new Error(response.message || 'Failed to update banner')
         }
       }
     } catch (error: any) {
@@ -134,6 +146,9 @@ export function BannersPage() {
       if (response.success) {
         toast.success('Banner deleted successfully')
         fetchBanners()
+      } else {
+        toast.error(response.message || 'Failed to delete banner')
+        throw new Error(response.message || 'Failed to delete banner')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete banner')

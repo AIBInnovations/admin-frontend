@@ -62,9 +62,12 @@ export function BookOrdersPage() {
         setOrders(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load book orders')
+        setOrders([])
       }
-    } catch (error) {
-      toast.error('Failed to load book orders')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load book orders')
       setOrders([])
     } finally {
       setLoading(false)
@@ -110,6 +113,8 @@ export function BookOrdersPage() {
         toast.success('Shipping info updated successfully')
         setShippingOrder(null)
         fetchOrders()
+      } else {
+        toast.error(response.message || 'Failed to update shipping')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update shipping')
@@ -301,6 +306,8 @@ export function BookOrdersPage() {
                           toast.success(`Order status updated to ${newStatus}`)
                           setDetailOrder(null)
                           fetchOrders()
+                        } else {
+                          toast.error(response.message || 'Failed to update status')
                         }
                       } catch (error: any) {
                         toast.error(error.message || 'Failed to update status')

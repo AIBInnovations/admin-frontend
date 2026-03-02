@@ -59,8 +59,8 @@ export function SessionDetailPage() {
         toast.error('Session not found')
         navigate('/sessions')
       }
-    } catch {
-      toast.error('Failed to load session details')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load session details')
       navigate('/sessions')
     } finally {
       setLoading(false)
@@ -76,9 +76,11 @@ export function SessionDetailPage() {
       const response = await recordingsService.getAll({ session_id: sessionId, limit: 100 })
       if (response.success && response.data) {
         setRecordings(response.data.entities || [])
+      } else {
+        toast.error(response.message || 'Failed to load recordings')
       }
-    } catch (error) {
-      console.error('Failed to load recordings:', error)
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load recordings')
     } finally {
       setLoadingRecordings(false)
     }
@@ -101,6 +103,9 @@ export function SessionDetailPage() {
       if (response.success) {
         toast.success('Session updated successfully')
         fetchSession()
+      } else {
+        toast.error(response.message || 'Failed to update session')
+        throw new Error(response.message || 'Failed to update session')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update session')
@@ -115,6 +120,9 @@ export function SessionDetailPage() {
       if (response.success) {
         toast.success('Session deleted successfully')
         navigate('/sessions')
+      } else {
+        toast.error(response.message || 'Failed to delete session')
+        throw new Error(response.message || 'Failed to delete session')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete session')
@@ -129,6 +137,8 @@ export function SessionDetailPage() {
       if (response.success) {
         toast.success('Session cancelled successfully')
         fetchSession()
+      } else {
+        toast.error(response.message || 'Failed to cancel session')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel session')
@@ -159,6 +169,8 @@ export function SessionDetailPage() {
         toast.success(`Package created with ${response.data.video_count} video(s).${migratedMsg}`)
         setConvertModalOpen(false)
         navigate(`/content/packages/${response.data.package_id}`)
+      } else {
+        toast.error(response.message || 'Failed to convert session to package')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to convert session to package')

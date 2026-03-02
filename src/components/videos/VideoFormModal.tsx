@@ -6,15 +6,19 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag } from 'lucide-react'
+import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Video, VideoFormData } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { VideoTag, videoTagsService } from '@/services/videoTags.service'
@@ -58,6 +62,8 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadPhase, setUploadPhase] = useState<UploadPhase | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [modulePopoverOpen, setModulePopoverOpen] = useState(false)
+  const [facultyPopoverOpen, setFacultyPopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -229,16 +235,48 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               <Controller
                 name="module_id" control={control}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || (mode === 'create' && !!defaultModuleId)}>
-                    <SelectTrigger><SelectValue placeholder="Select module" /></SelectTrigger>
-                    <SelectContent>
-                      {modules.map((m) => (
-                        <SelectItem key={m._id} value={m._id}>
-                          {m.name}{typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={modulePopoverOpen} onOpenChange={setModulePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline" role="combobox"
+                        disabled={isSubmitting || (mode === 'create' && !!defaultModuleId)}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        <span className="truncate">
+                          {field.value
+                            ? (() => {
+                                const m = modules.find(m => m._id === field.value)
+                                return m ? `${m.name}${typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}` : 'Select module'
+                              })()
+                            : 'Select module'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search modules..." />
+                        <CommandList>
+                          <CommandEmpty>No modules found.</CommandEmpty>
+                          <CommandGroup>
+                            {modules.map((m) => (
+                              <CommandItem
+                                key={m._id}
+                                value={`${m.name}${typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}`}
+                                onSelect={() => {
+                                  field.onChange(m._id)
+                                  setModulePopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === m._id ? 'opacity-100' : 'opacity-0')} />
+                                {m.name}{typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
               />
               {errors.module_id && <p className="text-sm text-red-500">{errors.module_id.message}</p>}
@@ -248,15 +286,53 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               <Controller
                 name="faculty_id" control={control}
                 render={({ field }) => (
-                  <Select value={field.value || 'none'} onValueChange={(v) => field.onChange(v === 'none' ? '' : v)} disabled={isSubmitting}>
-                    <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {faculty.map((f) => (
-                        <SelectItem key={f._id} value={f._id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={facultyPopoverOpen} onOpenChange={setFacultyPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline" role="combobox"
+                        disabled={isSubmitting}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        <span className="truncate">
+                          {field.value ? faculty.find(f => f._id === field.value)?.name || 'Select faculty' : 'None'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search faculty..." />
+                        <CommandList>
+                          <CommandEmpty>No faculty found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="None"
+                              onSelect={() => {
+                                field.onChange('')
+                                setFacultyPopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !field.value ? 'opacity-100' : 'opacity-0')} />
+                              None
+                            </CommandItem>
+                            {faculty.map((f) => (
+                              <CommandItem
+                                key={f._id}
+                                value={f.name}
+                                onSelect={() => {
+                                  field.onChange(f._id)
+                                  setFacultyPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === f._id ? 'opacity-100' : 'opacity-0')} />
+                                {f.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
               />
             </div>

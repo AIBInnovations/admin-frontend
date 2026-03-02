@@ -46,9 +46,12 @@ export function FacultyPage() {
         setFacultyList(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load faculty')
+        setFacultyList([])
       }
-    } catch (error) {
-      toast.error('Failed to load faculty')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load faculty')
       setFacultyList([])
     } finally {
       setLoading(false)
@@ -89,8 +92,11 @@ export function FacultyPage() {
       const response = await facultyService.getDeleteImpact(faculty._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -104,12 +110,18 @@ export function FacultyPage() {
         if (response.success) {
           toast.success('Faculty added successfully')
           fetchFaculty()
+        } else {
+          toast.error(response.message || 'Failed to add faculty')
+          throw new Error(response.message || 'Failed to add faculty')
         }
       } else if (selectedFaculty) {
         const response = await facultyService.update(selectedFaculty._id, data)
         if (response.success) {
           toast.success('Faculty updated successfully')
           fetchFaculty()
+        } else {
+          toast.error(response.message || 'Failed to update faculty')
+          throw new Error(response.message || 'Failed to update faculty')
         }
       }
     } catch (error: any) {
@@ -125,6 +137,9 @@ export function FacultyPage() {
       if (response.success) {
         toast.success('Faculty deleted successfully')
         fetchFaculty()
+      } else {
+        toast.error(response.message || 'Failed to delete faculty')
+        throw new Error(response.message || 'Failed to delete faculty')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete faculty')
@@ -138,6 +153,8 @@ export function FacultyPage() {
       if (response.success) {
         toast.success(`Faculty ${!faculty.is_active ? 'activated' : 'deactivated'} successfully`)
         fetchFaculty()
+      } else {
+        toast.error(response.message || 'Failed to update status')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update status')
@@ -150,6 +167,8 @@ export function FacultyPage() {
       if (response.success) {
         toast.success('Faculty verified successfully')
         fetchFaculty()
+      } else {
+        toast.error(response.message || 'Failed to verify faculty')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to verify faculty')

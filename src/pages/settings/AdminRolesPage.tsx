@@ -29,9 +29,12 @@ export function AdminRolesPage() {
       const response = await adminRolesService.getAll({ limit: 50 })
       if (response.success && response.data) {
         setRoles(response.data.entities || [])
+      } else {
+        toast.error(response.message || 'Failed to load roles')
+        setRoles([])
       }
-    } catch (error) {
-      toast.error('Failed to load roles')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load roles')
       setRoles([])
     } finally {
       setLoading(false)
@@ -62,8 +65,11 @@ export function AdminRolesPage() {
       const response = await adminRolesService.getDeleteImpact(role._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -77,12 +83,18 @@ export function AdminRolesPage() {
         if (response.success) {
           toast.success('Role created successfully')
           fetchRoles()
+        } else {
+          toast.error(response.message || 'Failed to create role')
+          throw new Error(response.message || 'Failed to create role')
         }
       } else if (selectedRole) {
         const response = await adminRolesService.update(selectedRole._id, data)
         if (response.success) {
           toast.success('Role updated successfully')
           fetchRoles()
+        } else {
+          toast.error(response.message || 'Failed to update role')
+          throw new Error(response.message || 'Failed to update role')
         }
       }
     } catch (error: any) {
@@ -98,6 +110,9 @@ export function AdminRolesPage() {
       if (response.success) {
         toast.success('Role deleted successfully')
         fetchRoles()
+      } else {
+        toast.error(response.message || 'Failed to delete role')
+        throw new Error(response.message || 'Failed to delete role')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete role')

@@ -56,9 +56,12 @@ export function AdminUsersPage() {
         setAdminUsers(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load admin users')
+        setAdminUsers([])
       }
-    } catch (error) {
-      toast.error('Failed to load admin users')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load admin users')
       setAdminUsers([])
     } finally {
       setLoading(false)
@@ -112,12 +115,18 @@ export function AdminUsersPage() {
         if (response.success) {
           toast.success('Admin user created successfully')
           fetchAdminUsers()
+        } else {
+          toast.error(response.message || 'Failed to create admin user')
+          throw new Error(response.message || 'Failed to create admin user')
         }
       } else if (selectedAdmin) {
         const response = await adminUsersService.update(selectedAdmin._id, data)
         if (response.success) {
           toast.success('Admin user updated successfully')
           fetchAdminUsers()
+        } else {
+          toast.error(response.message || 'Failed to update admin user')
+          throw new Error(response.message || 'Failed to update admin user')
         }
       }
     } catch (error: any) {
@@ -133,6 +142,9 @@ export function AdminUsersPage() {
       if (response.success) {
         toast.success('Admin user deleted successfully')
         fetchAdminUsers()
+      } else {
+        toast.error(response.message || 'Failed to delete admin user')
+        throw new Error(response.message || 'Failed to delete admin user')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete admin user')
@@ -147,12 +159,16 @@ export function AdminUsersPage() {
         if (response.success) {
           toast.success('Admin user deactivated')
           fetchAdminUsers()
+        } else {
+          toast.error(response.message || 'Failed to deactivate admin user')
         }
       } else {
         const response = await adminUsersService.activate(admin._id)
         if (response.success) {
           toast.success('Admin user activated')
           fetchAdminUsers()
+        } else {
+          toast.error(response.message || 'Failed to activate admin user')
         }
       }
     } catch (error: any) {

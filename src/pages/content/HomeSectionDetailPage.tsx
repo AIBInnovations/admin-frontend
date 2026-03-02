@@ -57,8 +57,8 @@ export function HomeSectionDetailPage() {
         toast.error('Section not found')
         navigate('/content/home-sections')
       }
-    } catch {
-      toast.error('Failed to load section details')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load section details')
       navigate('/content/home-sections')
     } finally {
       setLoading(false)
@@ -75,6 +75,9 @@ export function HomeSectionDetailPage() {
       if (response.success) {
         toast.success('Section updated successfully')
         fetchSection()
+      } else {
+        toast.error(response.message || 'Failed to update section')
+        throw new Error(response.message || 'Failed to update section')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update section')
@@ -91,8 +94,11 @@ export function HomeSectionDetailPage() {
       const response = await homeSectionsService.getDeleteImpact(section._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -106,6 +112,9 @@ export function HomeSectionDetailPage() {
       if (response.success) {
         toast.success('Section deleted successfully')
         navigate('/content/home-sections')
+      } else {
+        toast.error(response.message || 'Failed to delete section')
+        throw new Error(response.message || 'Failed to delete section')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete section')
@@ -139,6 +148,9 @@ export function HomeSectionDetailPage() {
       if (response.success) {
         toast.success('Item deleted successfully')
         fetchSection()
+      } else {
+        toast.error(response.message || 'Failed to delete item')
+        throw new Error(response.message || 'Failed to delete item')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete item')

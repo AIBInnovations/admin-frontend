@@ -58,9 +58,12 @@ export function RecordingsPage() {
         setRecordings(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load recordings')
+        setRecordings([])
       }
-    } catch (error) {
-      toast.error('Failed to load recordings')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load recordings')
       setRecordings([])
     } finally {
       setLoading(false)
@@ -105,8 +108,11 @@ export function RecordingsPage() {
       const response = await recordingsService.getDeleteImpact(recording._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -119,11 +125,17 @@ export function RecordingsPage() {
         const response = await recordingsService.upload(data, file, onProgress, onPhaseChange)
         if (response.success) {
           toast.success('Recording uploaded successfully — processing will begin shortly')
+        } else {
+          toast.error(response.message || 'Failed to upload recording')
+          throw new Error(response.message || 'Failed to upload recording')
         }
       } else if (selectedRecording) {
         const response = await recordingsService.update(selectedRecording._id, data)
         if (response.success) {
           toast.success('Recording updated successfully')
+        } else {
+          toast.error(response.message || 'Failed to update recording')
+          throw new Error(response.message || 'Failed to update recording')
         }
       }
       fetchRecordings()
@@ -140,6 +152,9 @@ export function RecordingsPage() {
       if (response.success) {
         toast.success('Recording deleted successfully')
         fetchRecordings()
+      } else {
+        toast.error(response.message || 'Failed to delete recording')
+        throw new Error(response.message || 'Failed to delete recording')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete recording')
@@ -152,18 +167,19 @@ export function RecordingsPage() {
     {
       key: 'session',
       label: 'Session',
-      value: sessionFilter,
-      onChange: setSessionFilter,
+      type: 'select',
+      searchable: true,
       options: [
         { value: 'all', label: 'All Sessions' },
         ...sessions.map(s => ({ value: s._id, label: s.title })),
       ],
+      placeholder: 'Filter by session',
+      defaultValue: 'all',
     },
     {
       key: 'status',
       label: 'Status',
-      value: statusFilter,
-      onChange: setStatusFilter,
+      type: 'select',
       options: [
         { value: 'all', label: 'All Statuses' },
         { value: 'ready', label: 'Ready' },
@@ -171,6 +187,8 @@ export function RecordingsPage() {
         { value: 'uploading', label: 'Uploading' },
         { value: 'failed', label: 'Failed' },
       ],
+      placeholder: 'Filter by status',
+      defaultValue: 'all',
     },
   ]
 

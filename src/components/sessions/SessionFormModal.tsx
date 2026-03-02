@@ -8,12 +8,15 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { subjectsService, Subject } from '@/services/subjects.service'
 import { apiService } from '@/services/api.service'
 import { LiveSession, LiveSessionFormData } from '@/services/liveSessions.service'
@@ -56,6 +59,8 @@ interface SessionFormModalProps {
 export function SessionFormModal({ open, onClose, onSubmit, session, mode }: SessionFormModalProps) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [faculty, setFaculty] = useState<Array<{ _id: string; name: string }>>([])
+  const [subjectPopoverOpen, setSubjectPopoverOpen] = useState(false)
+  const [facultyPopoverOpen, setFacultyPopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -166,26 +171,94 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Subject <span className="text-red-500">*</span></Label>
-              <Controller name="subject_id" control={control} render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
-                  <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                  <SelectContent>
-                    {subjects.map((s) => <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )} />
+              <Controller name="subject_id" control={control} render={({ field }) => {
+                const selectedSubject = subjects.find((s) => s._id === field.value)
+                return (
+                  <Popover open={subjectPopoverOpen} onOpenChange={setSubjectPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={subjectPopoverOpen}
+                        className="w-full justify-between font-normal"
+                        disabled={isSubmitting}
+                      >
+                        {selectedSubject ? selectedSubject.name : 'Select subject'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search subjects..." />
+                        <CommandList>
+                          <CommandEmpty>No subjects found.</CommandEmpty>
+                          <CommandGroup>
+                            {subjects.map((s) => (
+                              <CommandItem
+                                key={s._id}
+                                value={s.name}
+                                onSelect={() => {
+                                  field.onChange(s._id)
+                                  setSubjectPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                                {s.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
+              }} />
               {errors.subject_id && <p className="text-sm text-red-500">{errors.subject_id.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Faculty <span className="text-red-500">*</span></Label>
-              <Controller name="faculty_id" control={control} render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
-                  <SelectTrigger><SelectValue placeholder="Select faculty" /></SelectTrigger>
-                  <SelectContent>
-                    {faculty.map((f) => <SelectItem key={f._id} value={f._id}>{f.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )} />
+              <Controller name="faculty_id" control={control} render={({ field }) => {
+                const selectedFaculty = faculty.find((f) => f._id === field.value)
+                return (
+                  <Popover open={facultyPopoverOpen} onOpenChange={setFacultyPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={facultyPopoverOpen}
+                        className="w-full justify-between font-normal"
+                        disabled={isSubmitting}
+                      >
+                        {selectedFaculty ? selectedFaculty.name : 'Select faculty'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search faculty..." />
+                        <CommandList>
+                          <CommandEmpty>No faculty found.</CommandEmpty>
+                          <CommandGroup>
+                            {faculty.map((f) => (
+                              <CommandItem
+                                key={f._id}
+                                value={f.name}
+                                onSelect={() => {
+                                  field.onChange(f._id)
+                                  setFacultyPopoverOpen(false)
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', field.value === f._id ? 'opacity-100' : 'opacity-0')} />
+                                {f.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
+              }} />
               {errors.faculty_id && <p className="text-sm text-red-500">{errors.faculty_id.message}</p>}
             </div>
           </div>

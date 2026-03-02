@@ -63,9 +63,12 @@ export function PackagesPage() {
         setPackages(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+      } else {
+        toast.error(response.message || 'Failed to load packages')
+        setPackages([])
       }
-    } catch (error) {
-      toast.error('Failed to load packages')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load packages')
       setPackages([])
     } finally {
       setLoading(false)
@@ -118,8 +121,11 @@ export function PackagesPage() {
       const response = await packagesService.getDeleteImpact(pkg._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
+      } else {
+        toast.error(response.message || 'Failed to check delete impact')
       }
-    } catch {
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check delete impact')
       setDeleteImpact(null)
     } finally {
       setLoadingDeleteImpact(false)
@@ -133,12 +139,18 @@ export function PackagesPage() {
         if (response.success) {
           toast.success('Package created successfully')
           fetchPackages()
+        } else {
+          toast.error(response.message || 'Failed to create package')
+          throw new Error(response.message || 'Failed to create package')
         }
       } else if (selectedPackage) {
         const response = await packagesService.update(selectedPackage._id, data)
         if (response.success) {
           toast.success('Package updated successfully')
           fetchPackages()
+        } else {
+          toast.error(response.message || 'Failed to update package')
+          throw new Error(response.message || 'Failed to update package')
         }
       }
     } catch (error: any) {
@@ -154,6 +166,9 @@ export function PackagesPage() {
       if (response.success) {
         toast.success('Package deleted successfully')
         fetchPackages()
+      } else {
+        toast.error(response.message || 'Failed to delete package')
+        throw new Error(response.message || 'Failed to delete package')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete package')
@@ -167,6 +182,8 @@ export function PackagesPage() {
       if (response.success) {
         toast.success(`Package ${!pkg.is_active ? 'activated' : 'deactivated'} successfully`)
         fetchPackages()
+      } else {
+        toast.error(response.message || 'Failed to update status')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update status')
@@ -179,6 +196,7 @@ export function PackagesPage() {
       key: 'subject',
       label: 'Subject',
       type: 'select',
+      searchable: true,
       options: [
         { label: 'All Subjects', value: 'all' },
         ...subjects.map((s) => ({ label: s.name, value: s._id })),
