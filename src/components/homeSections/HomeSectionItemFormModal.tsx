@@ -132,7 +132,7 @@ async function fetchEntityList(
   filterParams?: Record<string, string>,
 ): Promise<EntityOption[]> {
   try {
-    const params = { page: 1, limit: 200, ...filterParams }
+    const params = { page: 1, limit: 100, ...filterParams }
     let res: any
     switch (listKey) {
       case 'packages':
