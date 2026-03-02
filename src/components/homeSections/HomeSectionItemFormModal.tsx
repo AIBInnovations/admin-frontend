@@ -154,8 +154,6 @@ async function fetchEntityList(
         return []
     }
 
-    console.log(`[EntityDropdown] ${listKey} response:`, { success: res?.success, hasData: !!res?.data, entities: res?.data?.entities?.length, raw: res })
-
     if (!res?.success || !res?.data?.entities) return []
 
     switch (listKey) {
@@ -177,7 +175,7 @@ async function fetchEntityList(
         return []
     }
   } catch (err) {
-    console.error(`[EntityDropdown] ${listKey} FETCH ERROR:`, err)
+    console.error(`Failed to fetch ${listKey}:`, err)
     return []
   }
 }
@@ -350,10 +348,8 @@ export function HomeSectionItemFormModal({
     const cacheKey = filterParams ? `${listKey}:${JSON.stringify(filterParams)}` : listKey
     if (fetchedKeysRef.current.has(cacheKey)) return
     fetchedKeysRef.current.add(cacheKey)
-    console.log(`[EntityDropdown] Loading ${listKey}...`, { cacheKey, filterParams })
     setEntityListsLoading(prev => ({ ...prev, [listKey]: true }))
     const items = await fetchEntityList(listKey, filterParams)
-    console.log(`[EntityDropdown] Loaded ${listKey}:`, items.length, 'items')
     setEntityLists(prev => ({ ...prev, [listKey]: items }))
     setEntityListsLoading(prev => ({ ...prev, [listKey]: false }))
   }, [])
