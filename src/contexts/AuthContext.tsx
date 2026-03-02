@@ -5,9 +5,8 @@ import { authService, AdminUser, LoginCredentials, VerifyOTPCredentials } from '
 // OTP state exposed to login page
 export interface OTPState {
   admin_id: string;
+  identifier: string;
   phone: string;
-  otp_id: string;
-  expires_in: number;
 }
 
 // Types
@@ -83,9 +82,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // OTP required — return OTP state, don't navigate yet
           return {
             admin_id: response.data.admin_id!,
+            identifier: response.data.identifier!,
             phone: response.data.phone!,
-            otp_id: response.data.otp_id!,
-            expires_in: response.data.expires_in!,
           };
         }
 

@@ -18,9 +18,8 @@ export interface LoginResponse {
   requires_otp: boolean;
   // Present when requires_otp is true
   admin_id?: string;
+  identifier?: string;
   phone?: string;
-  otp_id?: string;
-  expires_in?: number;
   // Present when requires_otp is false (direct login)
   access_token?: string;
   refresh_token?: string;
@@ -29,7 +28,7 @@ export interface LoginResponse {
 
 export interface VerifyOTPCredentials {
   admin_id: string;
-  otp_code: string;
+  access_token: string;
 }
 
 export interface VerifyOTPResponse {

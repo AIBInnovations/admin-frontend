@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useAuth, OTPState } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { openOTPWidget } from "@/lib/msg91";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,38 +17,28 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-// Validation schemas
+// Validation schema
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   remember_me: z.boolean().optional(),
 });
 
-const otpSchema = z.object({
-  otp_code: z
-    .string()
-    .length(4, "OTP must be 4 digits")
-    .regex(/^[0-9]{4}$/, "OTP must contain only digits"),
-});
-
 type LoginFormData = z.infer<typeof loginSchema>;
-type OTPFormData = z.infer<typeof otpSchema>;
 
 export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
-  const [otpState, setOtpState] = useState<OTPState | null>(null);
   const { login, verifyOTP, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const otpInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    register: registerLogin,
-    handleSubmit: handleLoginSubmit,
-    formState: { errors: loginErrors, isSubmitting: isLoginSubmitting },
-    setValue: setLoginValue,
-    watch: watchLogin,
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setValue,
+    watch,
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -57,19 +48,7 @@ export function LoginPage() {
     },
   });
 
-  const {
-    register: registerOTP,
-    handleSubmit: handleOTPSubmit,
-    formState: { errors: otpErrors, isSubmitting: isOTPSubmitting },
-    reset: resetOTP,
-  } = useForm<OTPFormData>({
-    resolver: zodResolver(otpSchema),
-    defaultValues: {
-      otp_code: "",
-    },
-  });
-
-  const rememberMe = watchLogin("remember_me");
+  const rememberMe = watch("remember_me");
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -78,24 +57,32 @@ export function LoginPage() {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Focus OTP input when OTP step appears
-  useEffect(() => {
-    if (otpState) {
-      setTimeout(() => otpInputRef.current?.focus(), 100);
-    }
-  }, [otpState]);
-
-  const onLoginSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: LoginFormData) => {
     try {
       setError(null);
-      const result = await login({
+      const otpState = await login({
         email: data.email,
         password: data.password,
       });
 
-      if (result) {
-        // OTP required
-        setOtpState(result);
+      if (otpState) {
+        // OTP required — open MSG91 widget with admin's phone pre-filled
+        try {
+          const msg91AccessToken = await openOTPWidget(otpState.identifier);
+
+          // Widget OTP verified — send access token to backend
+          await verifyOTP({
+            admin_id: otpState.admin_id,
+            access_token: msg91AccessToken,
+          });
+          // Navigation handled by context
+        } catch (widgetErr) {
+          const msg =
+            widgetErr instanceof Error
+              ? widgetErr.message
+              : "OTP verification failed";
+          setError(msg);
+        }
       }
       // If null, direct login happened — navigation handled by context
     } catch (err) {
@@ -103,31 +90,6 @@ export function LoginPage() {
         err instanceof Error ? err.message : "Login failed. Please try again.";
       setError(errorMessage);
     }
-  };
-
-  const onOTPSubmit = async (data: OTPFormData) => {
-    if (!otpState) return;
-
-    try {
-      setError(null);
-      await verifyOTP({
-        admin_id: otpState.admin_id,
-        otp_code: data.otp_code,
-      });
-      // Navigation handled by context
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "OTP verification failed. Please try again.";
-      setError(errorMessage);
-    }
-  };
-
-  const handleBackToLogin = () => {
-    setOtpState(null);
-    setError(null);
-    resetOTP();
   };
 
   // Show loading state while checking auth
@@ -152,155 +114,82 @@ export function LoginPage() {
             PGME Admin
           </CardTitle>
           <CardDescription className="text-center">
-            {otpState
-              ? `Enter the OTP sent to ${otpState.phone}`
-              : "Sign in to your admin account"}
+            Sign in to your admin account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Error Alert */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          {!otpState ? (
-            /* ===== Step 1: Email + Password ===== */
-            <form
-              onSubmit={handleLoginSubmit(onLoginSubmit)}
-              className="space-y-4"
-            >
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@pgme.com"
-                  autoComplete="email"
-                  disabled={isLoginSubmitting}
-                  {...registerLogin("email")}
-                />
-                {loginErrors.email && (
-                  <p className="text-sm text-red-500">
-                    {loginErrors.email.message}
-                  </p>
-                )}
-              </div>
+            {/* Email Field */}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="admin@pgme.com"
+                autoComplete="email"
+                disabled={isSubmitting}
+                {...register("email")}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
+            </div>
 
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  disabled={isLoginSubmitting}
-                  {...registerLogin("password")}
-                />
-                {loginErrors.password && (
-                  <p className="text-sm text-red-500">
-                    {loginErrors.password.message}
-                  </p>
-                )}
-              </div>
+            {/* Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                disabled={isSubmitting}
+                {...register("password")}
+              />
+              {errors.password && (
+                <p className="text-sm text-red-500">
+                  {errors.password.message}
+                </p>
+              )}
+            </div>
 
-              {/* Remember Me Checkbox */}
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="remember_me"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) =>
-                    setLoginValue("remember_me", checked as boolean)
-                  }
-                  disabled={isLoginSubmitting}
-                />
-                <Label
-                  htmlFor="remember_me"
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  Remember me
-                </Label>
-              </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoginSubmitting}
+            {/* Remember Me Checkbox */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember_me"
+                checked={rememberMe}
+                onCheckedChange={(checked) =>
+                  setValue("remember_me", checked as boolean)
+                }
+                disabled={isSubmitting}
+              />
+              <Label
+                htmlFor="remember_me"
+                className="text-sm font-normal cursor-pointer"
               >
-                {isLoginSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign in"
-                )}
-              </Button>
-            </form>
-          ) : (
-            /* ===== Step 2: OTP Verification ===== */
-            <form
-              onSubmit={handleOTPSubmit(onOTPSubmit)}
-              className="space-y-4"
-            >
-              {/* OTP Field */}
-              <div className="space-y-2">
-                <Label htmlFor="otp_code">OTP Code</Label>
-                <Input
-                  id="otp_code"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Enter 4-digit OTP"
-                  maxLength={4}
-                  autoComplete="one-time-code"
-                  disabled={isOTPSubmitting}
-                  className="text-center text-2xl tracking-[0.5em] font-mono"
-                  {...registerOTP("otp_code")}
-                  ref={(e) => {
-                    registerOTP("otp_code").ref(e);
-                    (otpInputRef as React.MutableRefObject<HTMLInputElement | null>).current = e;
-                  }}
-                />
-                {otpErrors.otp_code && (
-                  <p className="text-sm text-red-500">
-                    {otpErrors.otp_code.message}
-                  </p>
-                )}
-              </div>
+                Remember me
+              </Label>
+            </div>
 
-              {/* Verify Button */}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isOTPSubmitting}
-              >
-                {isOTPSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Verify OTP"
-                )}
-              </Button>
-
-              {/* Back to Login */}
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={handleBackToLogin}
-                disabled={isOTPSubmitting}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to login
-              </Button>
-            </form>
-          )}
+            {/* Submit Button */}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </Button>
+          </form>
 
           {/* Additional Info */}
           <div className="mt-6 text-center text-sm text-gray-600">
