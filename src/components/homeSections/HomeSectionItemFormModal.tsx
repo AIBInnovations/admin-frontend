@@ -132,46 +132,52 @@ async function fetchEntityList(
   filterParams?: Record<string, string>,
 ): Promise<EntityOption[]> {
   try {
-    const params = { limit: 200, ...filterParams }
+    const params = { page: 1, limit: 200, ...filterParams }
+    let res: any
     switch (listKey) {
-      case 'packages': {
-        const res = await packagesService.getAll(params)
-        return res.success && res.data
-          ? res.data.entities.map(e => ({ _id: e._id, label: e.name }))
-          : []
-      }
-      case 'series': {
-        const res = await seriesService.getAll(params as any)
-        return res.success && res.data
-          ? res.data.entities.map(e => ({ _id: e._id, label: e.name }))
-          : []
-      }
-      case 'videos': {
-        const res = await videosService.getAll(params as any)
-        return res.success && res.data
-          ? res.data.entities.map(e => ({ _id: e._id, label: e.title }))
-          : []
-      }
-      case 'liveSessions': {
-        const res = await liveSessionsService.getAll(params as any)
-        return res.success && res.data
-          ? res.data.entities.map(e => ({ _id: e._id, label: e.title }))
-          : []
-      }
-      case 'documents': {
-        const res = await documentsService.getAll(params as any)
-        return res.success && res.data
-          ? res.data.entities.map(e => ({
-              _id: e._id,
-              label: e.title,
-              extra: { file_url: e.file_url },
-            }))
-          : []
-      }
+      case 'packages':
+        res = await packagesService.getAll(params)
+        break
+      case 'series':
+        res = await seriesService.getAll(params as any)
+        break
+      case 'videos':
+        res = await videosService.getAll(params as any)
+        break
+      case 'liveSessions':
+        res = await liveSessionsService.getAll(params as any)
+        break
+      case 'documents':
+        res = await documentsService.getAll(params as any)
+        break
       default:
         return []
     }
-  } catch {
+
+    console.log(`[EntityDropdown] ${listKey} response:`, { success: res?.success, hasData: !!res?.data, entities: res?.data?.entities?.length, raw: res })
+
+    if (!res?.success || !res?.data?.entities) return []
+
+    switch (listKey) {
+      case 'packages':
+        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.name }))
+      case 'series':
+        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.name }))
+      case 'videos':
+        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.title }))
+      case 'liveSessions':
+        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.title }))
+      case 'documents':
+        return res.data.entities.map((e: any) => ({
+          _id: e._id,
+          label: e.title,
+          extra: { file_url: e.file_url },
+        }))
+      default:
+        return []
+    }
+  } catch (err) {
+    console.error(`[EntityDropdown] ${listKey} FETCH ERROR:`, err)
     return []
   }
 }
@@ -343,8 +349,10 @@ export function HomeSectionItemFormModal({
     const cacheKey = filterParams ? `${listKey}:${JSON.stringify(filterParams)}` : listKey
     if (fetchedKeysRef.current.has(cacheKey)) return
     fetchedKeysRef.current.add(cacheKey)
+    console.log(`[EntityDropdown] Loading ${listKey}...`, { cacheKey, filterParams })
     setEntityListsLoading(prev => ({ ...prev, [listKey]: true }))
     const items = await fetchEntityList(listKey, filterParams)
+    console.log(`[EntityDropdown] Loaded ${listKey}:`, items.length, 'items')
     setEntityLists(prev => ({ ...prev, [listKey]: items }))
     setEntityListsLoading(prev => ({ ...prev, [listKey]: false }))
   }, [])
