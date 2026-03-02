@@ -69,6 +69,8 @@ export interface NavigationTargetParam {
   required: boolean
   label: string
   options?: string[]
+  autoFrom?: string         // e.g. 'packageId' — value auto-derived from another param's entity
+  filterPackageType?: string // e.g. 'Theory' — filter packages dropdown to this type only
 }
 
 export interface NavigationTarget {

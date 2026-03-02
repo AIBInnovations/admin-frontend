@@ -158,7 +158,11 @@ async function fetchEntityList(
 
     switch (listKey) {
       case 'packages':
-        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.name }))
+        return res.data.entities.map((e: any) => ({
+          _id: e._id,
+          label: e.name,
+          extra: { packageType: e.package_type_id?.name || '' },
+        }))
       case 'series':
         return res.data.entities.map((e: any) => ({ _id: e._id, label: e.name }))
       case 'videos':
@@ -381,24 +385,69 @@ export function HomeSectionItemFormModal({
 
   // Cascading: filter series by packageId for targets that use series + package
   const targetsWithSeriesPackageCascade = ['series_detail', 'lecture']
+  const prevPrimaryPkgRef = useRef<string | undefined>(undefined)
+  const prevSecondaryPkgRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
-    if (targetsWithSeriesPackageCascade.includes(navTargetKey || '') && primaryParams['packageId']) {
-      const cacheKey = `series:{"package_id":"${primaryParams['packageId']}"}`
+    if (!targetsWithSeriesPackageCascade.includes(navTargetKey || '')) return
+    const currentPkgId = primaryParams['packageId']
+    const prevPkgId = prevPrimaryPkgRef.current
+    prevPrimaryPkgRef.current = currentPkgId
+
+    if (currentPkgId) {
+      const cacheKey = `series:{"package_id":"${currentPkgId}"}`
       fetchedKeysRef.current.delete(cacheKey)
       fetchedKeysRef.current.delete('series')
-      loadEntityList('series', { package_id: primaryParams['packageId'] })
+      loadEntityList('series', { package_id: currentPkgId })
+
+      // Clear series selection when package changes (not on initial load)
+      if (prevPkgId && prevPkgId !== currentPkgId && primaryParams['id']) {
+        setValue('navigation_params', { ...primaryParams, id: '' })
+      }
     }
   }, [primaryParams['packageId'], navTargetKey, loadEntityList])
 
   useEffect(() => {
-    if (targetsWithSeriesPackageCascade.includes(secondaryNavTargetKey || '') && secondaryParams['packageId']) {
-      const cacheKey = `series:{"package_id":"${secondaryParams['packageId']}"}`
+    if (!targetsWithSeriesPackageCascade.includes(secondaryNavTargetKey || '')) return
+    const currentPkgId = secondaryParams['packageId']
+    const prevPkgId = prevSecondaryPkgRef.current
+    prevSecondaryPkgRef.current = currentPkgId
+
+    if (currentPkgId) {
+      const cacheKey = `series:{"package_id":"${currentPkgId}"}`
       fetchedKeysRef.current.delete(cacheKey)
       fetchedKeysRef.current.delete('series')
-      loadEntityList('series', { package_id: secondaryParams['packageId'] })
+      loadEntityList('series', { package_id: currentPkgId })
+
+      // Clear series selection when package changes (not on initial load)
+      if (prevPkgId && prevPkgId !== currentPkgId && secondaryParams['id']) {
+        setValue('secondary_navigation_params', { ...secondaryParams, id: '' })
+      }
     }
   }, [secondaryParams['packageId'], secondaryNavTargetKey, loadEntityList])
+
+  // Auto-populate packageType from the selected package's type
+  useEffect(() => {
+    if (!navTargetKey || !primaryParams['packageId'] || !entityLists['packages']) return
+    const target = navTargets.find(t => t.key === navTargetKey)
+    const hasAutoPackageType = target?.params.some(p => p.name === 'packageType' && p.autoFrom === 'packageId')
+    if (!hasAutoPackageType) return
+    const pkg = entityLists['packages']?.find(p => p._id === primaryParams['packageId'])
+    if (pkg?.extra?.packageType && pkg.extra.packageType !== primaryParams['packageType']) {
+      setValue('navigation_params', { ...primaryParams, packageType: pkg.extra.packageType })
+    }
+  }, [primaryParams['packageId'], navTargetKey, entityLists['packages'], navTargets])
+
+  useEffect(() => {
+    if (!secondaryNavTargetKey || !secondaryParams['packageId'] || !entityLists['packages']) return
+    const target = navTargets.find(t => t.key === secondaryNavTargetKey)
+    const hasAutoPackageType = target?.params.some(p => p.name === 'packageType' && p.autoFrom === 'packageId')
+    if (!hasAutoPackageType) return
+    const pkg = entityLists['packages']?.find(p => p._id === secondaryParams['packageId'])
+    if (pkg?.extra?.packageType && pkg.extra.packageType !== secondaryParams['packageType']) {
+      setValue('secondary_navigation_params', { ...secondaryParams, packageType: pkg.extra.packageType })
+    }
+  }, [secondaryParams['packageId'], secondaryNavTargetKey, entityLists['packages'], navTargets])
 
   // PDF Viewer auto-populate: when documentId changes, fill pdfUrl + title
   useEffect(() => {
@@ -648,15 +697,32 @@ export function HomeSectionItemFormModal({
         {target.params.map(param => {
           const entityKey = getEntityListKey(target.key, param.name)
           const isPdfAutoField = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
+          const isAutoFromPackage = param.autoFrom === 'packageId'
+
+          // Filter packages by type if filterPackageType is set (e.g. theory_series only shows Theory packages)
+          let dropdownItems = entityKey ? (entityLists[entityKey] || []) : []
+          if (entityKey === 'packages' && param.filterPackageType) {
+            dropdownItems = dropdownItems.filter(p => p.extra?.packageType === param.filterPackageType)
+          }
 
           return (
             <div key={param.name} className="space-y-1">
               <Label className="text-xs">
                 {param.label}
                 {param.required && <span className="text-red-500 ml-0.5">*</span>}
+                {isAutoFromPackage && <span className="text-muted-foreground ml-1">(auto)</span>}
               </Label>
 
-              {param.type === 'boolean' ? (
+              {isAutoFromPackage ? (
+                // Auto-derived from selected package — read-only
+                <Input
+                  className="h-8 text-xs bg-muted"
+                  placeholder={params['packageId'] ? 'Auto-filled from package' : 'Select a package first'}
+                  value={params[param.name] || ''}
+                  readOnly
+                  disabled={disabled}
+                />
+              ) : param.type === 'boolean' ? (
                 <Select
                   value={params[param.name] || ''}
                   onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
@@ -695,9 +761,9 @@ export function HomeSectionItemFormModal({
                   disabled={disabled}
                 />
               ) : entityKey ? (
-                // Searchable entity dropdown
+                // Searchable entity dropdown (with optional type filtering)
                 <EntityCombobox
-                  items={entityLists[entityKey] || []}
+                  items={dropdownItems}
                   loading={entityListsLoading[entityKey] || false}
                   value={params[param.name] || ''}
                   onSelect={(id) => setValue(prefix, { ...params, [param.name]: id })}
