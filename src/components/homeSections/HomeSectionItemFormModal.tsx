@@ -105,8 +105,8 @@ interface EntityOption {
  * Returns null if the param should NOT be a dropdown (boolean, enum, or free text).
  */
 function getEntityListKey(targetKey: string, paramName: string): string | null {
-  // Params handled by boolean/enum selects — not dropdowns
-  if (paramName === 'subscribed' || paramName === 'packageType') return null
+  // Params handled by enum selects — not dropdowns
+  if (paramName === 'packageType') return null
   // PDF viewer auto-populated fields
   if (paramName === 'pdfUrl' || (paramName === 'title' && targetKey === 'pdf_viewer')) return null
 
