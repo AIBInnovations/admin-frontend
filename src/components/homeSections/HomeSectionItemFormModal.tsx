@@ -217,7 +217,7 @@ function EntityCombobox({
   const selectedItem = items.find(i => i._id === value)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -232,16 +232,17 @@ function EntityCombobox({
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" sideOffset={4}>
         <Command>
           <CommandInput placeholder="Search..." className="h-8" />
-          <CommandList>
+          <CommandList className="max-h-50">
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup>
               {items.map(item => (
                 <CommandItem
                   key={item._id}
-                  value={item.label}
+                  value={`${item.label} ${item._id}`}
+                  keywords={[item.label]}
                   onSelect={() => {
                     onSelect(item._id)
                     setOpen(false)
