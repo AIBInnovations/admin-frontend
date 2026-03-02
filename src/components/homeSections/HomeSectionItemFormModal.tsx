@@ -503,8 +503,10 @@ export function HomeSectionItemFormModal({
       setImageFile([])
       setIconFile([])
       setUploadProgress(null)
-      // Reset entity list cache for fresh fetches
+      // Reset entity list cache and cascading refs for fresh state
       fetchedKeysRef.current.clear()
+      prevPrimaryPkgRef.current = undefined
+      prevSecondaryPkgRef.current = undefined
 
       if (mode === 'edit' && item) {
         const primaryKey = findNavTargetKey(item.internal_route, navTargets)
