@@ -497,62 +497,78 @@ export function HomeSectionItemFormModal({
     return target?.key || ''
   }
 
-  // Reset form on open
+  // Cleanup on modal open (runs once per open)
+  const hasCleanedRef = useRef(false)
   useEffect(() => {
-    if (open) {
+    if (open && !hasCleanedRef.current) {
+      hasCleanedRef.current = true
       setImageFile([])
       setIconFile([])
       setUploadProgress(null)
-      // Reset entity list cache and cascading refs for fresh state
       fetchedKeysRef.current.clear()
       prevPrimaryPkgRef.current = undefined
       prevSecondaryPkgRef.current = undefined
+      setExistingImageUrl(null)
+      setExistingImageS3Key(null)
+      setExistingIconUrl(null)
+      setExistingIconS3Key(null)
+    }
+    if (!open) {
+      hasCleanedRef.current = false
+    }
+  }, [open])
 
-      if (mode === 'edit' && item) {
-        const primaryKey = findNavTargetKey(item.internal_route, navTargets)
-        const secondaryKey = findNavTargetKey(item.secondary_internal_route, navTargets)
+  // Reset form on open — for edit mode, wait until navTargets are loaded
+  useEffect(() => {
+    if (!open) return
 
-        reset({
-          card_type: item.card_type,
-          title: item.title || '',
-          subtitle: item.subtitle || '',
-          description: item.description || '',
-          tag_label: item.tag_label || '',
-          tag_color: item.tag_color || '',
-          background_color: item.background_color || '',
-          text_color: item.text_color || '',
-          border_color: item.border_color || '',
-          button_text: item.button_text || '',
-          button_color: item.button_color || '',
-          button_text_color: item.button_text_color || '',
-          link_type: item.link_type,
-          external_url: item.external_url || '',
-          navigation_target_key: primaryKey,
-          navigation_params: item.internal_params || {},
-          secondary_button_text: item.secondary_button_text || '',
-          secondary_link_type: item.secondary_link_type,
-          secondary_external_url: item.secondary_external_url || '',
-          secondary_navigation_target_key: secondaryKey,
-          secondary_navigation_params: item.secondary_internal_params || {},
-          metadata: item.metadata?.length ? item.metadata.map(m => ({
-            label: m.label,
-            value: m.value,
-            icon_url: m.icon_url || '',
-          })) : [],
-          display_order: item.display_order,
-          is_active: item.is_active,
-        })
-        setExistingImageUrl(item.image_url)
-        setExistingImageS3Key(item.image_s3_key)
-        setExistingIconUrl(item.icon_url)
-        setExistingIconS3Key(item.icon_s3_key)
-      } else {
-        reset(defaultValues)
-        setExistingImageUrl(null)
-        setExistingImageS3Key(null)
-        setExistingIconUrl(null)
-        setExistingIconS3Key(null)
-      }
+    if (mode === 'edit' && item) {
+      // Don't reset until navTargets are loaded — otherwise findNavTargetKey returns ''
+      if (navTargets.length === 0) return
+
+      const primaryKey = findNavTargetKey(item.internal_route, navTargets)
+      const secondaryKey = findNavTargetKey(item.secondary_internal_route, navTargets)
+
+      reset({
+        card_type: item.card_type,
+        title: item.title || '',
+        subtitle: item.subtitle || '',
+        description: item.description || '',
+        tag_label: item.tag_label || '',
+        tag_color: item.tag_color || '',
+        background_color: item.background_color || '',
+        text_color: item.text_color || '',
+        border_color: item.border_color || '',
+        button_text: item.button_text || '',
+        button_color: item.button_color || '',
+        button_text_color: item.button_text_color || '',
+        link_type: item.link_type,
+        external_url: item.external_url || '',
+        navigation_target_key: primaryKey,
+        navigation_params: item.internal_params || {},
+        secondary_button_text: item.secondary_button_text || '',
+        secondary_link_type: item.secondary_link_type,
+        secondary_external_url: item.secondary_external_url || '',
+        secondary_navigation_target_key: secondaryKey,
+        secondary_navigation_params: item.secondary_internal_params || {},
+        metadata: item.metadata?.length ? item.metadata.map(m => ({
+          label: m.label,
+          value: m.value,
+          icon_url: m.icon_url || '',
+        })) : [],
+        display_order: item.display_order,
+        is_active: item.is_active,
+      })
+      setExistingImageUrl(item.image_url)
+      setExistingImageS3Key(item.image_s3_key)
+      setExistingIconUrl(item.icon_url)
+      setExistingIconS3Key(item.icon_s3_key)
+    } else {
+      reset(defaultValues)
+      setExistingImageUrl(null)
+      setExistingImageS3Key(null)
+      setExistingIconUrl(null)
+      setExistingIconS3Key(null)
     }
   }, [open, mode, item, reset, navTargets])
 
