@@ -399,7 +399,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                       ? 'Assembling file on server...'
                       : 'Uploading to cloud...'}
                 </span>
-                {uploadPhase === 'uploading' && <span>{uploadProgress ?? 0}%</span>}
+                {uploadPhase !== 'completing' && uploadPhase !== 'confirming' && <span>{uploadProgress ?? 0}%</span>}
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
@@ -423,7 +423,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting || (mode === 'create' && !videoFile)}>
               {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? 'Uploading...' : 'Updating...'}</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? `Uploading...${uploadProgress != null ? ` ${uploadProgress}%` : ''}` : 'Updating...'}</>
               ) : (
                 <>{mode === 'create' ? 'Upload Video' : 'Update Video'}</>
               )}

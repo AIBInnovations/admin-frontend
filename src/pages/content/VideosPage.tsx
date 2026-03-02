@@ -8,6 +8,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { VideoFormModal } from '@/components/videos/VideoFormModal'
 import { Plus, Video as VideoIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import { videosService, Video, VideoFormData } from '@/services/videos.service'
 import { modulesService, Module } from '@/services/modules.service'
 import { useVideosColumns } from './VideosPage.columns'
@@ -34,6 +35,8 @@ export function VideosPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch modules for filter dropdown
   useEffect(() => {
@@ -97,9 +100,21 @@ export function VideosPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (video: Video) => {
+  const handleDeleteClick = async (video: Video) => {
     setSelectedVideo(video)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await videosService.getDeleteImpact(video._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: VideoFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void) => {
@@ -257,10 +272,22 @@ export function VideosPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Video"
         itemName={selectedVideo?.title}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

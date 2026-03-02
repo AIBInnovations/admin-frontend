@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
 
 // Types
 export type BannerType = 'generic' | 'theory_package' | 'practical_package'
@@ -84,6 +84,13 @@ class BannersService {
       return { ...response, data: response.data.banner }
     }
     return response as unknown as ApiResponse<Banner>
+  }
+
+  /**
+   * Get delete impact — checks what depends on this entity before deletion
+   */
+  async getDeleteImpact(bannerId: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`${this.basePath}/${bannerId}/delete-impact`)
   }
 
   async delete(bannerId: string): Promise<ApiResponse<void>> {

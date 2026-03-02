@@ -32,6 +32,8 @@ import { AppSettingsPage } from '@/pages/settings/AppSettingsPage'
 import { VideoTagsPage } from '@/pages/content/VideoTagsPage'
 import { BooksPage } from '@/pages/content/BooksPage'
 import { BannersPage } from '@/pages/content/BannersPage'
+import { HomeSectionsPage } from '@/pages/content/HomeSectionsPage'
+import { HomeSectionDetailPage } from '@/pages/content/HomeSectionDetailPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
@@ -74,6 +76,8 @@ function App() {
               <Route path="/content/video-tags" element={<VideoTagsPage />} />
               <Route path="/content/books" element={<BooksPage />} />
               <Route path="/content/banners" element={<BannersPage />} />
+              <Route path="/content/home-sections" element={<HomeSectionsPage />} />
+              <Route path="/content/home-sections/:sectionId" element={<HomeSectionDetailPage />} />
               <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
 
               {/* Live Sessions */}

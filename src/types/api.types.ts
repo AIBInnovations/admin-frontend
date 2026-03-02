@@ -35,3 +35,17 @@ export interface PopulatedRef {
   _id: string
   name: string
 }
+
+/** Single dependency entry from delete-impact endpoint */
+export interface DeleteDependency {
+  type: string
+  label: string
+  count: number
+  blocking: boolean
+}
+
+/** Response from GET /:id/delete-impact endpoints */
+export interface DeleteImpactResponse {
+  blocked: boolean
+  dependencies: DeleteDependency[]
+}

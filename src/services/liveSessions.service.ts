@@ -1,5 +1,5 @@
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
 
 // Types
 export interface LiveSession {
@@ -121,6 +121,13 @@ class LiveSessionsService {
       return { ...response, data: response.data.session }
     }
     return response as ApiResponse<LiveSession>
+  }
+
+  /**
+   * Get delete impact — checks what depends on this entity before deletion
+   */
+  async getDeleteImpact(sessionId: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`${this.basePath}/${sessionId}/delete-impact`)
   }
 
   async delete(sessionId: string): Promise<ApiResponse<void>> {

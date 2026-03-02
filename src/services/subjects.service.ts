@@ -1,4 +1,5 @@
 import { apiService, ApiResponse } from './api.service';
+import type { DeleteImpactResponse } from '@/types/api.types';
 
 // Types
 export interface Subject {
@@ -59,13 +60,6 @@ export interface SubjectsListResponse {
     hasNextPage: boolean;
     hasPrevPage: boolean;
   };
-}
-
-export interface DeleteImpact {
-  packages_count: number;
-  series_count: number;
-  modules_count: number;
-  videos_count: number;
 }
 
 class SubjectsService {
@@ -144,22 +138,10 @@ class SubjectsService {
   }
 
   /**
-   * Get delete impact (simulated - backend throws error directly)
-   * This is kept for UI flow but won't be called
+   * Get delete impact — checks what depends on this entity before deletion
    */
-  async getDeleteImpact(_subjectId: string): Promise<ApiResponse<DeleteImpact>> {
-    // Backend doesn't have this endpoint - it throws error on delete if packages exist
-    // Return empty impact for now (parameter prefixed with _ to indicate intentionally unused)
-    return {
-      success: true,
-      message: 'No impact data available',
-      data: {
-        packages_count: 0,
-        series_count: 0,
-        modules_count: 0,
-        videos_count: 0,
-      },
-    };
+  async getDeleteImpact(subjectId: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`admin/subjects/${subjectId}/delete-impact`);
   }
 
   /**

@@ -7,6 +7,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { AdminRoleFormModal } from '@/components/adminRoles/AdminRoleFormModal'
 import { Plus, Shield, Pencil, Trash2, Loader2, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import { adminRolesService, AdminRole, AdminRoleFormData } from '@/services/adminRoles.service'
 
 export function AdminRolesPage() {
@@ -18,6 +19,8 @@ export function AdminRolesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedRole, setSelectedRole] = useState<AdminRole | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch roles
   const fetchRoles = useCallback(async () => {
@@ -50,9 +53,21 @@ export function AdminRolesPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (role: AdminRole) => {
+  const handleDeleteClick = async (role: AdminRole) => {
     setSelectedRole(role)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await adminRolesService.getDeleteImpact(role._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: AdminRoleFormData) => {
@@ -189,10 +204,22 @@ export function AdminRolesPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Role"
         itemName={selectedRole?.name}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

@@ -1,24 +1,29 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
-import { FacultyFormModal } from '@/components/faculty/FacultyFormModal'
-import { Plus, GraduationCap } from 'lucide-react'
+import { HomeSectionFormModal } from '@/components/homeSections/HomeSectionFormModal'
+import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import type { DeleteImpactResponse } from '@/types/api.types'
-import { facultyService, Faculty, FacultyFormData } from '@/services/faculty.service'
-import { useFacultyColumns } from './FacultyPage.columns'
+import {
+  homeSectionsService,
+  HomeSection,
+  HomeSectionFormData,
+} from '@/services/homeSections.service'
+import { useHomeSectionsColumns } from './HomeSectionsPage.columns'
 
-export function FacultyPage() {
+export function HomeSectionsPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // State
-  const [facultyList, setFacultyList] = useState<Faculty[]>([])
-  const [search, setSearch] = useState('')
+  const [sections, setSections] = useState<HomeSection[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
@@ -28,65 +33,81 @@ export function FacultyPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedFaculty, setSelectedFaculty] = useState<Faculty | null>(null)
+  const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null)
   const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
   const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
-  // Fetch faculty
-  const fetchFaculty = useCallback(async () => {
+  // Client-side search filter
+  const filteredSections = search
+    ? sections.filter((s) =>
+        (s.title || '').toLowerCase().includes(search.toLowerCase()) ||
+        (s.subtitle || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : sections
+
+  // Fetch sections
+  const fetchSections = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await facultyService.getAll({
+      const response = await homeSectionsService.getAll({
         page: currentPage,
         limit: 20,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
 
       if (response.success && response.data) {
-        setFacultyList(response.data.entities || [])
+        setSections(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
       }
-    } catch (error) {
-      toast.error('Failed to load faculty')
-      setFacultyList([])
+    } catch {
+      toast.error('Failed to load home sections')
+      setSections([])
     } finally {
       setLoading(false)
     }
   }, [currentPage, statusFilter])
 
-  useEffect(() => { fetchFaculty() }, [fetchFaculty])
+  useEffect(() => { fetchSections() }, [fetchSections])
 
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [statusFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, currentPage, setSearchParams])
 
-  useEffect(() => { setCurrentPage(1) }, [statusFilter])
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter])
 
   // Handlers
   const handleCreate = () => {
     setModalMode('create')
-    setSelectedFaculty(null)
+    setSelectedSection(null)
     setFormModalOpen(true)
   }
 
-  const handleEdit = (faculty: Faculty) => {
+  const handleEdit = (section: HomeSection) => {
     setModalMode('edit')
-    setSelectedFaculty(faculty)
+    setSelectedSection(section)
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (faculty: Faculty) => {
-    setSelectedFaculty(faculty)
+  const handleViewItems = (section: HomeSection) => {
+    navigate(`/content/home-sections/${section._id}`)
+  }
+
+  const handleDeleteClick = async (section: HomeSection) => {
+    setSelectedSection(section)
     setDeleteModalOpen(true)
     setLoadingDeleteImpact(true)
     setDeleteImpact(null)
     try {
-      const response = await facultyService.getDeleteImpact(faculty._id)
+      const response = await homeSectionsService.getDeleteImpact(section._id)
       if (response.success && response.data) {
         setDeleteImpact(response.data)
       }
@@ -97,69 +118,40 @@ export function FacultyPage() {
     }
   }
 
-  const handleFormSubmit = async (data: FacultyFormData) => {
+  const handleFormSubmit = async (data: HomeSectionFormData) => {
     try {
       if (modalMode === 'create') {
-        const response = await facultyService.create(data)
+        const response = await homeSectionsService.create(data)
         if (response.success) {
-          toast.success('Faculty added successfully')
-          fetchFaculty()
+          toast.success('Home section created successfully')
+          fetchSections()
         }
-      } else if (selectedFaculty) {
-        const response = await facultyService.update(selectedFaculty._id, data)
+      } else if (selectedSection) {
+        const response = await homeSectionsService.update(selectedSection._id, data)
         if (response.success) {
-          toast.success('Faculty updated successfully')
-          fetchFaculty()
+          toast.success('Home section updated successfully')
+          fetchSections()
         }
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save faculty')
+      toast.error(error.message || 'Failed to save home section')
       throw error
     }
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedFaculty) return
+    if (!selectedSection) return
     try {
-      const response = await facultyService.delete(selectedFaculty._id)
+      const response = await homeSectionsService.delete(selectedSection._id)
       if (response.success) {
-        toast.success('Faculty deleted successfully')
-        fetchFaculty()
+        toast.success('Home section deleted successfully')
+        fetchSections()
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete faculty')
+      toast.error(error.message || 'Failed to delete home section')
       throw error
     }
   }
-
-  const handleToggleActive = async (faculty: Faculty) => {
-    try {
-      const response = await facultyService.toggleActive(faculty._id, !faculty.is_active)
-      if (response.success) {
-        toast.success(`Faculty ${!faculty.is_active ? 'activated' : 'deactivated'} successfully`)
-        fetchFaculty()
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update status')
-    }
-  }
-
-  const handleVerify = async (faculty: Faculty) => {
-    try {
-      const response = await facultyService.verifyFaculty(faculty._id, true)
-      if (response.success) {
-        toast.success('Faculty verified successfully')
-        fetchFaculty()
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to verify faculty')
-    }
-  }
-
-  // Client-side filtering
-  const filteredFaculty = search
-    ? facultyList.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
-    : facultyList
 
   // Filters
   const filters: FilterConfig[] = [
@@ -177,22 +169,21 @@ export function FacultyPage() {
     },
   ]
 
-  const columns = useFacultyColumns({
+  const columns = useHomeSectionsColumns({
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
-    onToggleActive: handleToggleActive,
-    onVerify: handleVerify,
+    onViewItems: handleViewItems,
   })
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty"
-        description="Manage faculty members and their profiles"
-        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Faculty' }]}
+        title="Home Sections"
+        description="Manage dynamic sections on the app home screen"
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Home Sections' }]}
         action={
           <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Faculty
+            <Plus className="mr-2 h-4 w-4" />Add Section
           </Button>
         }
       />
@@ -200,7 +191,7 @@ export function FacultyPage() {
       <SearchWithFilters
         value={search}
         onChange={setSearch}
-        placeholder="Filter faculty..."
+        placeholder="Search sections..."
         filters={filters}
         activeFilters={{ status: statusFilter }}
         onFiltersChange={(f) => {
@@ -209,7 +200,7 @@ export function FacultyPage() {
       />
 
       <DataTable
-        data={filteredFaculty}
+        data={filteredSections}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -218,33 +209,38 @@ export function FacultyPage() {
           totalCount,
           onPageChange: setCurrentPage,
         }}
+        onRowClick={handleViewItems}
         emptyState={{
-          icon: GraduationCap,
-          title: search || statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
-          description: !search && statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
+          icon: Layers,
+          title: search || statusFilter !== 'all'
+            ? 'No sections found matching your filters'
+            : 'No home sections yet',
+          description: !search && statusFilter === 'all'
+            ? 'Get started by adding your first home section'
+            : undefined,
           action: !search && statusFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Add your first faculty
+              <Plus className="mr-2 h-4 w-4" />Add your first section
             </Button>
           ) : undefined,
         }}
-        getRowKey={(f) => f._id}
+        getRowKey={(section) => section._id}
       />
 
-      <FacultyFormModal
+      <HomeSectionFormModal
         open={formModalOpen}
         onClose={() => setFormModalOpen(false)}
         onSubmit={handleFormSubmit}
-        faculty={selectedFaculty}
+        section={selectedSection}
         mode={modalMode}
       />
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null) }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Faculty"
-        itemName={selectedFaculty?.name}
+        title="Delete Home Section"
+        itemName={selectedSection?.title || 'this section'}
         isLoadingImpact={loadingDeleteImpact}
         blocked={deleteImpact?.blocked}
         warning={deleteImpact?.dependencies?.length ? {

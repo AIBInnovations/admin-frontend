@@ -1,5 +1,5 @@
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
 
 // Types
 export interface AdminRole {
@@ -88,6 +88,13 @@ class AdminRolesService {
       return { ...response, data: this.parsePermissions(response.data.admin_role) }
     }
     return response as ApiResponse<AdminRole>
+  }
+
+  /**
+   * Get delete impact — checks what depends on this entity before deletion
+   */
+  async getDeleteImpact(roleId: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`${this.basePath}/${roleId}/delete-impact`)
   }
 
   /**

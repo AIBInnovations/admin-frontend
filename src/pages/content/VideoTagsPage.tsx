@@ -8,6 +8,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { VideoTagFormModal } from '@/components/videoTags/VideoTagFormModal'
 import { Plus, Tags } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import { videoTagsService, VideoTag, VideoTagFormData } from '@/services/videoTags.service'
 import { useVideoTagsColumns } from './VideoTagsPage.columns'
 
@@ -28,6 +29,8 @@ export function VideoTagsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedTag, setSelectedTag] = useState<VideoTag | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Collect unique categories from loaded tags for filter
   const categories = Array.from(new Set(tags.map((t) => t.category).filter(Boolean))) as string[]
@@ -86,9 +89,21 @@ export function VideoTagsPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (tag: VideoTag) => {
+  const handleDeleteClick = async (tag: VideoTag) => {
     setSelectedTag(tag)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await videoTagsService.getDeleteImpact(tag._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: VideoTagFormData) => {
@@ -205,10 +220,22 @@ export function VideoTagsPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Tag"
         itemName={selectedTag?.name}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

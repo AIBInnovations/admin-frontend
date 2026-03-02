@@ -8,6 +8,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { BookFormModal } from '@/components/books/BookFormModal'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import { booksService, Book, BookFormData } from '@/services/books.service'
 import { useBooksColumns } from './BooksPage.columns'
 
@@ -28,6 +29,8 @@ export function BooksPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch books
   const fetchBooks = useCallback(async () => {
@@ -89,9 +92,21 @@ export function BooksPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (book: Book) => {
+  const handleDeleteClick = async (book: Book) => {
     setSelectedBook(book)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await booksService.getDeleteImpact(book._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: BookFormData, ebookFile?: File, onProgress?: (pct: number) => void) => {
@@ -220,10 +235,22 @@ export function BooksPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Book"
         itemName={selectedBook?.title}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

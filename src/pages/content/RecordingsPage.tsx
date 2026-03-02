@@ -8,6 +8,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { RecordingFormModal } from '@/components/recordings/RecordingFormModal'
 import { Plus, Film } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import { recordingsService, Recording, RecordingFormData } from '@/services/recordings.service'
 import { liveSessionsService, LiveSession } from '@/services/liveSessions.service'
 import { getRecordingsColumns } from './RecordingsPage.columns'
@@ -32,6 +33,8 @@ export function RecordingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch sessions for filter dropdown
   useEffect(() => {
@@ -93,9 +96,21 @@ export function RecordingsPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (recording: Recording) => {
+  const handleDeleteClick = async (recording: Recording) => {
     setSelectedRecording(recording)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await recordingsService.getDeleteImpact(recording._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void) => {
@@ -201,10 +216,22 @@ export function RecordingsPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Recording"
         itemName={selectedRecording?.title || ''}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

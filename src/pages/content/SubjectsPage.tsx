@@ -6,9 +6,10 @@ import { DataTable } from '@/components/common/DataTable';
 import { SearchWithFilters } from '@/components/common/SearchBar';
 import { Plus, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
-import { subjectsService, Subject, SubjectFormData, DeleteImpact } from '@/services/subjects.service';
+import type { DeleteImpactResponse } from '@/types/api.types';
+import { subjectsService, Subject, SubjectFormData } from '@/services/subjects.service';
 import { SubjectFormModal } from '@/components/subjects/SubjectFormModal';
-import { DeleteSubjectModal } from '@/components/subjects/DeleteSubjectModal';
+import { DeleteModal } from '@/components/modals/DeleteModal';
 import { useSubjectsColumns } from './SubjectsPage.columns';
 import { FilterConfig } from '@/components/common/SearchBar';
 
@@ -30,7 +31,7 @@ export function SubjectsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null);
   const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false);
 
   // Fetch subjects
@@ -90,14 +91,13 @@ export function SubjectsPage() {
     setSelectedSubject(subject);
     setDeleteModalOpen(true);
     setLoadingDeleteImpact(true);
-
+    setDeleteImpact(null);
     try {
       const response = await subjectsService.getDeleteImpact(subject._id);
       if (response.success && response.data) {
         setDeleteImpact(response.data);
       }
-    } catch (error) {
-      console.error('Failed to fetch delete impact:', error);
+    } catch {
       setDeleteImpact(null);
     } finally {
       setLoadingDeleteImpact(false);
@@ -255,13 +255,24 @@ export function SubjectsPage() {
       />
 
       {/* Delete Modal */}
-      <DeleteSubjectModal
+      <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
-        subject={selectedSubject}
-        deleteImpact={deleteImpact}
+        title="Delete Subject"
+        itemName={selectedSubject?.name}
         isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   );

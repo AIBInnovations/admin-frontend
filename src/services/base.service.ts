@@ -1,5 +1,5 @@
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
 
 /**
  * Base CRUD service that all entity services extend.
@@ -84,6 +84,13 @@ export class BaseCrudService<
       }
     }
     return response as ApiResponse<TEntity>
+  }
+
+  /**
+   * Get delete impact — checks what depends on this entity before deletion
+   */
+  async getDeleteImpact(id: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`${this.basePath}/${id}/delete-impact`)
   }
 
   /**

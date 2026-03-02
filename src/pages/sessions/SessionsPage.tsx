@@ -8,6 +8,7 @@ import { DeleteModal } from '@/components/modals/DeleteModal'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
 import { Plus, Video } from 'lucide-react'
 import { toast } from 'sonner'
+import type { DeleteImpactResponse } from '@/types/api.types'
 import {
   liveSessionsService, LiveSession, LiveSessionFormData,
 } from '@/services/liveSessions.service'
@@ -31,6 +32,8 @@ export function SessionsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedSession, setSelectedSession] = useState<LiveSession | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
+  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
@@ -89,9 +92,21 @@ export function SessionsPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = (session: LiveSession) => {
+  const handleDeleteClick = async (session: LiveSession) => {
     setSelectedSession(session)
     setDeleteModalOpen(true)
+    setLoadingDeleteImpact(true)
+    setDeleteImpact(null)
+    try {
+      const response = await liveSessionsService.getDeleteImpact(session._id)
+      if (response.success && response.data) {
+        setDeleteImpact(response.data)
+      }
+    } catch {
+      setDeleteImpact(null)
+    } finally {
+      setLoadingDeleteImpact(false)
+    }
   }
 
   const handleCancel = async (session: LiveSession) => {
@@ -227,10 +242,22 @@ export function SessionsPage() {
 
       <DeleteModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
         onConfirm={handleDeleteConfirm}
         title="Delete Session"
         itemName={selectedSession?.title}
+        isLoadingImpact={loadingDeleteImpact}
+        blocked={deleteImpact?.blocked}
+        warning={deleteImpact?.dependencies?.length ? {
+          message: deleteImpact.blocked
+            ? 'Cannot delete. Remove the following dependencies first:'
+            : 'The following associated data will be affected:',
+          details: deleteImpact.dependencies.map(d => ({
+            label: d.label,
+            count: d.count,
+            blocking: d.blocking,
+          })),
+        } : undefined}
       />
     </div>
   )

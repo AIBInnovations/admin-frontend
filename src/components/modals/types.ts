@@ -38,6 +38,8 @@ export interface DeleteImpactDetail {
   label: string;
   /** Count of impacted items */
   count: number;
+  /** Whether this dependency blocks deletion */
+  blocking?: boolean;
 }
 
 /**
@@ -66,4 +68,6 @@ export interface DeleteModalProps extends BaseModalProps {
   requireConfirmation?: boolean;
   /** Whether delete impact is loading */
   isLoadingImpact?: boolean;
+  /** Whether deletion is blocked by dependencies */
+  blocked?: boolean;
 }

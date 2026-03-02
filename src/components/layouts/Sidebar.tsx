@@ -71,6 +71,7 @@ const navigation: NavItem[] = [
       { name: 'Recordings', href: '/content/recordings' },
       { name: 'Books', href: '/content/books' },
       { name: 'Banners', href: '/content/banners' },
+      { name: 'Home Sections', href: '/content/home-sections' },
     ],
   },
   { name: 'Live Sessions', href: '/sessions', icon: Calendar },

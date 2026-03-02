@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
 
 // Types
 export interface Book {
@@ -105,6 +105,13 @@ class BooksService {
       return { ...response, data: response.data.book }
     }
     return response as ApiResponse<Book>
+  }
+
+  /**
+   * Get delete impact — checks what depends on this entity before deletion
+   */
+  async getDeleteImpact(bookId: string): Promise<ApiResponse<DeleteImpactResponse>> {
+    return apiService.get<DeleteImpactResponse>(`${this.basePath}/${bookId}/delete-impact`)
   }
 
   async delete(bookId: string): Promise<ApiResponse<void>> {
