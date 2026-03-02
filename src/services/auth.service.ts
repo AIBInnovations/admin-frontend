@@ -15,6 +15,24 @@ export interface LoginCredentials {
 }
 
 export interface LoginResponse {
+  requires_otp: boolean;
+  // Present when requires_otp is true
+  admin_id?: string;
+  phone?: string;
+  otp_id?: string;
+  expires_in?: number;
+  // Present when requires_otp is false (direct login)
+  access_token?: string;
+  refresh_token?: string;
+  admin?: AdminUser;
+}
+
+export interface VerifyOTPCredentials {
+  admin_id: string;
+  otp_code: string;
+}
+
+export interface VerifyOTPResponse {
   access_token: string;
   refresh_token: string;
   admin: AdminUser;
@@ -31,8 +49,25 @@ class AuthService {
   async login(credentials: LoginCredentials): Promise<ApiResponse<LoginResponse>> {
     const response = await apiService.post<LoginResponse>('admin/auth/login', credentials);
 
+    if (response.success && response.data && !response.data.requires_otp) {
+      // Direct login (no phone / no OTP needed)
+      this.storeAuthData(
+        response.data.access_token!,
+        response.data.refresh_token!,
+        response.data.admin!
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Verify admin OTP for 2FA login
+   */
+  async verifyOTP(credentials: VerifyOTPCredentials): Promise<ApiResponse<VerifyOTPResponse>> {
+    const response = await apiService.post<VerifyOTPResponse>('admin/auth/verify-otp', credentials);
+
     if (response.success && response.data) {
-      // Store tokens and user data
       this.storeAuthData(
         response.data.access_token,
         response.data.refresh_token,

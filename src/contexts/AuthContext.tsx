@@ -1,13 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authService, AdminUser, LoginCredentials } from '@/services/auth.service';
+import { authService, AdminUser, LoginCredentials, VerifyOTPCredentials } from '@/services/auth.service';
+
+// OTP state exposed to login page
+export interface OTPState {
+  admin_id: string;
+  phone: string;
+  otp_id: string;
+  expires_in: number;
+}
 
 // Types
 interface AuthContextType {
   user: AdminUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<OTPState | null>;
+  verifyOTP: (credentials: VerifyOTPCredentials) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
@@ -61,21 +70,55 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const login = async (credentials: LoginCredentials) => {
+  /**
+   * Login step 1: email + password
+   * Returns OTPState if OTP required, null if direct login
+   */
+  const login = async (credentials: LoginCredentials): Promise<OTPState | null> => {
     try {
       const response = await authService.login(credentials);
 
       if (response.success && response.data) {
-        setUser(response.data.admin);
+        if (response.data.requires_otp) {
+          // OTP required — return OTP state, don't navigate yet
+          return {
+            admin_id: response.data.admin_id!,
+            phone: response.data.phone!,
+            otp_id: response.data.otp_id!,
+            expires_in: response.data.expires_in!,
+          };
+        }
 
-        // Redirect to intended destination or dashboard
+        // Direct login (no phone on admin)
+        setUser(response.data.admin!);
         const from = (location.state as any)?.from?.pathname || '/';
         navigate(from, { replace: true });
+        return null;
       } else {
         throw new Error(response.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Login step 2: verify OTP
+   */
+  const verifyOTP = async (credentials: VerifyOTPCredentials): Promise<void> => {
+    try {
+      const response = await authService.verifyOTP(credentials);
+
+      if (response.success && response.data) {
+        setUser(response.data.admin);
+        const from = (location.state as any)?.from?.pathname || '/';
+        navigate(from, { replace: true });
+      } else {
+        throw new Error(response.message || 'OTP verification failed');
+      }
+    } catch (error) {
+      console.error('OTP verification error:', error);
       throw error;
     }
   };
@@ -112,6 +155,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!user,
     isLoading,
     login,
+    verifyOTP,
     logout,
     hasPermission,
     hasAnyPermission,
