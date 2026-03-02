@@ -118,7 +118,7 @@ function getEntityListKey(targetKey: string, paramName: string): string | null {
   if (paramName === 'id') {
     switch (targetKey) {
       case 'series_detail': return 'series'
-      case 'lecture':
+      case 'lecture': return 'series'  // /lecture/:id uses series ID, not video ID
       case 'video_player': return 'videos'
       case 'live_session': return 'liveSessions'
     }
@@ -379,9 +379,11 @@ export function HomeSectionItemFormModal({
   const primaryParams: Record<string, string> = watch('navigation_params') || {}
   const secondaryParams: Record<string, string> = watch('secondary_navigation_params') || {}
 
+  // Cascading: filter series by packageId for targets that use series + package
+  const targetsWithSeriesPackageCascade = ['series_detail', 'lecture']
+
   useEffect(() => {
-    if (navTargetKey === 'series_detail' && primaryParams['packageId']) {
-      // Force refetch series with package filter
+    if (targetsWithSeriesPackageCascade.includes(navTargetKey || '') && primaryParams['packageId']) {
       const cacheKey = `series:{"package_id":"${primaryParams['packageId']}"}`
       fetchedKeysRef.current.delete(cacheKey)
       fetchedKeysRef.current.delete('series')
@@ -390,7 +392,7 @@ export function HomeSectionItemFormModal({
   }, [primaryParams['packageId'], navTargetKey, loadEntityList])
 
   useEffect(() => {
-    if (secondaryNavTargetKey === 'series_detail' && secondaryParams['packageId']) {
+    if (targetsWithSeriesPackageCascade.includes(secondaryNavTargetKey || '') && secondaryParams['packageId']) {
       const cacheKey = `series:{"package_id":"${secondaryParams['packageId']}"}`
       fetchedKeysRef.current.delete(cacheKey)
       fetchedKeysRef.current.delete('series')
