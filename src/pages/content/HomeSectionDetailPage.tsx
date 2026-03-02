@@ -21,7 +21,7 @@ import type { DeleteImpactResponse } from '@/types/api.types'
 import {
   homeSectionsService,
   HomeSection, HomeSectionItem,
-  HomeSectionFormData, HomeSectionItemFormData,
+  HomeSectionFormData,
 } from '@/services/homeSections.service'
 import { HomeSectionFormModal } from '@/components/homeSections/HomeSectionFormModal'
 import { HomeSectionItemFormModal } from '@/components/homeSections/HomeSectionItemFormModal'
@@ -131,27 +131,6 @@ export function HomeSectionDetailPage() {
     setDeleteItemOpen(true)
   }
 
-  const handleItemSubmit = async (data: HomeSectionItemFormData) => {
-    if (!section) return
-    try {
-      if (itemMode === 'create') {
-        const response = await homeSectionsService.createItem(section._id, data)
-        if (response.success) {
-          toast.success('Item created successfully')
-          fetchSection()
-        }
-      } else if (selectedItem) {
-        const response = await homeSectionsService.updateItem(section._id, selectedItem._id, data)
-        if (response.success) {
-          toast.success('Item updated successfully')
-          fetchSection()
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save item')
-      throw error
-    }
-  }
 
   const handleDeleteItemConfirm = async () => {
     if (!section || !selectedItem) return
@@ -397,11 +376,11 @@ export function HomeSectionDetailPage() {
       {/* Item Form Modal */}
       <HomeSectionItemFormModal
         open={itemFormOpen}
-        onClose={() => setItemFormOpen(false)}
-        onSubmit={handleItemSubmit}
+        onOpenChange={setItemFormOpen}
         sectionId={section._id}
         item={selectedItem}
         mode={itemMode}
+        onSuccess={fetchSection}
       />
 
       {/* Delete Section Modal */}

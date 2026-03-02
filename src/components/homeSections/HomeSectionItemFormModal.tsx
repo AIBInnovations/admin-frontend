@@ -34,177 +34,112 @@ import { videosService } from '@/services/videos.service'
 import { liveSessionsService } from '@/services/liveSessions.service'
 import { documentsService } from '@/services/documents.service'
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
 const hexColorRegex = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/
 
-const metadataEntrySchema = z.object({
-  label: z.string().min(1, 'Label is required'),
-  value: z.string().min(1, 'Value is required'),
-  icon_url: z.string().optional().or(z.literal('')),
-})
+const optionalHexColor = z.string().optional().refine(
+  val => !val || hexColorRegex.test(val),
+  { message: 'Invalid hex color' },
+)
 
-const itemSchema = z.object({
+const formSchema = z.object({
   card_type: z.string().min(1, 'Card type is required'),
-  title: z.string().max(200).optional().or(z.literal('')),
-  subtitle: z.string().max(300).optional().or(z.literal('')),
-  description: z.string().max(2000).optional().or(z.literal('')),
-  tag_label: z.string().max(50).optional().or(z.literal('')),
-  tag_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  background_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  text_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  border_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  button_text: z.string().max(100).optional().or(z.literal('')),
-  button_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  button_text_color: z.string().regex(hexColorRegex, 'Invalid hex').optional().or(z.literal('')),
-  link_type: z.enum(['none', 'internal', 'external']),
-  external_url: z.string().optional().or(z.literal('')),
-  navigation_target_key: z.string().optional().or(z.literal('')),
+  title: z.string().max(200).optional(),
+  subtitle: z.string().max(300).optional(),
+  description: z.string().max(2000).optional(),
+  tag_label: z.string().max(100).optional(),
+  tag_color: optionalHexColor,
+  background_color: optionalHexColor,
+  text_color: optionalHexColor,
+  border_color: optionalHexColor,
+  button_text: z.string().max(100).optional(),
+  button_color: optionalHexColor,
+  button_text_color: optionalHexColor,
+  link_type: z.string().optional(),
+  navigation_target_key: z.string().optional(),
   navigation_params: z.record(z.string(), z.string()).optional(),
-  secondary_button_text: z.string().max(100).optional().or(z.literal('')),
-  secondary_link_type: z.enum(['none', 'internal', 'external']),
-  secondary_external_url: z.string().optional().or(z.literal('')),
-  secondary_navigation_target_key: z.string().optional().or(z.literal('')),
+  external_url: z.string().optional().refine(
+    val => !val || /^https?:\/\//.test(val), { message: 'Invalid URL' },
+  ),
+  secondary_button_text: z.string().max(100).optional(),
+  secondary_link_type: z.string().optional(),
+  secondary_navigation_target_key: z.string().optional(),
   secondary_navigation_params: z.record(z.string(), z.string()).optional(),
-  metadata: z.array(metadataEntrySchema).max(10).optional(),
-  display_order: z.number().int().min(0).optional().or(z.nan()),
-  is_active: z.boolean(),
+  secondary_external_url: z.string().optional().refine(
+    val => !val || /^https?:\/\//.test(val), { message: 'Invalid URL' },
+  ),
+  metadata: z.array(z.object({
+    label: z.string().min(1, 'Label is required'),
+    value: z.string().min(1, 'Value is required'),
+    icon_url: z.string().optional(),
+  })).optional(),
+  display_order: z.coerce.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
 })
 
-type ItemFormValues = z.infer<typeof itemSchema>
+type FormValues = z.infer<typeof formSchema>
 
-interface HomeSectionItemFormModalProps {
-  open: boolean
-  onClose: () => void
-  onSubmit: (data: HomeSectionItemFormData) => Promise<void>
-  sectionId: string
-  item?: HomeSectionItem | null
-  mode: 'create' | 'edit'
+const DEFAULT_VALUES: FormValues = {
+  card_type: 'info_card',
+  title: '',
+  subtitle: '',
+  description: '',
+  tag_label: '',
+  tag_color: '',
+  background_color: '',
+  text_color: '',
+  border_color: '',
+  button_text: '',
+  button_color: '',
+  button_text_color: '',
+  link_type: 'none',
+  navigation_target_key: '',
+  navigation_params: {},
+  external_url: '',
+  secondary_button_text: '',
+  secondary_link_type: 'none',
+  secondary_navigation_target_key: '',
+  secondary_navigation_params: {},
+  secondary_external_url: '',
+  metadata: [],
+  display_order: 0,
+  is_active: true,
 }
 
-function ColorSwatch({ color }: { color: string }) {
-  const isValid = hexColorRegex.test(color)
-  return (
-    <div
-      className="h-8 w-8 rounded border border-border shrink-0"
-      style={{ backgroundColor: isValid ? color : '#e5e7eb' }}
-    />
-  )
-}
+// ─── Entity types for searchable dropdowns ──────────────────────────────────
 
-const IMAGE_ASPECT_RATIO = 16 / 9
-const ICON_ASPECT_RATIO = 1
-
-// ─── Entity dropdown infrastructure ──────────────────────────────────
 interface EntityOption {
   _id: string
   label: string
-  extra?: Record<string, string>  // e.g. { file_url: '...' } for documents
+  extra?: Record<string, string> // for storing additional fields like file_url, package_type
 }
 
 /**
- * Resolves which entity list key to use for a given target+param combination.
- * Returns null if the param should NOT be a dropdown (boolean, enum, or free text).
+ * Resolves which entity list key to use for a given param + navigation target.
+ * The param name "id" is ambiguous — its entity type depends on the navigation target.
  */
 function getEntityListKey(targetKey: string, paramName: string): string | null {
-  // Params handled by enum selects — not dropdowns
-  if (paramName === 'packageType') return null
-  // PDF viewer auto-populated fields
-  if (paramName === 'pdfUrl' || (paramName === 'title' && targetKey === 'pdf_viewer')) return null
-
   // Non-ambiguous param names
   if (paramName === 'packageId') return 'packages'
   if (paramName === 'documentId') return 'documents'
 
-  // Ambiguous 'id' param — depends on target
+  // "id" depends on target
   if (paramName === 'id') {
     switch (targetKey) {
       case 'series_detail': return 'series'
-      case 'lecture': return 'series'  // /lecture/:id uses series ID, not video ID
+      case 'lecture': return 'series' // lecture's :id param is a Series ID per backend
       case 'video_player': return 'videos'
       case 'live_session': return 'liveSessions'
+      default: return null
     }
   }
+
   return null
 }
 
-/** Fetch entities from a service with { _id, label } format */
-async function fetchEntityList(
-  listKey: string,
-  filterParams?: Record<string, string>,
-): Promise<EntityOption[]> {
-  try {
-    const params = { page: 1, limit: 100, ...filterParams }
-    let res: any
-    switch (listKey) {
-      case 'packages':
-        res = await packagesService.getAll(params)
-        break
-      case 'series':
-        res = await seriesService.getAll(params as any)
-        break
-      case 'videos':
-        res = await videosService.getAll(params as any)
-        break
-      case 'liveSessions':
-        res = await liveSessionsService.getAll(params as any)
-        break
-      case 'documents':
-        res = await documentsService.getAll(params as any)
-        break
-      default:
-        return []
-    }
+// ─── EntityCombobox ─────────────────────────────────────────────────────────
 
-    if (!res?.success || !res?.data?.entities) return []
-
-    switch (listKey) {
-      case 'packages':
-        return res.data.entities.map((e: any) => ({
-          _id: e._id,
-          label: e.name,
-          extra: { packageType: e.package_type_id?.name || '' },
-        }))
-      case 'series':
-        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.name }))
-      case 'videos':
-        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.title }))
-      case 'liveSessions':
-        return res.data.entities.map((e: any) => ({ _id: e._id, label: e.title }))
-      case 'documents':
-        return res.data.entities.map((e: any) => ({
-          _id: e._id,
-          label: e.title,
-          extra: { file_url: e.file_url },
-        }))
-      default:
-        return []
-    }
-  } catch (err) {
-    console.error(`Failed to fetch ${listKey}:`, err)
-    return []
-  }
-}
-
-const defaultValues: ItemFormValues = {
-  card_type: '',
-  title: '', subtitle: '', description: '',
-  tag_label: '', tag_color: '',
-  background_color: '', text_color: '', border_color: '',
-  button_text: '', button_color: '', button_text_color: '',
-  link_type: 'none',
-  external_url: '',
-  navigation_target_key: '',
-  navigation_params: {},
-  secondary_button_text: '',
-  secondary_link_type: 'none',
-  secondary_external_url: '',
-  secondary_navigation_target_key: '',
-  secondary_navigation_params: {},
-  metadata: [],
-  display_order: NaN,
-  is_active: true,
-}
-
-/** Searchable combobox for selecting an entity by name */
 function EntityCombobox({
   items, loading, value, onSelect, placeholder, disabled,
 }: {
@@ -213,7 +148,7 @@ function EntityCombobox({
   value: string
   onSelect: (id: string) => void
   placeholder: string
-  disabled: boolean
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const selectedItem = items.find(i => i._id === value)
@@ -245,10 +180,7 @@ function EntityCombobox({
                   key={item._id}
                   value={`${item.label} ${item._id}`}
                   keywords={[item.label]}
-                  onSelect={() => {
-                    onSelect(item._id)
-                    setOpen(false)
-                  }}
+                  onSelect={() => { onSelect(item._id); setOpen(false) }}
                 >
                   <Check className={cn("mr-2 h-3 w-3", value === item._id ? "opacity-100" : "opacity-0")} />
                   <span className="truncate">{item.label}</span>
@@ -262,275 +194,183 @@ function EntityCombobox({
   )
 }
 
+// ─── Helper: find navTarget key from a saved route ──────────────────────────
+
+function findNavTargetKey(route: string | null | undefined, targets: NavigationTarget[]): string {
+  if (!route) return ''
+  const found = targets.find(t => t.route === route)
+  return found ? found.key : ''
+}
+
+// ─── Helper: fetch entities from a service ──────────────────────────────────
+
+async function fetchEntityList(
+  serviceKey: string,
+  filters?: Record<string, string>,
+): Promise<EntityOption[]> {
+  try {
+    let res: any
+    switch (serviceKey) {
+      case 'packages':
+        res = await packagesService.getAll({ limit: 100, ...filters } as any)
+        if (res.success && res.data?.entities) {
+          return res.data.entities.map((e: any) => ({
+            _id: e._id,
+            label: e.name || e._id,
+            extra: { package_type: e.package_type_id?.name || '' },
+          }))
+        }
+        break
+      case 'series':
+        res = await seriesService.getAll({ limit: 100, ...filters } as any)
+        if (res.success && res.data?.entities) {
+          return res.data.entities.map((e: any) => ({
+            _id: e._id,
+            label: e.name || e._id,
+          }))
+        }
+        break
+      case 'videos':
+        res = await videosService.getAll({ limit: 100, ...filters } as any)
+        if (res.success && res.data?.entities) {
+          return res.data.entities.map((e: any) => ({
+            _id: e._id,
+            label: e.title || e._id,
+          }))
+        }
+        break
+      case 'liveSessions':
+        res = await liveSessionsService.getAll({ limit: 100, ...filters } as any)
+        if (res.success && res.data?.entities) {
+          return res.data.entities.map((e: any) => ({
+            _id: e._id,
+            label: e.title || e._id,
+          }))
+        }
+        break
+      case 'documents':
+        res = await documentsService.getAll({ limit: 100, ...filters } as any)
+        if (res.success && res.data?.entities) {
+          return res.data.entities.map((e: any) => ({
+            _id: e._id,
+            label: e.title || e._id,
+            extra: { file_url: e.file_url || '' },
+          }))
+        }
+        break
+    }
+  } catch (err) {
+    console.error(`Failed to fetch ${serviceKey}:`, err)
+  }
+  return []
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
+
+interface Props {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  sectionId: string
+  mode: 'create' | 'edit'
+  item?: HomeSectionItem | null
+  onSuccess: () => void
+}
+
 export function HomeSectionItemFormModal({
-  open, onClose, onSubmit, sectionId, item, mode,
-}: HomeSectionItemFormModalProps) {
-  // Reference data
-  const [cardTypes, setCardTypes] = useState<CardTypeInfo[]>([])
+  open, onOpenChange, sectionId, mode, item, onSuccess,
+}: Props) {
+  // ── Reference data (fetched once) ───────────────────────────────────────
   const [navTargets, setNavTargets] = useState<NavigationTarget[]>([])
-  const [refLoading, setRefLoading] = useState(false)
+  const [cardTypes, setCardTypes] = useState<CardTypeInfo[]>([])
+  const [refDataReady, setRefDataReady] = useState(false)
 
-  // Image state
+  // ── Entity lists for dropdowns ──────────────────────────────────────────
+  const [entityLists, setEntityLists] = useState<Record<string, EntityOption[]>>({})
+  const [entityLoading, setEntityLoading] = useState<Record<string, boolean>>({})
+  const fetchedKeysRef = useRef<Set<string>>(new Set())
+
+  // ── Image / icon state ──────────────────────────────────────────────────
   const [imageFile, setImageFile] = useState<File[]>([])
-  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
-  const [existingImageS3Key, setExistingImageS3Key] = useState<string | null>(null)
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
-  const [imageCropperFile, setImageCropperFile] = useState<File | null>(null)
-  const [showImageCropper, setShowImageCropper] = useState(false)
-
-  // Icon state
   const [iconFile, setIconFile] = useState<File[]>([])
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
   const [existingIconUrl, setExistingIconUrl] = useState<string | null>(null)
-  const [existingIconS3Key, setExistingIconS3Key] = useState<string | null>(null)
-  const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null)
-  const [iconCropperFile, setIconCropperFile] = useState<File | null>(null)
+  const [showImageCropper, setShowImageCropper] = useState(false)
   const [showIconCropper, setShowIconCropper] = useState(false)
-
-  // Upload progress
+  const [imageCropFile, setImageCropFile] = useState<File | null>(null)
+  const [iconCropFile, setIconCropFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
-  const {
-    register, handleSubmit, control,
-    formState: { errors, isSubmitting },
-    reset, setValue, watch,
-  } = useForm<ItemFormValues>({
-    resolver: zodResolver(itemSchema),
-    defaultValues,
+  // ── Form ────────────────────────────────────────────────────────────────
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formReady, setFormReady] = useState(false)
+
+  const form = useForm({
+    resolver: zodResolver(formSchema) as any,
+    defaultValues: DEFAULT_VALUES,
   })
 
-  const { fields: metadataFields, append: appendMeta, remove: removeMeta } = useFieldArray({
+  const { register, handleSubmit, watch, setValue, reset, control, formState: { errors } } = form
+
+  const { fields: metadataFields, append: appendMetadata, remove: removeMetadata } = useFieldArray({
     control,
     name: 'metadata',
   })
 
-  const isActive = watch('is_active')
-  const cardType = watch('card_type')
-  const linkType = watch('link_type')
-  const navTargetKey = watch('navigation_target_key')
-  const secondaryLinkType = watch('secondary_link_type')
-  const secondaryNavTargetKey = watch('secondary_navigation_target_key')
+  // Watched values
+  const watchedLinkType = watch('link_type')
+  const watchedNavTargetKey = watch('navigation_target_key')
+  const watchedNavParams = watch('navigation_params')
+  const watchedSecondaryLinkType = watch('secondary_link_type')
+  const watchedSecondaryNavTargetKey = watch('secondary_navigation_target_key')
+  const watchedSecondaryNavParams = watch('secondary_navigation_params')
 
-  // Color watches for swatches
-  const tagColor = watch('tag_color') || ''
-  const bgColor = watch('background_color') || ''
-  const txtColor = watch('text_color') || ''
-  const borderColor = watch('border_color') || ''
-  const btnColor = watch('button_color') || ''
-  const btnTxtColor = watch('button_text_color') || ''
+  // Resolved targets
+  const selectedNavTarget = navTargets.find(t => t.key === watchedNavTargetKey) || null
+  const selectedSecondaryNavTarget = navTargets.find(t => t.key === watchedSecondaryNavTargetKey) || null
 
-  // Entity dropdown state
-  const [entityLists, setEntityLists] = useState<Record<string, EntityOption[]>>({})
-  const [entityListsLoading, setEntityListsLoading] = useState<Record<string, boolean>>({})
-  const fetchedKeysRef = useRef<Set<string>>(new Set())
-
-  // Derived
-  const selectedCardType = cardTypes.find(ct => ct.key === cardType)
-  const selectedNavTarget = navTargets.find(t => t.key === navTargetKey)
-  const secondaryNavTarget = navTargets.find(t => t.key === secondaryNavTargetKey)
-
-  // Manage preview URLs
-  useEffect(() => {
-    if (imageFile.length > 0) {
-      const url = URL.createObjectURL(imageFile[0])
-      setImagePreviewUrl(url)
-      return () => URL.revokeObjectURL(url)
-    }
-    setImagePreviewUrl(null)
-  }, [imageFile])
-
-  useEffect(() => {
-    if (iconFile.length > 0) {
-      const url = URL.createObjectURL(iconFile[0])
-      setIconPreviewUrl(url)
-      return () => URL.revokeObjectURL(url)
-    }
-    setIconPreviewUrl(null)
-  }, [iconFile])
-
-  // ─── Entity dropdown fetching ──────────────────────────────────────
-  const loadEntityList = useCallback(async (listKey: string, filterParams?: Record<string, string>) => {
-    const cacheKey = filterParams ? `${listKey}:${JSON.stringify(filterParams)}` : listKey
-    if (fetchedKeysRef.current.has(cacheKey)) return
-    fetchedKeysRef.current.add(cacheKey)
-    setEntityListsLoading(prev => ({ ...prev, [listKey]: true }))
-    const items = await fetchEntityList(listKey, filterParams)
-    setEntityLists(prev => ({ ...prev, [listKey]: items }))
-    setEntityListsLoading(prev => ({ ...prev, [listKey]: false }))
-  }, [])
-
-  /** Fetch all entity lists needed by a given navigation target */
-  const loadEntitiesForTarget = useCallback((target: NavigationTarget | undefined) => {
-    if (!target) return
-    const needed = new Set<string>()
-    for (const param of target.params) {
-      const key = getEntityListKey(target.key, param.name)
-      if (key) needed.add(key)
-    }
-    needed.forEach(key => loadEntityList(key))
-  }, [loadEntityList])
-
-  // Fetch entity lists when primary nav target changes
-  useEffect(() => {
-    loadEntitiesForTarget(selectedNavTarget)
-  }, [navTargetKey, selectedNavTarget, loadEntitiesForTarget])
-
-  // Fetch entity lists when secondary nav target changes
-  useEffect(() => {
-    loadEntitiesForTarget(secondaryNavTarget)
-  }, [secondaryNavTargetKey, secondaryNavTarget, loadEntitiesForTarget])
-
-  // Cascading: refetch series list when packageId changes in series_detail target
-  const primaryParams: Record<string, string> = watch('navigation_params') || {}
-  const secondaryParams: Record<string, string> = watch('secondary_navigation_params') || {}
-
-  // Cascading: filter series by packageId for targets that use series + package
-  const targetsWithSeriesPackageCascade = ['series_detail', 'lecture']
+  // ── Refs for auto-populate tracking ─────────────────────────────────────
   const prevPrimaryPkgRef = useRef<string | undefined>(undefined)
   const prevSecondaryPkgRef = useRef<string | undefined>(undefined)
 
-  useEffect(() => {
-    if (!targetsWithSeriesPackageCascade.includes(navTargetKey || '')) return
-    const currentPkgId = primaryParams['packageId']
-    const prevPkgId = prevPrimaryPkgRef.current
-    prevPrimaryPkgRef.current = currentPkgId
+  // ── 1. Fetch reference data when dialog opens ───────────────────────────
 
-    if (currentPkgId) {
-      const cacheKey = `series:{"package_id":"${currentPkgId}"}`
-      fetchedKeysRef.current.delete(cacheKey)
-      fetchedKeysRef.current.delete('series')
-      loadEntityList('series', { package_id: currentPkgId })
-
-      // Clear series selection when package changes (not on initial load)
-      if (prevPkgId && prevPkgId !== currentPkgId && primaryParams['id']) {
-        setValue('navigation_params', { ...primaryParams, id: '' })
-      }
-    }
-  }, [primaryParams['packageId'], navTargetKey, loadEntityList])
-
-  useEffect(() => {
-    if (!targetsWithSeriesPackageCascade.includes(secondaryNavTargetKey || '')) return
-    const currentPkgId = secondaryParams['packageId']
-    const prevPkgId = prevSecondaryPkgRef.current
-    prevSecondaryPkgRef.current = currentPkgId
-
-    if (currentPkgId) {
-      const cacheKey = `series:{"package_id":"${currentPkgId}"}`
-      fetchedKeysRef.current.delete(cacheKey)
-      fetchedKeysRef.current.delete('series')
-      loadEntityList('series', { package_id: currentPkgId })
-
-      // Clear series selection when package changes (not on initial load)
-      if (prevPkgId && prevPkgId !== currentPkgId && secondaryParams['id']) {
-        setValue('secondary_navigation_params', { ...secondaryParams, id: '' })
-      }
-    }
-  }, [secondaryParams['packageId'], secondaryNavTargetKey, loadEntityList])
-
-  // Auto-populate packageType from the selected package's type
-  useEffect(() => {
-    if (!navTargetKey || !primaryParams['packageId'] || !entityLists['packages']) return
-    const target = navTargets.find(t => t.key === navTargetKey)
-    const hasAutoPackageType = target?.params.some(p => p.name === 'packageType' && p.autoFrom === 'packageId')
-    if (!hasAutoPackageType) return
-    const pkg = entityLists['packages']?.find(p => p._id === primaryParams['packageId'])
-    if (pkg?.extra?.packageType && pkg.extra.packageType !== primaryParams['packageType']) {
-      setValue('navigation_params', { ...primaryParams, packageType: pkg.extra.packageType })
-    }
-  }, [primaryParams['packageId'], navTargetKey, entityLists['packages'], navTargets])
-
-  useEffect(() => {
-    if (!secondaryNavTargetKey || !secondaryParams['packageId'] || !entityLists['packages']) return
-    const target = navTargets.find(t => t.key === secondaryNavTargetKey)
-    const hasAutoPackageType = target?.params.some(p => p.name === 'packageType' && p.autoFrom === 'packageId')
-    if (!hasAutoPackageType) return
-    const pkg = entityLists['packages']?.find(p => p._id === secondaryParams['packageId'])
-    if (pkg?.extra?.packageType && pkg.extra.packageType !== secondaryParams['packageType']) {
-      setValue('secondary_navigation_params', { ...secondaryParams, packageType: pkg.extra.packageType })
-    }
-  }, [secondaryParams['packageId'], secondaryNavTargetKey, entityLists['packages'], navTargets])
-
-  // PDF Viewer auto-populate: when documentId changes, fill pdfUrl + title
-  useEffect(() => {
-    if (navTargetKey === 'pdf_viewer' && primaryParams['documentId']) {
-      const doc = entityLists['documents']?.find(d => d._id === primaryParams['documentId'])
-      if (doc) {
-        const updated = { ...primaryParams }
-        if (doc.extra?.file_url) updated['pdfUrl'] = doc.extra.file_url
-        updated['title'] = doc.label
-        setValue('navigation_params', updated)
-      }
-    }
-  }, [primaryParams['documentId'], navTargetKey, entityLists['documents']])
-
-  useEffect(() => {
-    if (secondaryNavTargetKey === 'pdf_viewer' && secondaryParams['documentId']) {
-      const doc = entityLists['documents']?.find(d => d._id === secondaryParams['documentId'])
-      if (doc) {
-        const updated = { ...secondaryParams }
-        if (doc.extra?.file_url) updated['pdfUrl'] = doc.extra.file_url
-        updated['title'] = doc.label
-        setValue('secondary_navigation_params', updated)
-      }
-    }
-  }, [secondaryParams['documentId'], secondaryNavTargetKey, entityLists['documents']])
-
-  // Fetch reference data on open
-  useEffect(() => {
-    if (open && cardTypes.length === 0) {
-      setRefLoading(true)
-      Promise.all([
-        homeSectionsService.getCardTypes(),
-        homeSectionsService.getNavigationTargets(),
-      ]).then(([ctRes, ntRes]) => {
-        if (ctRes.success && ctRes.data) setCardTypes(ctRes.data.card_types)
-        if (ntRes.success && ntRes.data) setNavTargets(ntRes.data.targets)
-      }).catch(() => {
-        toast.error('Failed to load form options')
-      }).finally(() => setRefLoading(false))
-    }
-  }, [open])
-
-  // Find nav target key from an item's internal_route
-  function findNavTargetKey(route: string | null, targets: NavigationTarget[]): string {
-    if (!route) return ''
-    const target = targets.find(t => t.route === route)
-    return target?.key || ''
-  }
-
-  // Cleanup on modal open (runs once per open)
-  const hasCleanedRef = useRef(false)
-  useEffect(() => {
-    if (open && !hasCleanedRef.current) {
-      hasCleanedRef.current = true
-      setImageFile([])
-      setIconFile([])
-      setUploadProgress(null)
-      fetchedKeysRef.current.clear()
-      prevPrimaryPkgRef.current = undefined
-      prevSecondaryPkgRef.current = undefined
-      setExistingImageUrl(null)
-      setExistingImageS3Key(null)
-      setExistingIconUrl(null)
-      setExistingIconS3Key(null)
-    }
-    if (!open) {
-      hasCleanedRef.current = false
-    }
-  }, [open])
-
-  // Reset form on open — for edit mode, wait until navTargets are loaded
   useEffect(() => {
     if (!open) return
+    setRefDataReady(false)
+
+    Promise.all([
+      homeSectionsService.getNavigationTargets(),
+      homeSectionsService.getCardTypes(),
+    ]).then(([navRes, ctRes]) => {
+      const targets = navRes.success && navRes.data ? navRes.data.targets : []
+      const types = ctRes.success && ctRes.data ? ctRes.data.card_types : []
+      setNavTargets(targets)
+      setCardTypes(types)
+      setRefDataReady(true)
+    })
+  }, [open])
+
+  // ── 2. Initialize form once reference data is ready ─────────────────────
+
+  useEffect(() => {
+    if (!open || !refDataReady) return
+
+    // Clear transient state
+    setImageFile([])
+    setIconFile([])
+    setUploadProgress(null)
+    fetchedKeysRef.current.clear()
+    prevPrimaryPkgRef.current = undefined
+    prevSecondaryPkgRef.current = undefined
+    setEntityLists({})
+    setEntityLoading({})
 
     if (mode === 'edit' && item) {
-      // Don't reset until navTargets are loaded — otherwise findNavTargetKey returns ''
-      if (navTargets.length === 0) return
-
       const primaryKey = findNavTargetKey(item.internal_route, navTargets)
       const secondaryKey = findNavTargetKey(item.secondary_internal_route, navTargets)
 
       reset({
-        card_type: item.card_type,
+        card_type: item.card_type || 'info_card',
         title: item.title || '',
         subtitle: item.subtitle || '',
         description: item.description || '',
@@ -542,104 +382,261 @@ export function HomeSectionItemFormModal({
         button_text: item.button_text || '',
         button_color: item.button_color || '',
         button_text_color: item.button_text_color || '',
-        link_type: item.link_type,
-        external_url: item.external_url || '',
+        link_type: item.link_type || 'none',
         navigation_target_key: primaryKey,
         navigation_params: item.internal_params || {},
+        external_url: item.external_url || '',
         secondary_button_text: item.secondary_button_text || '',
-        secondary_link_type: item.secondary_link_type,
-        secondary_external_url: item.secondary_external_url || '',
+        secondary_link_type: item.secondary_link_type || 'none',
         secondary_navigation_target_key: secondaryKey,
         secondary_navigation_params: item.secondary_internal_params || {},
-        metadata: item.metadata?.length ? item.metadata.map(m => ({
+        secondary_external_url: item.secondary_external_url || '',
+        metadata: (item.metadata || []).map(m => ({
           label: m.label,
           value: m.value,
           icon_url: m.icon_url || '',
-        })) : [],
-        display_order: item.display_order,
-        is_active: item.is_active,
+        })),
+        display_order: item.display_order ?? 0,
+        is_active: item.is_active ?? true,
       })
-      setExistingImageUrl(item.image_url)
-      setExistingImageS3Key(item.image_s3_key)
-      setExistingIconUrl(item.icon_url)
-      setExistingIconS3Key(item.icon_s3_key)
+      setExistingImageUrl(item.image_url || null)
+      setExistingIconUrl(item.icon_url || null)
     } else {
-      reset(defaultValues)
+      reset(DEFAULT_VALUES)
       setExistingImageUrl(null)
-      setExistingImageS3Key(null)
       setExistingIconUrl(null)
-      setExistingIconS3Key(null)
     }
-  }, [open, mode, item, reset, navTargets])
 
-  const handleFormSubmit = async (data: ItemFormValues) => {
+    setFormReady(true)
+  }, [open, refDataReady]) // intentionally only open + refDataReady
+
+  // Clean up on close
+  useEffect(() => {
+    if (!open) {
+      setFormReady(false)
+      setRefDataReady(false)
+    }
+  }, [open])
+
+  // ── 3. Load entity lists when navigation target changes ─────────────────
+
+  const loadEntityList = useCallback(async (
+    key: string,
+    filters?: Record<string, string>,
+  ) => {
+    const cacheKey = filters ? `${key}:${JSON.stringify(filters)}` : key
+    if (fetchedKeysRef.current.has(cacheKey)) return
+    fetchedKeysRef.current.add(cacheKey)
+
+    setEntityLoading(prev => ({ ...prev, [key]: true }))
+    const items = await fetchEntityList(key, filters)
+    setEntityLists(prev => ({ ...prev, [key]: items }))
+    setEntityLoading(prev => ({ ...prev, [key]: false }))
+  }, [])
+
+  const loadEntitiesForTarget = useCallback((target: NavigationTarget | null) => {
+    if (!target) return
+    const neededKeys = new Set<string>()
+    for (const param of target.params) {
+      if (param.autoFrom || param.options || param.type === 'boolean') continue
+      const key = getEntityListKey(target.key, param.name)
+      if (key) neededKeys.add(key)
+    }
+    neededKeys.forEach(key => loadEntityList(key))
+  }, [loadEntityList])
+
+  // Load entities when primary nav target changes
+  useEffect(() => {
+    if (!formReady) return
+    loadEntitiesForTarget(selectedNavTarget)
+  }, [watchedNavTargetKey, formReady, loadEntitiesForTarget, selectedNavTarget])
+
+  // Load entities when secondary nav target changes
+  useEffect(() => {
+    if (!formReady) return
+    loadEntitiesForTarget(selectedSecondaryNavTarget)
+  }, [watchedSecondaryNavTargetKey, formReady, loadEntitiesForTarget, selectedSecondaryNavTarget])
+
+  // ── 4. Cascading: series filtered by packageId ──────────────────────────
+
+  useEffect(() => {
+    if (!formReady || !selectedNavTarget) return
+    const needsSeries = selectedNavTarget.params.some(
+      p => getEntityListKey(selectedNavTarget.key, p.name) === 'series'
+    )
+    if (!needsSeries) return
+
+    const pkgId = watchedNavParams?.packageId
+    if (pkgId) {
+      const cacheKey = `series:{"package_id":"${pkgId}"}`
+      if (!fetchedKeysRef.current.has(cacheKey)) {
+        fetchedKeysRef.current.add(cacheKey)
+        setEntityLoading(prev => ({ ...prev, series: true }))
+        fetchEntityList('series', { package_id: pkgId }).then(items => {
+          setEntityLists(prev => ({ ...prev, series: items }))
+          setEntityLoading(prev => ({ ...prev, series: false }))
+        })
+      }
+    }
+  }, [watchedNavParams?.packageId, formReady, selectedNavTarget])
+
+  // Same for secondary
+  useEffect(() => {
+    if (!formReady || !selectedSecondaryNavTarget) return
+    const needsSeries = selectedSecondaryNavTarget.params.some(
+      p => getEntityListKey(selectedSecondaryNavTarget.key, p.name) === 'series'
+    )
+    if (!needsSeries) return
+
+    const pkgId = watchedSecondaryNavParams?.packageId
+    if (pkgId) {
+      const cacheKey = `series:{"package_id":"${pkgId}"}`
+      if (!fetchedKeysRef.current.has(cacheKey)) {
+        fetchedKeysRef.current.add(cacheKey)
+        setEntityLoading(prev => ({ ...prev, series: true }))
+        fetchEntityList('series', { package_id: pkgId }).then(items => {
+          setEntityLists(prev => ({ ...prev, series: items }))
+          setEntityLoading(prev => ({ ...prev, series: false }))
+        })
+      }
+    }
+  }, [watchedSecondaryNavParams?.packageId, formReady, selectedSecondaryNavTarget])
+
+  // ── 5. Auto-populate packageType from selected package ──────────────────
+
+  useEffect(() => {
+    if (!formReady || !selectedNavTarget) return
+    const hasAutoType = selectedNavTarget.params.some(p => p.autoFrom === 'packageId')
+    if (!hasAutoType) return
+
+    const pkgId = watchedNavParams?.packageId
+    if (!pkgId || pkgId === prevPrimaryPkgRef.current) return
+
+    const pkg = entityLists['packages']?.find(e => e._id === pkgId)
+    if (pkg?.extra?.package_type) {
+      prevPrimaryPkgRef.current = pkgId
+      setValue('navigation_params', {
+        ...watchedNavParams,
+        packageType: pkg.extra.package_type,
+      })
+    }
+  }, [watchedNavParams?.packageId, entityLists['packages'], formReady, selectedNavTarget])
+
+  // Same for secondary
+  useEffect(() => {
+    if (!formReady || !selectedSecondaryNavTarget) return
+    const hasAutoType = selectedSecondaryNavTarget.params.some(p => p.autoFrom === 'packageId')
+    if (!hasAutoType) return
+
+    const pkgId = watchedSecondaryNavParams?.packageId
+    if (!pkgId || pkgId === prevSecondaryPkgRef.current) return
+
+    const pkg = entityLists['packages']?.find(e => e._id === pkgId)
+    if (pkg?.extra?.package_type) {
+      prevSecondaryPkgRef.current = pkgId
+      setValue('secondary_navigation_params', {
+        ...watchedSecondaryNavParams,
+        packageType: pkg.extra.package_type,
+      })
+    }
+  }, [watchedSecondaryNavParams?.packageId, entityLists['packages'], formReady, selectedSecondaryNavTarget])
+
+  // ── 6. PDF Viewer: auto-fill pdfUrl + title from documentId ─────────────
+
+  useEffect(() => {
+    if (!formReady) return
+    if (watchedNavTargetKey !== 'pdf_viewer') return
+
+    const docId = watchedNavParams?.documentId
+    if (!docId) return
+    const doc = entityLists['documents']?.find(e => e._id === docId)
+    if (doc) {
+      setValue('navigation_params', {
+        ...watchedNavParams,
+        pdfUrl: doc.extra?.file_url || '',
+        title: doc.label || '',
+      })
+    }
+  }, [watchedNavParams?.documentId, entityLists['documents'], formReady, watchedNavTargetKey])
+
+  // Same for secondary
+  useEffect(() => {
+    if (!formReady) return
+    if (watchedSecondaryNavTargetKey !== 'pdf_viewer') return
+
+    const docId = watchedSecondaryNavParams?.documentId
+    if (!docId) return
+    const doc = entityLists['documents']?.find(e => e._id === docId)
+    if (doc) {
+      setValue('secondary_navigation_params', {
+        ...watchedSecondaryNavParams,
+        pdfUrl: doc.extra?.file_url || '',
+        title: doc.label || '',
+      })
+    }
+  }, [watchedSecondaryNavParams?.documentId, entityLists['documents'], formReady, watchedSecondaryNavTargetKey])
+
+  // ── Image handling ──────────────────────────────────────────────────────
+
+  const handleImageSelect = useCallback((files: File[]) => {
+    if (files.length > 0) {
+      setImageCropFile(files[0])
+      setShowImageCropper(true)
+    }
+  }, [])
+
+  const handleIconSelect = useCallback((files: File[]) => {
+    if (files.length > 0) {
+      setIconCropFile(files[0])
+      setShowIconCropper(true)
+    }
+  }, [])
+
+  // ── Form submit ─────────────────────────────────────────────────────────
+
+  const onSubmit = async (data: FormValues) => {
+    setIsSubmitting(true)
     try {
+      let imageS3Key = item?.image_s3_key || undefined
+      let iconS3Key = item?.icon_s3_key || undefined
       let imageUrl = existingImageUrl || undefined
-      let imageS3Key = existingImageS3Key || undefined
       let iconUrl = existingIconUrl || undefined
-      let iconS3Key = existingIconS3Key || undefined
 
-      // Upload main image if new
+      // Upload image if new file selected
       if (imageFile.length > 0) {
         setUploadProgress(0)
-        try {
-          const result = await homeSectionsService.uploadItemImage(sectionId, imageFile[0], setUploadProgress)
-          imageUrl = result.imageUrl
-          imageS3Key = result.s3Key
-        } catch (err: any) {
-          toast.error(err.message || 'Failed to upload image')
-          setUploadProgress(null)
-          return
-        }
+        const result = await homeSectionsService.uploadItemImage(
+          sectionId, imageFile[0], (p) => setUploadProgress(p),
+        )
+        imageS3Key = result.s3Key
+        imageUrl = result.imageUrl
+        setUploadProgress(null)
       }
 
-      // Upload icon if new
+      // Upload icon if new file selected
       if (iconFile.length > 0) {
         setUploadProgress(0)
-        try {
-          const result = await homeSectionsService.uploadItemImage(sectionId, iconFile[0], setUploadProgress)
-          iconUrl = result.imageUrl
-          iconS3Key = result.s3Key
-        } catch (err: any) {
-          toast.error(err.message || 'Failed to upload icon')
-          setUploadProgress(null)
-          return
-        }
-      }
-      setUploadProgress(null)
-
-      // Build internal route/params from navigation target
-      let internalRoute: string | undefined
-      let internalParams: Record<string, string> | undefined
-      if (data.link_type === 'internal' && data.navigation_target_key) {
-        const target = navTargets.find(t => t.key === data.navigation_target_key)
-        if (target) {
-          internalRoute = target.route
-          internalParams = data.navigation_params && Object.keys(data.navigation_params).length > 0
-            ? data.navigation_params : undefined
-        }
+        const result = await homeSectionsService.uploadItemImage(
+          sectionId, iconFile[0], (p) => setUploadProgress(p),
+        )
+        iconS3Key = result.s3Key
+        iconUrl = result.imageUrl
+        setUploadProgress(null)
       }
 
-      let secondaryInternalRoute: string | undefined
-      let secondaryInternalParams: Record<string, string> | undefined
-      if (data.secondary_link_type === 'internal' && data.secondary_navigation_target_key) {
-        const target = navTargets.find(t => t.key === data.secondary_navigation_target_key)
-        if (target) {
-          secondaryInternalRoute = target.route
-          secondaryInternalParams = data.secondary_navigation_params && Object.keys(data.secondary_navigation_params).length > 0
-            ? data.secondary_navigation_params : undefined
-        }
-      }
+      // Build submission data
+      const target = navTargets.find(t => t.key === data.navigation_target_key)
+      const secondaryTarget = navTargets.find(t => t.key === data.secondary_navigation_target_key)
 
-      const formData: HomeSectionItemFormData = {
+      const submitData: HomeSectionItemFormData = {
         card_type: data.card_type,
         title: data.title || undefined,
         subtitle: data.subtitle || undefined,
         description: data.description || undefined,
-        image_url: imageUrl,
-        image_s3_key: imageS3Key,
-        icon_url: iconUrl,
-        icon_s3_key: iconS3Key,
+        image_url: imageUrl || undefined,
+        image_s3_key: imageS3Key || undefined,
+        icon_url: iconUrl || undefined,
+        icon_s3_key: iconS3Key || undefined,
         tag_label: data.tag_label || undefined,
         tag_color: data.tag_color || undefined,
         background_color: data.background_color || undefined,
@@ -648,628 +645,630 @@ export function HomeSectionItemFormModal({
         button_text: data.button_text || undefined,
         button_color: data.button_color || undefined,
         button_text_color: data.button_text_color || undefined,
-        link_type: data.link_type,
-        external_url: data.link_type === 'external' ? (data.external_url || undefined) : undefined,
-        internal_route: internalRoute,
-        internal_params: internalParams,
+        link_type: data.link_type || 'none',
+        external_url: data.link_type === 'external' ? data.external_url || undefined : undefined,
+        internal_route: data.link_type === 'internal' && target ? target.route : undefined,
+        internal_params: data.link_type === 'internal' && target
+          ? data.navigation_params || undefined
+          : undefined,
         secondary_button_text: data.secondary_button_text || undefined,
-        secondary_link_type: data.secondary_link_type,
-        secondary_external_url: data.secondary_link_type === 'external' ? (data.secondary_external_url || undefined) : undefined,
-        secondary_internal_route: secondaryInternalRoute,
-        secondary_internal_params: secondaryInternalParams,
-        metadata: data.metadata?.length ? data.metadata.map(m => ({
-          label: m.label,
-          value: m.value,
-          icon_url: m.icon_url || undefined,
-        })) : undefined,
-        display_order: typeof data.display_order === 'number' && !isNaN(data.display_order) ? data.display_order : undefined,
+        secondary_link_type: data.secondary_link_type || 'none',
+        secondary_external_url: data.secondary_link_type === 'external'
+          ? data.secondary_external_url || undefined : undefined,
+        secondary_internal_route: data.secondary_link_type === 'internal' && secondaryTarget
+          ? secondaryTarget.route : undefined,
+        secondary_internal_params: data.secondary_link_type === 'internal' && secondaryTarget
+          ? data.secondary_navigation_params || undefined
+          : undefined,
+        metadata: data.metadata && data.metadata.length > 0 ? data.metadata : undefined,
+        display_order: data.display_order,
         is_active: data.is_active,
       }
 
-      await onSubmit(formData)
-      onClose()
-    } catch (error) {
-      console.error('Form submission error:', error)
+      // Clear image/icon fields if removed (send null so backend clears them)
+      if (!imageFile.length && !existingImageUrl) {
+        submitData.image_url = undefined
+        submitData.image_s3_key = undefined
+      }
+      if (!iconFile.length && !existingIconUrl) {
+        submitData.icon_url = undefined
+        submitData.icon_s3_key = undefined
+      }
+
+      if (mode === 'edit' && item) {
+        const res = await homeSectionsService.updateItem(sectionId, item._id, submitData)
+        if (res.success) {
+          toast.success('Item updated successfully')
+          onSuccess()
+          onOpenChange(false)
+        } else {
+          toast.error(res.message || 'Failed to update item')
+        }
+      } else {
+        const res = await homeSectionsService.createItem(sectionId, submitData)
+        if (res.success) {
+          toast.success('Item created successfully')
+          onSuccess()
+          onOpenChange(false)
+        } else {
+          toast.error(res.message || 'Failed to create item')
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'An error occurred')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleClose = () => { if (!isSubmitting && uploadProgress === null) onClose() }
-  const isUploading = uploadProgress !== null
-  const disabled = isSubmitting || isUploading
+  // ── Render nav params for a given target ────────────────────────────────
 
-  // Image handlers
-  const handleImageSelected = (files: File[]) => {
-    if (files.length > 0) {
-      setImageCropperFile(files[0])
-      setShowImageCropper(true)
-    }
-  }
-  const handleImageCropComplete = (croppedFile: File) => {
-    setImageFile([croppedFile])
-    setShowImageCropper(false)
-    setImageCropperFile(null)
-  }
-  const handleIconSelected = (files: File[]) => {
-    if (files.length > 0) {
-      setIconCropperFile(files[0])
-      setShowIconCropper(true)
-    }
-  }
-  const handleIconCropComplete = (croppedFile: File) => {
-    setIconFile([croppedFile])
-    setShowIconCropper(false)
-    setIconCropperFile(null)
-  }
+  const renderNavParams = (
+    target: NavigationTarget,
+    paramsFieldName: 'navigation_params' | 'secondary_navigation_params',
+    currentParams: Record<string, string> | undefined,
+  ) => {
+    return target.params.map(param => {
+      const paramValue = currentParams?.[param.name] || ''
 
-  // Render navigation param fields
-  function renderNavParams(
-    target: NavigationTarget | undefined,
-    prefix: 'navigation_params' | 'secondary_navigation_params',
-  ) {
-    if (!target || target.params.length === 0) return null
-    const params: Record<string, string> = watch(prefix) || {}
+      const setParamValue = (val: string) => {
+        setValue(paramsFieldName, { ...currentParams, [param.name]: val })
+      }
 
-    return (
-      <div className="space-y-2 pl-4 border-l-2 border-muted">
-        <p className="text-xs font-medium text-muted-foreground">Route Parameters</p>
-        {target.params.map(param => {
-          const entityKey = getEntityListKey(target.key, param.name)
-          const isPdfAutoField = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
-          const isAutoFromPackage = param.autoFrom === 'packageId'
+      // Auto-derived param (e.g., packageType from packageId) — show read-only
+      if (param.autoFrom) {
+        return (
+          <div key={param.name} className="space-y-1">
+            <Label className="text-xs">{param.label} <span className="text-muted-foreground">(auto)</span></Label>
+            <Input
+              className="h-8 text-xs bg-muted"
+              value={paramValue}
+              readOnly
+              placeholder="Auto-derived..."
+            />
+          </div>
+        )
+      }
 
-          // Filter packages by type if filterPackageType is set (e.g. theory_series only shows Theory packages)
-          let dropdownItems = entityKey ? (entityLists[entityKey] || []) : []
-          if (entityKey === 'packages' && param.filterPackageType) {
-            dropdownItems = dropdownItems.filter(p => p.extra?.packageType === param.filterPackageType)
-          }
+      // Boolean param
+      if (param.type === 'boolean') {
+        return (
+          <div key={param.name} className="space-y-1">
+            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
+            <Select value={paramValue} onValueChange={setParamValue}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">Yes</SelectItem>
+                <SelectItem value="false">No</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )
+      }
 
+      // Enum options param (e.g., packageType with predefined options)
+      if (param.options && param.options.length > 0) {
+        return (
+          <div key={param.name} className="space-y-1">
+            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
+            <Select value={paramValue} onValueChange={setParamValue}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {param.options.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )
+      }
+
+      // Entity dropdown param (packageId, documentId, id, etc.)
+      const entityKey = getEntityListKey(target.key, param.name)
+      if (entityKey) {
+        let items = entityLists[entityKey] || []
+        const loading = entityLoading[entityKey] || false
+
+        // Client-side filter: for theory_series/practical_series, only show matching package type
+        if (entityKey === 'packages' && param.filterPackageType) {
+          items = items.filter(i => i.extra?.package_type === param.filterPackageType)
+        }
+
+        // PDF viewer: pdfUrl and title are auto-filled from document
+        const isPdfAuto = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
+        if (isPdfAuto) {
           return (
             <div key={param.name} className="space-y-1">
-              <Label className="text-xs">
-                {param.label}
-                {param.required && <span className="text-red-500 ml-0.5">*</span>}
-                {isAutoFromPackage && <span className="text-muted-foreground ml-1">(auto)</span>}
-              </Label>
-
-              {isAutoFromPackage ? (
-                // Auto-derived from selected package — read-only
-                <Input
-                  className="h-8 text-xs bg-muted"
-                  placeholder={params['packageId'] ? 'Auto-filled from package' : 'Select a package first'}
-                  value={params[param.name] || ''}
-                  readOnly
-                  disabled={disabled}
-                />
-              ) : param.type === 'boolean' ? (
-                <Select
-                  value={params[param.name] || ''}
-                  onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
-                  disabled={disabled}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="true">Yes</SelectItem>
-                    <SelectItem value="false">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : param.options ? (
-                <Select
-                  value={params[param.name] || ''}
-                  onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
-                  disabled={disabled}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {param.options.map(opt => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : isPdfAutoField ? (
-                // PDF Viewer auto-populated read-only fields
-                <Input
-                  className="h-8 text-xs bg-muted"
-                  placeholder={params['documentId'] ? 'Auto-filled from document' : `Select a document first`}
-                  value={params[param.name] || ''}
-                  readOnly
-                  disabled={disabled}
-                />
-              ) : entityKey ? (
-                // Searchable entity dropdown (with optional type filtering)
-                <EntityCombobox
-                  items={dropdownItems}
-                  loading={entityListsLoading[entityKey] || false}
-                  value={params[param.name] || ''}
-                  onSelect={(id) => setValue(prefix, { ...params, [param.name]: id })}
-                  placeholder={`Select ${param.label}...`}
-                  disabled={disabled}
-                />
-              ) : (
-                <Input
-                  className="h-8 text-xs"
-                  placeholder={param.label}
-                  value={params[param.name] || ''}
-                  onChange={(e) => setValue(prefix, { ...params, [param.name]: e.target.value })}
-                  disabled={disabled}
-                />
-              )}
+              <Label className="text-xs">{param.label} <span className="text-muted-foreground">(auto)</span></Label>
+              <Input
+                className="h-8 text-xs bg-muted"
+                value={paramValue}
+                readOnly
+                placeholder="Auto-filled from document..."
+              />
             </div>
           )
-        })}
+        }
+
+        return (
+          <div key={param.name} className="space-y-1">
+            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
+            <EntityCombobox
+              items={items}
+              loading={loading}
+              value={paramValue}
+              onSelect={setParamValue}
+              placeholder={`Select ${param.label.toLowerCase()}...`}
+            />
+          </div>
+        )
+      }
+
+      // Fallback: plain text input for pdfUrl, title (pdf_viewer), etc.
+      const isPdfAutoFill = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
+      return (
+        <div key={param.name} className="space-y-1">
+          <Label className="text-xs">
+            {param.label}{param.required && ' *'}
+            {isPdfAutoFill && <span className="text-muted-foreground"> (auto)</span>}
+          </Label>
+          <Input
+            className={cn("h-8 text-xs", isPdfAutoFill && "bg-muted")}
+            value={paramValue}
+            onChange={e => setParamValue(e.target.value)}
+            readOnly={isPdfAutoFill}
+            placeholder={isPdfAutoFill ? 'Auto-filled from document...' : `Enter ${param.label.toLowerCase()}...`}
+          />
+        </div>
+      )
+    })
+  }
+
+  // ── Render a link type section (primary or secondary) ───────────────────
+
+  const renderLinkSection = (
+    prefix: '' | 'secondary_',
+    linkType: string | undefined,
+    navTargetKey: string | undefined,
+    navParams: Record<string, string> | undefined,
+    target: NavigationTarget | null,
+  ) => {
+    const linkTypeField = `${prefix}link_type` as const
+    const navKeyField = `${prefix}navigation_target_key` as const
+    const navParamsField = `${prefix}navigation_params` as const
+    const externalUrlField = `${prefix}external_url` as const
+    const buttonTextField = `${prefix}button_text` as const
+
+    return (
+      <div className="space-y-3">
+        {/* Button Text */}
+        <div className="space-y-1">
+          <Label className="text-xs">{prefix === 'secondary_' ? 'Secondary ' : ''}Button Text</Label>
+          <Input className="h-8 text-xs" {...register(buttonTextField as any)} placeholder="e.g. View Details" />
+        </div>
+
+        {/* Link Type */}
+        <div className="space-y-1">
+          <Label className="text-xs">{prefix === 'secondary_' ? 'Secondary ' : ''}Link Type</Label>
+          <Select
+            value={linkType || 'none'}
+            onValueChange={(val) => {
+              setValue(linkTypeField as any, val)
+              if (val !== 'internal') {
+                setValue(navKeyField as any, '')
+                setValue(navParamsField as any, {})
+              }
+              if (val !== 'external') {
+                setValue(externalUrlField as any, '')
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="internal">Internal Navigation</SelectItem>
+              <SelectItem value="external">External URL</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* External URL */}
+        {linkType === 'external' && (
+          <div className="space-y-1">
+            <Label className="text-xs">External URL *</Label>
+            <Input className="h-8 text-xs" {...register(externalUrlField as any)} placeholder="https://..." />
+            {(errors as any)?.[externalUrlField] && (
+              <p className="text-xs text-destructive">{(errors as any)[externalUrlField]?.message}</p>
+            )}
+          </div>
+        )}
+
+        {/* Internal Navigation */}
+        {linkType === 'internal' && (
+          <div className="space-y-3">
+            {/* Navigation Target Selector */}
+            <div className="space-y-1">
+              <Label className="text-xs">Navigation Target *</Label>
+              <Select
+                value={navTargetKey || ''}
+                onValueChange={(val) => {
+                  setValue(navKeyField as any, val)
+                  setValue(navParamsField as any, {})
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select screen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {navTargets.map(t => (
+                    <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Route Params */}
+            {target && target.params.length > 0 && (
+              <div className="space-y-2 pl-3 border-l-2 border-muted">
+                <Label className="text-xs text-muted-foreground">Route Parameters</Label>
+                {renderNavParams(target, navParamsField as any, navParams)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
 
+  // ── Main render ─────────────────────────────────────────────────────────
+
   return (
     <>
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'Add Item' : 'Edit Item'}</DialogTitle>
-          <DialogDescription>
-            {mode === 'create'
-              ? 'Create a new item in this section.'
-              : 'Update the item details.'}
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{mode === 'edit' ? 'Edit Item' : 'Add Item'}</DialogTitle>
+            <DialogDescription>
+              {mode === 'edit' ? 'Update this home section item.' : 'Add a new item to this section.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        {refLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Loading form options...</span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-            {/* ─── Card Type ─────────────────────────────────── */}
-            <div className="space-y-2">
-              <Label>Card Type <span className="text-red-500">*</span></Label>
-              <Select
-                value={cardType}
-                onValueChange={(v) => setValue('card_type', v)}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a card type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {cardTypes.map(ct => (
-                    <SelectItem key={ct.key} value={ct.key}>{ct.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedCardType && (
-                <p className="text-xs text-muted-foreground">{selectedCardType.description}</p>
-              )}
-              {errors.card_type && <p className="text-sm text-red-500">{errors.card_type.message}</p>}
+          {!formReady ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-
-            {/* ─── Content ───────────────────────────────────── */}
-            <fieldset className="space-y-4 rounded-lg border p-4">
-              <legend className="px-2 text-sm font-medium">Content</legend>
-
-              <div className="space-y-2">
-                <Label htmlFor="item-title">Title</Label>
-                <Input id="item-title" placeholder="Item title" disabled={disabled} {...register('title')} />
-                {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="item-subtitle">Subtitle</Label>
-                <Input id="item-subtitle" placeholder="Optional subtitle" disabled={disabled} {...register('subtitle')} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="item-description">Description</Label>
-                <Textarea id="item-description" placeholder="Optional description" rows={3} disabled={disabled} {...register('description')} />
-              </div>
-
-              {/* Image upload */}
-              <div className="space-y-2">
-                <Label>Image</Label>
-                {imageFile.length > 0 ? (
-                  <div className="relative rounded-lg border overflow-hidden">
-                    <img src={imagePreviewUrl!} alt="Cropped" className="w-full h-32 object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7"
-                      onClick={() => setImageFile([])} disabled={disabled}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : existingImageUrl ? (
-                  <div className="relative rounded-lg border overflow-hidden">
-                    <img src={existingImageUrl} alt="Current" className="w-full h-32 object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7"
-                      onClick={() => { setExistingImageUrl(null); setExistingImageS3Key(null) }} disabled={disabled}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <FileUpload
-                    accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }}
-                    maxSize={5 * 1024 * 1024}
-                    maxFiles={1}
-                    value={[]}
-                    onChange={handleImageSelected}
-                    disabled={disabled}
-                    label="Upload image"
-                    description="JPEG, PNG, or WebP. Max 5MB. Cropped to 16:9."
-                  />
-                )}
-              </div>
-
-              {/* Icon upload */}
-              <div className="space-y-2">
-                <Label>Icon</Label>
-                {iconFile.length > 0 ? (
-                  <div className="relative inline-block rounded-lg border overflow-hidden">
-                    <img src={iconPreviewUrl!} alt="Cropped icon" className="h-16 w-16 object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-5 w-5"
-                      onClick={() => setIconFile([])} disabled={disabled}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : existingIconUrl ? (
-                  <div className="relative inline-block rounded-lg border overflow-hidden">
-                    <img src={existingIconUrl} alt="Current icon" className="h-16 w-16 object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-5 w-5"
-                      onClick={() => { setExistingIconUrl(null); setExistingIconS3Key(null) }} disabled={disabled}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <FileUpload
-                    accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }}
-                    maxSize={2 * 1024 * 1024}
-                    maxFiles={1}
-                    value={[]}
-                    onChange={handleIconSelected}
-                    disabled={disabled}
-                    label="Upload icon"
-                    description="Square icon. Max 2MB. Cropped to 1:1."
-                  />
-                )}
-              </div>
-
-              {/* Tag */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tag_label">Tag Label</Label>
-                  <Input id="tag_label" placeholder="e.g. NEW" disabled={disabled} {...register('tag_label')} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tag_color">Tag Color</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="tag_color" placeholder="#FF5722" disabled={disabled} {...register('tag_color')} />
-                    <ColorSwatch color={tagColor} />
-                  </div>
-                  {errors.tag_color && <p className="text-sm text-red-500">{errors.tag_color.message}</p>}
-                </div>
-              </div>
-            </fieldset>
-
-            {/* ─── Styling ───────────────────────────────────── */}
-            <fieldset className="space-y-4 rounded-lg border p-4">
-              <legend className="px-2 text-sm font-medium">Styling</legend>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="bg_color">Background</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="bg_color" placeholder="#FFFFFF" disabled={disabled} {...register('background_color')} />
-                    <ColorSwatch color={bgColor} />
-                  </div>
-                  {errors.background_color && <p className="text-sm text-red-500">{errors.background_color.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="txt_color">Text</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="txt_color" placeholder="#000000" disabled={disabled} {...register('text_color')} />
-                    <ColorSwatch color={txtColor} />
-                  </div>
-                  {errors.text_color && <p className="text-sm text-red-500">{errors.text_color.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bdr_color">Border</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="bdr_color" placeholder="#E0E0E0" disabled={disabled} {...register('border_color')} />
-                    <ColorSwatch color={borderColor} />
-                  </div>
-                  {errors.border_color && <p className="text-sm text-red-500">{errors.border_color.message}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="button_text">Button Text</Label>
-                <Input id="button_text" placeholder="e.g. Learn More" disabled={disabled} {...register('button_text')} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="btn_color">Button Color</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="btn_color" placeholder="#1976D2" disabled={disabled} {...register('button_color')} />
-                    <ColorSwatch color={btnColor} />
-                  </div>
-                  {errors.button_color && <p className="text-sm text-red-500">{errors.button_color.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="btn_txt_color">Button Text Color</Label>
-                  <div className="flex items-center gap-2">
-                    <Input id="btn_txt_color" placeholder="#FFFFFF" disabled={disabled} {...register('button_text_color')} />
-                    <ColorSwatch color={btnTxtColor} />
-                  </div>
-                  {errors.button_text_color && <p className="text-sm text-red-500">{errors.button_text_color.message}</p>}
-                </div>
-              </div>
-            </fieldset>
-
-            {/* ─── Primary Action ─────────────────────────────── */}
-            <fieldset className="space-y-4 rounded-lg border p-4">
-              <legend className="px-2 text-sm font-medium">Primary Action</legend>
-
-              <div className="space-y-2">
-                <Label>Link Type</Label>
-                <Select
-                  value={linkType}
-                  onValueChange={(v) => {
-                    setValue('link_type', v as 'none' | 'internal' | 'external')
-                    setValue('external_url', '')
-                    setValue('navigation_target_key', '')
-                    setValue('navigation_params', {})
-                  }}
-                  disabled={disabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="internal">Internal Navigation</SelectItem>
-                    <SelectItem value="external">External URL</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {linkType === 'external' && (
-                <div className="space-y-2">
-                  <Label htmlFor="external_url">External URL</Label>
-                  <Input id="external_url" placeholder="https://..." disabled={disabled} {...register('external_url')} />
-                </div>
-              )}
-
-              {linkType === 'internal' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Navigation Target</Label>
-                    <Select
-                      value={navTargetKey || ''}
-                      onValueChange={(v) => {
-                        setValue('navigation_target_key', v)
-                        setValue('navigation_params', {})
-                      }}
-                      disabled={disabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select screen..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {navTargets.map(t => (
-                          <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedNavTarget && (
-                      <p className="text-xs text-muted-foreground">Route: {selectedNavTarget.route}</p>
-                    )}
-                  </div>
-                  {renderNavParams(selectedNavTarget, 'navigation_params')}
-                </>
-              )}
-            </fieldset>
-
-            {/* ─── Secondary Action ──────────────────────────── */}
-            <fieldset className="space-y-4 rounded-lg border p-4">
-              <legend className="px-2 text-sm font-medium">Secondary Action</legend>
-
-              <div className="space-y-2">
-                <Label htmlFor="secondary_button_text">Button Text</Label>
-                <Input id="secondary_button_text" placeholder="e.g. View Details" disabled={disabled} {...register('secondary_button_text')} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Link Type</Label>
-                <Select
-                  value={secondaryLinkType}
-                  onValueChange={(v) => {
-                    setValue('secondary_link_type', v as 'none' | 'internal' | 'external')
-                    setValue('secondary_external_url', '')
-                    setValue('secondary_navigation_target_key', '')
-                    setValue('secondary_navigation_params', {})
-                  }}
-                  disabled={disabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="internal">Internal Navigation</SelectItem>
-                    <SelectItem value="external">External URL</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {secondaryLinkType === 'external' && (
-                <div className="space-y-2">
-                  <Label htmlFor="secondary_external_url">External URL</Label>
-                  <Input id="secondary_external_url" placeholder="https://..." disabled={disabled} {...register('secondary_external_url')} />
-                </div>
-              )}
-
-              {secondaryLinkType === 'internal' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Navigation Target</Label>
-                    <Select
-                      value={secondaryNavTargetKey || ''}
-                      onValueChange={(v) => {
-                        setValue('secondary_navigation_target_key', v)
-                        setValue('secondary_navigation_params', {})
-                      }}
-                      disabled={disabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select screen..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {navTargets.map(t => (
-                          <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {secondaryNavTarget && (
-                      <p className="text-xs text-muted-foreground">Route: {secondaryNavTarget.route}</p>
-                    )}
-                  </div>
-                  {renderNavParams(secondaryNavTarget, 'secondary_navigation_params')}
-                </>
-              )}
-            </fieldset>
-
-            {/* ─── Metadata ──────────────────────────────────── */}
-            <fieldset className="space-y-4 rounded-lg border p-4">
-              <legend className="px-2 text-sm font-medium">
-                Metadata <span className="text-xs text-muted-foreground font-normal">({metadataFields.length}/10)</span>
-              </legend>
-
-              {metadataFields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-7 gap-2 items-start">
-                  <div className="col-span-2 space-y-1">
-                    {index === 0 && <Label className="text-xs">Label</Label>}
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="Label"
-                      disabled={disabled}
-                      {...register(`metadata.${index}.label`)}
-                    />
-                    {errors.metadata?.[index]?.label && (
-                      <p className="text-[10px] text-red-500">{errors.metadata[index].label?.message}</p>
-                    )}
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    {index === 0 && <Label className="text-xs">Value</Label>}
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="Value"
-                      disabled={disabled}
-                      {...register(`metadata.${index}.value`)}
-                    />
-                    {errors.metadata?.[index]?.value && (
-                      <p className="text-[10px] text-red-500">{errors.metadata[index].value?.message}</p>
-                    )}
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    {index === 0 && <Label className="text-xs">Icon URL</Label>}
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="Optional icon URL"
-                      disabled={disabled}
-                      {...register(`metadata.${index}.icon_url`)}
-                    />
-                  </div>
-                  <div className={index === 0 ? 'pt-5' : ''}>
-                    <Button
-                      type="button" variant="ghost" size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeMeta(index)}
-                      disabled={disabled}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-
-              {metadataFields.length < 10 && (
-                <Button
-                  type="button" variant="outline" size="sm"
-                  onClick={() => appendMeta({ label: '', value: '', icon_url: '' })}
-                  disabled={disabled}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />Add Entry
-                </Button>
-              )}
-            </fieldset>
-
-            {/* ─── Order & Active ─────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="item-order">Display Order</Label>
-                <Input id="item-order" type="number" min={0} disabled={disabled} {...register('display_order', { valueAsNumber: true })} />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="item-active" className="text-sm">Active</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {isActive ? 'Visible' : 'Hidden'}
-                  </p>
-                </div>
-                <Switch
-                  id="item-active"
-                  checked={isActive}
-                  onCheckedChange={(c) => setValue('is_active', c)}
-                  disabled={disabled}
-                />
-              </div>
-            </div>
-
-            {/* Upload progress */}
-            {uploadProgress !== null && (
+          ) : (
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* ── Card Type ── */}
               <div className="space-y-1">
-                <Progress value={uploadProgress} className="h-2" />
-                <p className="text-xs text-muted-foreground">Uploading... {uploadProgress}%</p>
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose} disabled={disabled}>Cancel</Button>
-              <Button type="submit" disabled={disabled}>
-                {isSubmitting || isUploading ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isUploading ? 'Uploading...' : mode === 'create' ? 'Creating...' : 'Updating...'}</>
-                ) : (
-                  <>{mode === 'create' ? 'Add Item' : 'Update Item'}</>
+                <Label className="text-sm font-medium">Card Type *</Label>
+                <Select value={watch('card_type')} onValueChange={(val) => setValue('card_type', val)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cardTypes.map(ct => (
+                      <SelectItem key={ct.key} value={ct.key}>
+                        <div>
+                          <span>{ct.label}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{ct.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.card_type && (
+                  <p className="text-xs text-destructive">{errors.card_type.message}</p>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+              </div>
 
-    {/* Image Cropper */}
-    <ImageCropper
-      file={imageCropperFile}
-      open={showImageCropper}
-      onClose={() => { setShowImageCropper(false); setImageCropperFile(null) }}
-      onCropComplete={handleImageCropComplete}
-      aspectRatio={IMAGE_ASPECT_RATIO}
-      title="Crop Image"
-      description="Adjust the crop area (16:9 ratio)."
-    />
+              {/* ── Content Fields ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Content</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Title</Label>
+                    <Input className="h-8 text-xs" {...register('title')} placeholder="Item title" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Subtitle</Label>
+                    <Input className="h-8 text-xs" {...register('subtitle')} placeholder="Item subtitle" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Description</Label>
+                  <Textarea className="text-xs min-h-15" {...register('description')} placeholder="Item description" />
+                </div>
+              </div>
 
-    {/* Icon Cropper */}
-    <ImageCropper
-      file={iconCropperFile}
-      open={showIconCropper}
-      onClose={() => { setShowIconCropper(false); setIconCropperFile(null) }}
-      onCropComplete={handleIconCropComplete}
-      aspectRatio={ICON_ASPECT_RATIO}
-      title="Crop Icon"
-      description="Adjust the crop area (square 1:1 ratio)."
-    />
+              {/* ── Tag ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Tag</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tag Label</Label>
+                    <Input className="h-8 text-xs" {...register('tag_label')} placeholder="e.g. New, Popular" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tag Color</Label>
+                    <Input className="h-8 text-xs" {...register('tag_color')} placeholder="#FF5733" />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Image & Icon ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Media</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Image</Label>
+                    {existingImageUrl && !imageFile.length && (
+                      <div className="relative mb-2">
+                        <img src={existingImageUrl} alt="Current" className="w-full h-24 object-cover rounded border" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-5 w-5"
+                          onClick={() => setExistingImageUrl(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    {imageFile.length > 0 && (
+                      <div className="relative mb-2">
+                        <img src={URL.createObjectURL(imageFile[0])} alt="New" className="w-full h-24 object-cover rounded border" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-5 w-5"
+                          onClick={() => setImageFile([])}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    <FileUpload
+                      accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp'] }}
+                      maxSize={5 * 1024 * 1024}
+                      maxFiles={1}
+                      value={[]}
+                      onChange={handleImageSelect}
+                      label="Upload image"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Icon</Label>
+                    {existingIconUrl && !iconFile.length && (
+                      <div className="relative mb-2">
+                        <img src={existingIconUrl} alt="Current icon" className="w-12 h-12 object-contain rounded border" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-0 right-0 h-5 w-5"
+                          onClick={() => setExistingIconUrl(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    {iconFile.length > 0 && (
+                      <div className="relative mb-2">
+                        <img src={URL.createObjectURL(iconFile[0])} alt="New icon" className="w-12 h-12 object-contain rounded border" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-0 right-0 h-5 w-5"
+                          onClick={() => setIconFile([])}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    <FileUpload
+                      accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp'] }}
+                      maxSize={2 * 1024 * 1024}
+                      maxFiles={1}
+                      value={[]}
+                      onChange={handleIconSelect}
+                      label="Upload icon"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Styling ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Styling</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Background Color</Label>
+                    <Input className="h-8 text-xs" {...register('background_color')} placeholder="#FFFFFF" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Text Color</Label>
+                    <Input className="h-8 text-xs" {...register('text_color')} placeholder="#000000" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Border Color</Label>
+                    <Input className="h-8 text-xs" {...register('border_color')} placeholder="#E5E7EB" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Button Color</Label>
+                    <Input className="h-8 text-xs" {...register('button_color')} placeholder="#3B82F6" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Button Text Color</Label>
+                    <Input className="h-8 text-xs" {...register('button_text_color')} placeholder="#FFFFFF" />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Primary Action ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Primary Action</h4>
+                {renderLinkSection(
+                  '',
+                  watchedLinkType,
+                  watchedNavTargetKey,
+                  watchedNavParams,
+                  selectedNavTarget,
+                )}
+              </div>
+
+              {/* ── Secondary Action ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Secondary Action</h4>
+                {renderLinkSection(
+                  'secondary_',
+                  watchedSecondaryLinkType,
+                  watchedSecondaryNavTargetKey,
+                  watchedSecondaryNavParams,
+                  selectedSecondaryNavTarget,
+                )}
+              </div>
+
+              {/* ── Metadata ── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium">Metadata</h4>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => appendMetadata({ label: '', value: '', icon_url: '' })}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add Entry
+                  </Button>
+                </div>
+                {metadataFields.map((field, index) => (
+                  <div key={field.id} className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-1">
+                      <Input
+                        className="h-7 text-xs"
+                        {...register(`metadata.${index}.label`)}
+                        placeholder="Label"
+                      />
+                      {errors.metadata?.[index]?.label && (
+                        <p className="text-xs text-destructive">{errors.metadata[index]?.label?.message}</p>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Input
+                        className="h-7 text-xs"
+                        {...register(`metadata.${index}.value`)}
+                        placeholder="Value"
+                      />
+                      {errors.metadata?.[index]?.value && (
+                        <p className="text-xs text-destructive">{errors.metadata[index]?.value?.message}</p>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Input
+                        className="h-7 text-xs"
+                        {...register(`metadata.${index}.icon_url`)}
+                        placeholder="Icon URL (optional)"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      onClick={() => removeMetadata(index)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Settings ── */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Settings</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Display Order</Label>
+                    <Input
+                      className="h-8 text-xs"
+                      type="number"
+                      min={0}
+                      {...register('display_order', { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-4">
+                    <Switch
+                      checked={watch('is_active') ?? true}
+                      onCheckedChange={(val) => setValue('is_active', val)}
+                    />
+                    <Label className="text-xs">Active</Label>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Upload Progress ── */}
+              {uploadProgress !== null && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Uploading...</Label>
+                  <Progress value={uploadProgress} className="h-2" />
+                </div>
+              )}
+
+              {/* ── Actions ── */}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {mode === 'edit' ? 'Update' : 'Create'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Cropper */}
+      <ImageCropper
+        file={imageCropFile}
+        open={showImageCropper}
+        onClose={() => setShowImageCropper(false)}
+        onCropComplete={(croppedFile) => {
+          setImageFile([croppedFile])
+          setShowImageCropper(false)
+        }}
+        aspectRatio={16 / 9}
+        title="Crop Image"
+      />
+
+      {/* Icon Cropper */}
+      <ImageCropper
+        file={iconCropFile}
+        open={showIconCropper}
+        onClose={() => setShowIconCropper(false)}
+        onCropComplete={(croppedFile) => {
+          setIconFile([croppedFile])
+          setShowIconCropper(false)
+        }}
+        aspectRatio={1}
+        title="Crop Icon"
+      />
     </>
   )
 }
