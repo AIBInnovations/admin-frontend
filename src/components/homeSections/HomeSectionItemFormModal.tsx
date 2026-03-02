@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,15 +14,25 @@ import { Progress } from '@/components/ui/progress'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
-import { Loader2, X, Plus, Trash2 } from 'lucide-react'
+import { Loader2, X, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
   HomeSectionItem, HomeSectionItemFormData,
   CardTypeInfo, NavigationTarget,
   homeSectionsService,
 } from '@/services/homeSections.service'
+import { packagesService } from '@/services/packages.service'
+import { seriesService } from '@/services/series.service'
+import { videosService } from '@/services/videos.service'
+import { liveSessionsService } from '@/services/liveSessions.service'
+import { documentsService } from '@/services/documents.service'
 
 const hexColorRegex = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/
 
@@ -83,6 +93,89 @@ function ColorSwatch({ color }: { color: string }) {
 const IMAGE_ASPECT_RATIO = 16 / 9
 const ICON_ASPECT_RATIO = 1
 
+// ─── Entity dropdown infrastructure ──────────────────────────────────
+interface EntityOption {
+  _id: string
+  label: string
+  extra?: Record<string, string>  // e.g. { file_url: '...' } for documents
+}
+
+/**
+ * Resolves which entity list key to use for a given target+param combination.
+ * Returns null if the param should NOT be a dropdown (boolean, enum, or free text).
+ */
+function getEntityListKey(targetKey: string, paramName: string): string | null {
+  // Params handled by boolean/enum selects — not dropdowns
+  if (paramName === 'subscribed' || paramName === 'packageType') return null
+  // PDF viewer auto-populated fields
+  if (paramName === 'pdfUrl' || (paramName === 'title' && targetKey === 'pdf_viewer')) return null
+
+  // Non-ambiguous param names
+  if (paramName === 'packageId') return 'packages'
+  if (paramName === 'documentId') return 'documents'
+
+  // Ambiguous 'id' param — depends on target
+  if (paramName === 'id') {
+    switch (targetKey) {
+      case 'series_detail': return 'series'
+      case 'lecture':
+      case 'video_player': return 'videos'
+      case 'live_session': return 'liveSessions'
+    }
+  }
+  return null
+}
+
+/** Fetch entities from a service with { _id, label } format */
+async function fetchEntityList(
+  listKey: string,
+  filterParams?: Record<string, string>,
+): Promise<EntityOption[]> {
+  try {
+    const params = { limit: 200, ...filterParams }
+    switch (listKey) {
+      case 'packages': {
+        const res = await packagesService.getAll(params)
+        return res.success && res.data
+          ? res.data.entities.map(e => ({ _id: e._id, label: e.name }))
+          : []
+      }
+      case 'series': {
+        const res = await seriesService.getAll(params as any)
+        return res.success && res.data
+          ? res.data.entities.map(e => ({ _id: e._id, label: e.name }))
+          : []
+      }
+      case 'videos': {
+        const res = await videosService.getAll(params as any)
+        return res.success && res.data
+          ? res.data.entities.map(e => ({ _id: e._id, label: e.title }))
+          : []
+      }
+      case 'liveSessions': {
+        const res = await liveSessionsService.getAll(params as any)
+        return res.success && res.data
+          ? res.data.entities.map(e => ({ _id: e._id, label: e.title }))
+          : []
+      }
+      case 'documents': {
+        const res = await documentsService.getAll(params as any)
+        return res.success && res.data
+          ? res.data.entities.map(e => ({
+              _id: e._id,
+              label: e.title,
+              extra: { file_url: e.file_url },
+            }))
+          : []
+      }
+      default:
+        return []
+    }
+  } catch {
+    return []
+  }
+}
+
 const defaultValues: ItemFormValues = {
   card_type: '',
   title: '', subtitle: '', description: '',
@@ -101,6 +194,63 @@ const defaultValues: ItemFormValues = {
   metadata: [],
   display_order: NaN,
   is_active: true,
+}
+
+/** Searchable combobox for selecting an entity by name */
+function EntityCombobox({
+  items, loading, value, onSelect, placeholder, disabled,
+}: {
+  items: EntityOption[]
+  loading: boolean
+  value: string
+  onSelect: (id: string) => void
+  placeholder: string
+  disabled: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedItem = items.find(i => i._id === value)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-8 w-full justify-between text-xs font-normal"
+          disabled={disabled || loading}
+        >
+          <span className="truncate">
+            {loading ? 'Loading...' : selectedItem ? selectedItem.label : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search..." className="h-8" />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {items.map(item => (
+                <CommandItem
+                  key={item._id}
+                  value={item.label}
+                  onSelect={() => {
+                    onSelect(item._id)
+                    setOpen(false)
+                  }}
+                >
+                  <Check className={cn("mr-2 h-3 w-3", value === item._id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{item.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function HomeSectionItemFormModal({
@@ -159,6 +309,11 @@ export function HomeSectionItemFormModal({
   const btnColor = watch('button_color') || ''
   const btnTxtColor = watch('button_text_color') || ''
 
+  // Entity dropdown state
+  const [entityLists, setEntityLists] = useState<Record<string, EntityOption[]>>({})
+  const [entityListsLoading, setEntityListsLoading] = useState<Record<string, boolean>>({})
+  const fetchedKeysRef = useRef<Set<string>>(new Set())
+
   // Derived
   const selectedCardType = cardTypes.find(ct => ct.key === cardType)
   const selectedNavTarget = navTargets.find(t => t.key === navTargetKey)
@@ -182,6 +337,86 @@ export function HomeSectionItemFormModal({
     }
     setIconPreviewUrl(null)
   }, [iconFile])
+
+  // ─── Entity dropdown fetching ──────────────────────────────────────
+  const loadEntityList = useCallback(async (listKey: string, filterParams?: Record<string, string>) => {
+    const cacheKey = filterParams ? `${listKey}:${JSON.stringify(filterParams)}` : listKey
+    if (fetchedKeysRef.current.has(cacheKey)) return
+    fetchedKeysRef.current.add(cacheKey)
+    setEntityListsLoading(prev => ({ ...prev, [listKey]: true }))
+    const items = await fetchEntityList(listKey, filterParams)
+    setEntityLists(prev => ({ ...prev, [listKey]: items }))
+    setEntityListsLoading(prev => ({ ...prev, [listKey]: false }))
+  }, [])
+
+  /** Fetch all entity lists needed by a given navigation target */
+  const loadEntitiesForTarget = useCallback((target: NavigationTarget | undefined) => {
+    if (!target) return
+    const needed = new Set<string>()
+    for (const param of target.params) {
+      const key = getEntityListKey(target.key, param.name)
+      if (key) needed.add(key)
+    }
+    needed.forEach(key => loadEntityList(key))
+  }, [loadEntityList])
+
+  // Fetch entity lists when primary nav target changes
+  useEffect(() => {
+    loadEntitiesForTarget(selectedNavTarget)
+  }, [navTargetKey, selectedNavTarget, loadEntitiesForTarget])
+
+  // Fetch entity lists when secondary nav target changes
+  useEffect(() => {
+    loadEntitiesForTarget(secondaryNavTarget)
+  }, [secondaryNavTargetKey, secondaryNavTarget, loadEntitiesForTarget])
+
+  // Cascading: refetch series list when packageId changes in series_detail target
+  const primaryParams: Record<string, string> = watch('navigation_params') || {}
+  const secondaryParams: Record<string, string> = watch('secondary_navigation_params') || {}
+
+  useEffect(() => {
+    if (navTargetKey === 'series_detail' && primaryParams['packageId']) {
+      // Force refetch series with package filter
+      const cacheKey = `series:{"package_id":"${primaryParams['packageId']}"}`
+      fetchedKeysRef.current.delete(cacheKey)
+      fetchedKeysRef.current.delete('series')
+      loadEntityList('series', { package_id: primaryParams['packageId'] })
+    }
+  }, [primaryParams['packageId'], navTargetKey, loadEntityList])
+
+  useEffect(() => {
+    if (secondaryNavTargetKey === 'series_detail' && secondaryParams['packageId']) {
+      const cacheKey = `series:{"package_id":"${secondaryParams['packageId']}"}`
+      fetchedKeysRef.current.delete(cacheKey)
+      fetchedKeysRef.current.delete('series')
+      loadEntityList('series', { package_id: secondaryParams['packageId'] })
+    }
+  }, [secondaryParams['packageId'], secondaryNavTargetKey, loadEntityList])
+
+  // PDF Viewer auto-populate: when documentId changes, fill pdfUrl + title
+  useEffect(() => {
+    if (navTargetKey === 'pdf_viewer' && primaryParams['documentId']) {
+      const doc = entityLists['documents']?.find(d => d._id === primaryParams['documentId'])
+      if (doc) {
+        const updated = { ...primaryParams }
+        if (doc.extra?.file_url) updated['pdfUrl'] = doc.extra.file_url
+        updated['title'] = doc.label
+        setValue('navigation_params', updated)
+      }
+    }
+  }, [primaryParams['documentId'], navTargetKey, entityLists['documents']])
+
+  useEffect(() => {
+    if (secondaryNavTargetKey === 'pdf_viewer' && secondaryParams['documentId']) {
+      const doc = entityLists['documents']?.find(d => d._id === secondaryParams['documentId'])
+      if (doc) {
+        const updated = { ...secondaryParams }
+        if (doc.extra?.file_url) updated['pdfUrl'] = doc.extra.file_url
+        updated['title'] = doc.label
+        setValue('secondary_navigation_params', updated)
+      }
+    }
+  }, [secondaryParams['documentId'], secondaryNavTargetKey, entityLists['documents']])
 
   // Fetch reference data on open
   useEffect(() => {
@@ -212,6 +447,8 @@ export function HomeSectionItemFormModal({
       setImageFile([])
       setIconFile([])
       setUploadProgress(null)
+      // Reset entity list cache for fresh fetches
+      fetchedKeysRef.current.clear()
 
       if (mode === 'edit' && item) {
         const primaryKey = findNavTargetKey(item.internal_route, navTargets)
@@ -397,55 +634,81 @@ export function HomeSectionItemFormModal({
   ) {
     if (!target || target.params.length === 0) return null
     const params: Record<string, string> = watch(prefix) || {}
+
     return (
       <div className="space-y-2 pl-4 border-l-2 border-muted">
         <p className="text-xs font-medium text-muted-foreground">Route Parameters</p>
-        {target.params.map(param => (
-          <div key={param.name} className="space-y-1">
-            <Label className="text-xs">
-              {param.label}
-              {param.required && <span className="text-red-500 ml-0.5">*</span>}
-            </Label>
-            {param.type === 'boolean' ? (
-              <Select
-                value={params[param.name] || ''}
-                onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
-                disabled={disabled}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Yes</SelectItem>
-                  <SelectItem value="false">No</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : param.options ? (
-              <Select
-                value={params[param.name] || ''}
-                onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
-                disabled={disabled}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {param.options.map(opt => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                className="h-8 text-xs"
-                placeholder={param.label}
-                value={params[param.name] || ''}
-                onChange={(e) => setValue(prefix, { ...params, [param.name]: e.target.value })}
-                disabled={disabled}
-              />
-            )}
-          </div>
-        ))}
+        {target.params.map(param => {
+          const entityKey = getEntityListKey(target.key, param.name)
+          const isPdfAutoField = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
+
+          return (
+            <div key={param.name} className="space-y-1">
+              <Label className="text-xs">
+                {param.label}
+                {param.required && <span className="text-red-500 ml-0.5">*</span>}
+              </Label>
+
+              {param.type === 'boolean' ? (
+                <Select
+                  value={params[param.name] || ''}
+                  onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : param.options ? (
+                <Select
+                  value={params[param.name] || ''}
+                  onValueChange={(v) => setValue(prefix, { ...params, [param.name]: v })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {param.options.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : isPdfAutoField ? (
+                // PDF Viewer auto-populated read-only fields
+                <Input
+                  className="h-8 text-xs bg-muted"
+                  placeholder={params['documentId'] ? 'Auto-filled from document' : `Select a document first`}
+                  value={params[param.name] || ''}
+                  readOnly
+                  disabled={disabled}
+                />
+              ) : entityKey ? (
+                // Searchable entity dropdown
+                <EntityCombobox
+                  items={entityLists[entityKey] || []}
+                  loading={entityListsLoading[entityKey] || false}
+                  value={params[param.name] || ''}
+                  onSelect={(id) => setValue(prefix, { ...params, [param.name]: id })}
+                  placeholder={`Select ${param.label}...`}
+                  disabled={disabled}
+                />
+              ) : (
+                <Input
+                  className="h-8 text-xs"
+                  placeholder={param.label}
+                  value={params[param.name] || ''}
+                  onChange={(e) => setValue(prefix, { ...params, [param.name]: e.target.value })}
+                  disabled={disabled}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
     )
   }
