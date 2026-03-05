@@ -38,7 +38,7 @@ export interface LiveSessionFormData {
   title: string
   description: string
   subject_id: string
-  faculty_id?: string
+  faculty_id?: string | null
   scheduled_start_time: string
   scheduled_end_time: string
   platform: 'zoom' | 'agora' | 'teams' | 'other'

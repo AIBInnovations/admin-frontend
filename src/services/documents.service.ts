@@ -11,6 +11,8 @@ export interface Document {
   file_url: string
   file_format: 'pdf' | 'epub' | 'doc' | 'docx' | 'ppt' | 'pptx'
   preview_url: string | null
+  thumbnail_url: string | null
+  thumbnail_s3_key: string | null
   file_size_mb: number
   page_count: number | null
   is_free: boolean
@@ -26,6 +28,8 @@ export interface DocumentFormData {
   series_id: string
   is_free?: boolean
   display_order?: number
+  thumbnail_url?: string
+  thumbnail_s3_key?: string
 }
 
 export interface DocumentsListParams extends BaseListParams {
@@ -109,7 +113,19 @@ class DocumentsService {
       is_free: data.is_free,
       fileSize: file.size,
       mimeType,
+      thumbnail_url: data.thumbnail_url,
+      thumbnail_s3_key: data.thumbnail_s3_key,
     })
+  }
+
+  /**
+   * Get presigned URL for document thumbnail upload
+   */
+  async getThumbnailUploadUrl(mimeType: string): Promise<ApiResponse<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>> {
+    return apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType },
+    )
   }
 
   /**

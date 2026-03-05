@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Banner } from '@/services/banners.service'
-import { MoreVertical, Pencil, Trash2, Image, ExternalLink, BookOpen, FlaskConical } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, Image, ExternalLink, BookOpen, FlaskConical, BookMarked } from 'lucide-react'
 
 interface BannersColumnsProps {
   onEdit: (banner: Banner) => void
@@ -55,6 +55,13 @@ export function useBannersColumns({
           return (
             <Badge className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-200">
               <FlaskConical className="mr-1 h-3 w-3" />Practical Package
+            </Badge>
+          )
+        }
+        if (banner.banner_type === 'ebook') {
+          return (
+            <Badge className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-200">
+              <BookMarked className="mr-1 h-3 w-3" />Book
             </Badge>
           )
         }

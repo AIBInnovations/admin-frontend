@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import axios from 'axios'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -14,8 +15,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Upload, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Document, DocumentFormData } from '@/services/documents.service'
+import { Document, DocumentFormData, documentsService } from '@/services/documents.service'
 import { Series, seriesService } from '@/services/series.service'
+import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
 
 const documentSchema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters').max(300),
@@ -40,6 +42,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
   const [seriesList, setSeriesList] = useState<Series[]>([])
   const [seriesPopoverOpen, setSeriesPopoverOpen] = useState(false)
   const [docFile, setDocFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   const {
@@ -68,6 +71,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
   useEffect(() => {
     if (open) {
       setDocFile(null)
+      setThumbnailFile(null)
       if (mode === 'edit' && doc) {
         reset({
           title: doc.title,
@@ -84,17 +88,49 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
     }
   }, [open, mode, doc, reset, defaultSeriesId])
 
+  /**
+   * Upload thumbnail to S3 via presigned URL (3-step flow)
+   * Returns { thumbnail_url, thumbnail_s3_key } or null
+   */
+  const uploadThumbnail = async (file: File): Promise<{ thumbnail_url: string; thumbnail_s3_key: string } | null> => {
+    const mimeType = file.type || 'image/jpeg'
+
+    // Step 1: Get presigned URL
+    const urlRes = await documentsService.getThumbnailUploadUrl(mimeType)
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    // Step 2: Upload to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+    })
+
+    return { thumbnail_url: thumbnailUrl, thumbnail_s3_key: s3Key }
+  }
+
   const handleFormSubmit = async (data: DocumentFormValues) => {
     if (mode === 'create' && !docFile) return
     setUploadProgress(null)
 
     try {
+      // Upload thumbnail first if provided
+      let thumbnailData: { thumbnail_url: string; thumbnail_s3_key: string } | null = null
+      if (thumbnailFile) {
+        thumbnailData = await uploadThumbnail(thumbnailFile)
+      }
+
       const formData: DocumentFormData = {
         title: data.title,
         description: data.description || '',
         series_id: data.series_id,
         is_free: data.is_free,
         display_order: data.display_order || undefined,
+        ...(thumbnailData && {
+          thumbnail_url: thumbnailData.thumbnail_url,
+          thumbnail_s3_key: thumbnailData.thumbnail_s3_key,
+        }),
       }
       await onSubmit(formData, docFile || undefined, (pct) => setUploadProgress(pct))
       onClose()
@@ -130,6 +166,21 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" placeholder="Document description..." rows={3} disabled={isSubmitting} {...register('description')} />
             {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+          </div>
+
+          {/* Cover Image / Thumbnail */}
+          <div className="space-y-2">
+            <Label>Cover Image</Label>
+            <ImageUploadWithCrop
+              value={thumbnailFile}
+              onChange={setThumbnailFile}
+              aspectRatio={3 / 4}
+              maxSize={5 * 1024 * 1024}
+              label="Upload cover image"
+              description="Recommended ratio: 3:4. Max 5MB. JPEG, PNG, or WebP."
+              disabled={isSubmitting}
+              currentImageUrl={mode === 'edit' ? doc?.thumbnail_url : undefined}
+            />
           </div>
 
           {/* Series */}

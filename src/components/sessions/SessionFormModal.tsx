@@ -26,7 +26,7 @@ const sessionSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(200),
   description: z.string().max(1000).optional().or(z.literal('')),
   subject_id: z.string().min(1, 'Subject is required'),
-  faculty_id: z.string().min(1, 'Faculty is required'),
+  faculty_id: z.string().optional().or(z.literal('')),
   scheduled_date: z.string().min(1, 'Date is required'),
   scheduled_time: z.string().min(1, 'Start time is required'),
   duration_minutes: z.number({ error: 'Duration is required' }).int().min(15, 'Min 15 minutes').max(480, 'Max 8 hours'),
@@ -128,7 +128,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
       const endDateTime = new Date(startDateTime.getTime() + data.duration_minutes * 60000)
       const formData: LiveSessionFormData = {
         title: data.title, description: data.description || '',
-        subject_id: data.subject_id, faculty_id: data.faculty_id || undefined,
+        subject_id: data.subject_id, faculty_id: data.faculty_id || null,
         scheduled_start_time: startDateTime.toISOString(),
         scheduled_end_time: endDateTime.toISOString(),
         platform: data.platform, enrollment_mode: data.enrollment_mode,
@@ -216,7 +216,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
               {errors.subject_id && <p className="text-sm text-red-500">{errors.subject_id.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Faculty <span className="text-red-500">*</span></Label>
+              <Label>Faculty</Label>
               <Controller name="faculty_id" control={control} render={({ field }) => {
                 const selectedFaculty = faculty.find((f) => f._id === field.value)
                 return (
@@ -229,7 +229,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         className="w-full justify-between font-normal"
                         disabled={isSubmitting}
                       >
-                        {selectedFaculty ? selectedFaculty.name : 'Select faculty'}
+                        {selectedFaculty ? selectedFaculty.name : 'No faculty'}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -239,6 +239,16 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         <CommandList>
                           <CommandEmpty>No faculty found.</CommandEmpty>
                           <CommandGroup>
+                            <CommandItem
+                              value="__none__"
+                              onSelect={() => {
+                                field.onChange('')
+                                setFacultyPopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !field.value ? 'opacity-100' : 'opacity-0')} />
+                              <span className="text-muted-foreground">None</span>
+                            </CommandItem>
                             {faculty.map((f) => (
                               <CommandItem
                                 key={f._id}

@@ -5,14 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   UserCircle, ShieldBan, ShieldCheck, Loader2,
   Phone, Mail, MapPin, Calendar, GraduationCap, Globe, Smartphone,
   Monitor, Tablet, CreditCard, Package, Settings, BookOpen,
-  Video, ShoppingBag, Truck, Edit, Gift,
+  Video, ShoppingBag, Truck, Edit, Gift, Ban,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -37,6 +43,9 @@ export function UserDetailPage() {
   const [blocking, setBlocking] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGrantModal, setShowGrantModal] = useState(false)
+  const [revokeTarget, setRevokeTarget] = useState<UserPurchase | null>(null)
+  const [revokeReason, setRevokeReason] = useState('')
+  const [revoking, setRevoking] = useState(false)
 
   const fetchUser = useCallback(async () => {
     if (!userId) return
@@ -110,6 +119,26 @@ export function UserDetailPage() {
     } catch (error: any) {
       toast.error(error.message || 'Failed to grant package access')
       throw error
+    }
+  }
+
+  const handleRevokePurchase = async () => {
+    if (!user || !revokeTarget) return
+    try {
+      setRevoking(true)
+      const response = await usersService.revokePackageAccess(user._id, revokeTarget._id, revokeReason)
+      if (response.success) {
+        toast.success('Package access revoked successfully')
+        fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to revoke package access')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to revoke package access')
+    } finally {
+      setRevoking(false)
+      setRevokeTarget(null)
+      setRevokeReason('')
     }
   }
 
@@ -373,6 +402,7 @@ export function UserDetailPage() {
                     <TableHead className="w-28">Purchased</TableHead>
                     <TableHead className="w-28">Expires</TableHead>
                     <TableHead className="w-20">Active</TableHead>
+                    <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -398,9 +428,28 @@ export function UserDetailPage() {
                         {formatDate(purchase.expires_at)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={purchase.is_active ? 'default' : 'outline'} className="text-[10px]">
-                          {purchase.is_active ? 'Yes' : 'No'}
-                        </Badge>
+                        {purchase.is_revoked ? (
+                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
+                            Revoked
+                          </Badge>
+                        ) : (
+                          <Badge variant={purchase.is_active ? 'default' : 'outline'} className="text-[10px]">
+                            {purchase.is_active ? 'Yes' : 'No'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {purchase.is_active && purchase.payment_status === 'completed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => setRevokeTarget(purchase)}
+                          >
+                            <Ban className="mr-1 h-3 w-3" />
+                            Revoke
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -654,6 +703,47 @@ export function UserDetailPage() {
           userName={user.name || user.phone_number}
         />
       )}
+
+      {/* Revoke Package Confirmation */}
+      <AlertDialog open={!!revokeTarget} onOpenChange={(open) => { if (!open && !revoking) { setRevokeTarget(null); setRevokeReason('') } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Package Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke access to{' '}
+              <span className="font-medium text-foreground">
+                {typeof revokeTarget?.package_id === 'object' ? revokeTarget.package_id.name : 'this package'}
+              </span>{' '}
+              for {user?.name || user?.phone_number}. The user will see an "access revoked" message.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revoke-reason">Reason (optional)</Label>
+            <Input
+              id="revoke-reason"
+              placeholder="e.g., Refund issued, Policy violation, etc."
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              disabled={revoking}
+              maxLength={500}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokePurchase}
+              disabled={revoking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {revoking ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
+              ) : (
+                'Revoke Access'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

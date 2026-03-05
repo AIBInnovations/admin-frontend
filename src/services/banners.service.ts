@@ -3,7 +3,7 @@ import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
 
 // Types
-export type BannerType = 'generic' | 'theory_package' | 'practical_package'
+export type BannerType = 'generic' | 'theory_package' | 'practical_package' | 'ebook'
 export type LinkType = 'internal' | 'external' | 'none'
 
 export interface Banner {
@@ -16,6 +16,7 @@ export interface Banner {
   link_type: LinkType
   banner_type: BannerType
   target_package_id: string | null
+  target_book_id: string | null
   display_order: number
   is_active: boolean
   start_date: string
@@ -33,6 +34,7 @@ export interface BannerFormData {
   link_type?: LinkType
   banner_type?: BannerType
   target_package_id?: string | null
+  target_book_id?: string | null
   display_order?: number
   is_active?: boolean
   start_date: string

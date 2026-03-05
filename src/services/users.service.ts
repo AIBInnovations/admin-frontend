@@ -19,6 +19,9 @@ export interface UserPurchase {
   purchased_at: string
   expires_at: string
   is_active: boolean
+  is_revoked?: boolean
+  revoked_reason?: string | null
+  revoked_at?: string | null
   auto_renewal_enabled: boolean
   createdAt: string
 }
@@ -263,6 +266,26 @@ class UsersService {
     }>
   > {
     return apiService.post(`${this.basePath}/${userId}/grant-package`, data)
+  }
+  /**
+   * Revoke package access for a user
+   */
+  async revokePackageAccess(
+    userId: string,
+    purchaseId: string,
+    reason?: string
+  ): Promise<
+    ApiResponse<{
+      user_id: string
+      user_name: string
+      purchase_id: string
+      package_name: string
+      revoked_at: string
+      reason: string
+      message: string
+    }>
+  > {
+    return apiService.put(`${this.basePath}/${userId}/purchases/${purchaseId}/revoke`, { reason })
   }
 }
 

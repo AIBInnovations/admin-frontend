@@ -19,12 +19,13 @@ import { Loader2, X } from 'lucide-react'
 import { Banner, BannerFormData, BannerType, bannersService } from '@/services/banners.service'
 import { Package, packagesService } from '@/services/packages.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
+import { Book, booksService } from '@/services/books.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: full-width x 140px on phone (~360px wide) ≈ 18:7 */
 const BANNER_ASPECT_RATIO = 18 / 7
 
-type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package'
+type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -50,6 +51,7 @@ interface BannerFormModalProps {
 function deriveLinkAction(banner: Banner): LinkAction {
   if (banner.banner_type === 'theory_package') return 'theory_package'
   if (banner.banner_type === 'practical_package') return 'practical_package'
+  if (banner.banner_type === 'ebook') return 'ebook'
   if (banner.click_url && banner.link_type === 'external') return 'external_url'
   return 'none'
 }
@@ -71,6 +73,12 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
   const [packagesLoading, setPackagesLoading] = useState(false)
   const [packageError, setPackageError] = useState<string | null>(null)
+
+  // Book state
+  const [selectedBookId, setSelectedBookId] = useState<string>('')
+  const [books, setBooks] = useState<Book[]>([])
+  const [booksLoading, setBooksLoading] = useState(false)
+  const [bookError, setBookError] = useState<string | null>(null)
 
   // Manage preview URL for cropped image
   useEffect(() => {
@@ -96,10 +104,11 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
 
   const isActive = watch('is_active')
 
-  // Fetch packages and package types when modal opens
+  // Fetch packages, package types, and books when modal opens
   useEffect(() => {
     if (open) {
       fetchPackagesAndTypes()
+      fetchBooks()
     }
   }, [open])
 
@@ -127,6 +136,19 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
     }
 
     setPackagesLoading(false)
+  }
+
+  const fetchBooks = async () => {
+    setBooksLoading(true)
+    try {
+      const response = await booksService.getAll({ limit: 100, is_available: true })
+      if (response.success && response.data) {
+        setBooks((response.data.entities || []).filter((b) => b.ebook))
+      }
+    } catch {
+      console.error('Failed to fetch books')
+    }
+    setBooksLoading(false)
   }
 
   // Filter packages by type name from the populated package_type_id
@@ -163,6 +185,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       setUploadProgress(null)
       setImageError(null)
       setPackageError(null)
+      setBookError(null)
       if (mode === 'edit' && banner) {
         reset({
           title: banner.title,
@@ -177,6 +200,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setExistingS3Key(banner.image_s3_key)
         setLinkAction(deriveLinkAction(banner))
         setSelectedPackageId(banner.target_package_id || '')
+        setSelectedBookId(banner.target_book_id || '')
       } else {
         reset({
           title: '', subtitle: '', click_url: '',
@@ -187,6 +211,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setExistingS3Key(null)
         setLinkAction('none')
         setSelectedPackageId('')
+        setSelectedBookId('')
       }
     }
   }, [open, mode, banner, reset])
@@ -208,6 +233,13 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       return
     }
     setPackageError(null)
+
+    // Validate book selection for ebook banner type
+    if (linkAction === 'ebook' && !selectedBookId) {
+      setBookError('Please select a book')
+      return
+    }
+    setBookError(null)
 
     try {
       let imageUrl = existingImageUrl || ''
@@ -233,6 +265,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       let clickUrl: string | undefined = undefined
       let linkType: 'internal' | 'external' | 'none' = 'none'
       let targetPackageId: string | null = null
+      let targetBookId: string | null = null
 
       if (linkAction === 'external_url') {
         bannerType = 'generic'
@@ -246,6 +279,10 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         bannerType = 'practical_package'
         linkType = 'internal'
         targetPackageId = selectedPackageId
+      } else if (linkAction === 'ebook') {
+        bannerType = 'ebook'
+        linkType = 'internal'
+        targetBookId = selectedBookId
       }
 
       const formData: BannerFormData = {
@@ -257,6 +294,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         link_type: linkType,
         banner_type: bannerType,
         target_package_id: targetPackageId,
+        target_book_id: targetBookId,
         display_order: data.display_order && !isNaN(data.display_order) ? data.display_order : undefined,
         is_active: data.is_active,
         start_date: data.start_date,
@@ -299,7 +337,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const handleLinkActionChange = (value: LinkAction) => {
     setLinkAction(value)
     setSelectedPackageId('')
+    setSelectedBookId('')
     setPackageError(null)
+    setBookError(null)
   }
 
   const isUploading = uploadProgress !== null
@@ -401,6 +441,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 <SelectItem value="external_url">External URL</SelectItem>
                 <SelectItem value="theory_package">Theory Package</SelectItem>
                 <SelectItem value="practical_package">Practical Package</SelectItem>
+                <SelectItem value="ebook">Book</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -408,6 +449,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
               {linkAction === 'external_url' && 'Opens an external URL in the browser when tapped.'}
               {linkAction === 'theory_package' && 'Navigates to the selected theory package screen when tapped.'}
               {linkAction === 'practical_package' && 'Navigates to the selected practical package screen when tapped.'}
+              {linkAction === 'ebook' && 'Opens the selected book details page when tapped.'}
             </p>
           </div>
 
@@ -455,6 +497,41 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 </SelectContent>
               </Select>
               {packageError && <p className="text-sm text-red-500">{packageError}</p>}
+            </div>
+          )}
+
+          {/* Book selector - shown for ebook action */}
+          {linkAction === 'ebook' && (
+            <div className="space-y-2">
+              <Label>
+                Select Book <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={selectedBookId}
+                onValueChange={(v) => { setSelectedBookId(v); setBookError(null) }}
+                disabled={isSubmitting || isUploading || booksLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    booksLoading ? 'Loading books...' : 'Select a book'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {books.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No ebooks found
+                    </div>
+                  ) : (
+                    books.map((book) => (
+                      <SelectItem key={book._id} value={book._id}>
+                        {book.title}
+                        {book.author ? ` — ${book.author}` : ''}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {bookError && <p className="text-sm text-red-500">{bookError}</p>}
             </div>
           )}
 

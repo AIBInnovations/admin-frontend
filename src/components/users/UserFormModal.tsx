@@ -143,14 +143,11 @@ export function UserFormModal({ open, onClose, onSubmit, user, mode }: UserFormM
             <Input
               id="phone_number"
               placeholder="10-digit phone number"
-              disabled={isSubmitting || mode === 'edit'}
+              disabled={isSubmitting}
               {...register('phone_number')}
             />
             {errors.phone_number && (
               <p className="text-sm text-red-500">{errors.phone_number.message}</p>
-            )}
-            {mode === 'edit' && (
-              <p className="text-xs text-muted-foreground">Phone number cannot be changed</p>
             )}
           </div>
 
