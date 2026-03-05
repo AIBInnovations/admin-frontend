@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,25 +14,18 @@ import { Progress } from '@/components/ui/progress'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from '@/components/ui/command'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
-import { Loader2, X, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Loader2, X, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   HomeSectionItem, HomeSectionItemFormData,
-  CardTypeInfo, NavigationTarget,
+  CardTypeInfo,
   homeSectionsService,
 } from '@/services/homeSections.service'
-import { packagesService } from '@/services/packages.service'
-import { seriesService } from '@/services/series.service'
-import { videosService } from '@/services/videos.service'
-import { liveSessionsService } from '@/services/liveSessions.service'
-import { documentsService } from '@/services/documents.service'
+import { Package, packagesService } from '@/services/packages.service'
+import { PackageType, packageTypesService } from '@/services/packageTypes.service'
+import { Book, booksService } from '@/services/books.service'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -56,16 +49,10 @@ const formSchema = z.object({
   button_text: z.string().max(100).optional(),
   button_color: optionalHexColor,
   button_text_color: optionalHexColor,
-  link_type: z.string().optional(),
-  navigation_target_key: z.string().optional(),
-  navigation_params: z.record(z.string(), z.string()).optional(),
   external_url: z.string().optional().refine(
     val => !val || /^https?:\/\//.test(val), { message: 'Invalid URL' },
   ),
   secondary_button_text: z.string().max(100).optional(),
-  secondary_link_type: z.string().optional(),
-  secondary_navigation_target_key: z.string().optional(),
-  secondary_navigation_params: z.record(z.string(), z.string()).optional(),
   secondary_external_url: z.string().optional().refine(
     val => !val || /^https?:\/\//.test(val), { message: 'Invalid URL' },
   ),
@@ -93,177 +80,30 @@ const DEFAULT_VALUES: FormValues = {
   button_text: '',
   button_color: '',
   button_text_color: '',
-  link_type: 'none',
-  navigation_target_key: '',
-  navigation_params: {},
   external_url: '',
   secondary_button_text: '',
-  secondary_link_type: 'none',
-  secondary_navigation_target_key: '',
-  secondary_navigation_params: {},
   secondary_external_url: '',
   metadata: [],
   display_order: 0,
   is_active: true,
 }
 
-// ─── Entity types for searchable dropdowns ──────────────────────────────────
+// ─── Click action types (same as banners) ────────────────────────────────────
 
-interface EntityOption {
-  _id: string
-  label: string
-  extra?: Record<string, string> // for storing additional fields like file_url, package_type
-}
+type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
 
-/**
- * Resolves which entity list key to use for a given param + navigation target.
- * The param name "id" is ambiguous — its entity type depends on the navigation target.
- */
-function getEntityListKey(targetKey: string, paramName: string): string | null {
-  // Non-ambiguous param names
-  if (paramName === 'packageId') return 'packages'
-  if (paramName === 'documentId') return 'documents'
-
-  // "id" depends on target
-  if (paramName === 'id') {
-    switch (targetKey) {
-      case 'series_detail': return 'series'
-      case 'lecture': return 'series' // lecture's :id param is a Series ID per backend
-      case 'video_player': return 'videos'
-      case 'live_session': return 'liveSessions'
-      default: return null
-    }
+/** Derive click action from stored item fields */
+function deriveClickAction(item: HomeSectionItem): ClickAction {
+  if (item.link_type === 'external') return 'external_url'
+  if (item.link_type === 'internal') {
+    if (item.internal_route === '/revision-series') return 'theory_package'
+    if (item.internal_route === '/practical-series') return 'practical_package'
+    if (item.internal_route === '/ebook-store') return 'ebook'
   }
-
-  return null
+  return 'none'
 }
 
-// ─── EntityCombobox ─────────────────────────────────────────────────────────
-
-function EntityCombobox({
-  items, loading, value, onSelect, placeholder, disabled,
-}: {
-  items: EntityOption[]
-  loading: boolean
-  value: string
-  onSelect: (id: string) => void
-  placeholder: string
-  disabled?: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const selectedItem = items.find(i => i._id === value)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="h-8 w-full justify-between text-xs font-normal"
-          disabled={disabled || loading}
-        >
-          <span className="truncate">
-            {loading ? 'Loading...' : selectedItem ? selectedItem.label : placeholder}
-          </span>
-          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" sideOffset={4}>
-        <Command>
-          <CommandInput placeholder="Search..." className="h-8" />
-          <CommandList className="max-h-50">
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup>
-              {items.map(item => (
-                <CommandItem
-                  key={item._id}
-                  value={`${item.label} ${item._id}`}
-                  keywords={[item.label]}
-                  onSelect={() => { onSelect(item._id); setOpen(false) }}
-                >
-                  <Check className={cn("mr-2 h-3 w-3", value === item._id ? "opacity-100" : "opacity-0")} />
-                  <span className="truncate">{item.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-// ─── Helper: find navTarget key from a saved route ──────────────────────────
-
-function findNavTargetKey(route: string | null | undefined, targets: NavigationTarget[]): string {
-  if (!route) return ''
-  const found = targets.find(t => t.route === route)
-  return found ? found.key : ''
-}
-
-// ─── Helper: fetch entities from a service ──────────────────────────────────
-
-async function fetchEntityList(
-  serviceKey: string,
-  filters?: Record<string, string>,
-): Promise<EntityOption[]> {
-  try {
-    let res: any
-    switch (serviceKey) {
-      case 'packages':
-        res = await packagesService.getAll({ limit: 100, ...filters } as any)
-        if (res.success && res.data?.entities) {
-          return res.data.entities.map((e: any) => ({
-            _id: e._id,
-            label: e.name || e._id,
-            extra: { package_type: e.package_type_id?.name || '' },
-          }))
-        }
-        break
-      case 'series':
-        res = await seriesService.getAll({ limit: 100, ...filters } as any)
-        if (res.success && res.data?.entities) {
-          return res.data.entities.map((e: any) => ({
-            _id: e._id,
-            label: e.name || e._id,
-          }))
-        }
-        break
-      case 'videos':
-        res = await videosService.getAll({ limit: 100, ...filters } as any)
-        if (res.success && res.data?.entities) {
-          return res.data.entities.map((e: any) => ({
-            _id: e._id,
-            label: e.title || e._id,
-          }))
-        }
-        break
-      case 'liveSessions':
-        res = await liveSessionsService.getAll({ limit: 100, ...filters } as any)
-        if (res.success && res.data?.entities) {
-          return res.data.entities.map((e: any) => ({
-            _id: e._id,
-            label: e.title || e._id,
-          }))
-        }
-        break
-      case 'documents':
-        res = await documentsService.getAll({ limit: 100, ...filters } as any)
-        if (res.success && res.data?.entities) {
-          return res.data.entities.map((e: any) => ({
-            _id: e._id,
-            label: e.title || e._id,
-            extra: { file_url: e.file_url || '' },
-          }))
-        }
-        break
-    }
-  } catch (err) {
-    console.error(`Failed to fetch ${serviceKey}:`, err)
-  }
-  return []
-}
+// (Complex entity helpers removed — using simplified banner-style click actions)
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -279,15 +119,24 @@ interface Props {
 export function HomeSectionItemFormModal({
   open, onOpenChange, sectionId, mode, item, onSuccess,
 }: Props) {
-  // ── Reference data (fetched once) ───────────────────────────────────────
-  const [navTargets, setNavTargets] = useState<NavigationTarget[]>([])
+  // ── Reference data ─────────────────────────────────────────────────────
   const [cardTypes, setCardTypes] = useState<CardTypeInfo[]>([])
   const [refDataReady, setRefDataReady] = useState(false)
 
-  // ── Entity lists for dropdowns ──────────────────────────────────────────
-  const [entityLists, setEntityLists] = useState<Record<string, EntityOption[]>>({})
-  const [entityLoading, setEntityLoading] = useState<Record<string, boolean>>({})
-  const fetchedKeysRef = useRef<Set<string>>(new Set())
+  // ── Click action state (same pattern as BannerFormModal) ──────────────
+  const [primaryClickAction, setPrimaryClickAction] = useState<ClickAction>('none')
+  const [secondaryClickAction, setSecondaryClickAction] = useState<ClickAction>('none')
+  const [selectedPackageId, setSelectedPackageId] = useState('')
+  const [selectedBookId, setSelectedBookId] = useState('')
+  const [selectedSecondaryPackageId, setSelectedSecondaryPackageId] = useState('')
+  const [selectedSecondaryBookId, setSelectedSecondaryBookId] = useState('')
+
+  // ── Package & book data ───────────────────────────────────────────────
+  const [packages, setPackages] = useState<Package[]>([])
+  const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
+  const [books, setBooks] = useState<Book[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [booksLoading, setBooksLoading] = useState(false)
 
   // ── Image / icon state ──────────────────────────────────────────────────
   const [imageFile, setImageFile] = useState<File[]>([])
@@ -316,21 +165,28 @@ export function HomeSectionItemFormModal({
     name: 'metadata',
   })
 
-  // Watched values
-  const watchedLinkType = watch('link_type')
-  const watchedNavTargetKey = watch('navigation_target_key')
-  const watchedNavParams = watch('navigation_params')
-  const watchedSecondaryLinkType = watch('secondary_link_type')
-  const watchedSecondaryNavTargetKey = watch('secondary_navigation_target_key')
-  const watchedSecondaryNavParams = watch('secondary_navigation_params')
+  // ── Package filtering (same as BannerFormModal) ───────────────────────
 
-  // Resolved targets
-  const selectedNavTarget = navTargets.find(t => t.key === watchedNavTargetKey) || null
-  const selectedSecondaryNavTarget = navTargets.find(t => t.key === watchedSecondaryNavTargetKey) || null
+  const getTypeName = (pkg: Package): string => {
+    const ref = pkg.package_type_id
+    if (typeof ref === 'object' && ref !== null && 'name' in ref) {
+      return (ref as { name: string }).name.toLowerCase()
+    }
+    return ''
+  }
 
-  // ── Refs for auto-populate tracking ─────────────────────────────────────
-  const prevPrimaryPkgRef = useRef<string | undefined>(undefined)
-  const prevSecondaryPkgRef = useRef<string | undefined>(undefined)
+  const matchesType = (pkg: Package, typeName: string): boolean => {
+    const name = getTypeName(pkg)
+    if (name) return name === typeName
+    const typeId = packageTypes.find((t) => t.name.toLowerCase() === typeName)?._id
+    if (!typeId) return false
+    const ref = pkg.package_type_id
+    const pkgTypeId = typeof ref === 'object' && ref !== null ? ref._id : (ref as unknown as string)
+    return pkgTypeId === typeId
+  }
+
+  const theoryPackages = packages.filter((p) => matchesType(p, 'theory'))
+  const practicalPackages = packages.filter((p) => matchesType(p, 'practical'))
 
   // ── 1. Fetch reference data when dialog opens ───────────────────────────
 
@@ -338,16 +194,28 @@ export function HomeSectionItemFormModal({
     if (!open) return
     setRefDataReady(false)
 
-    Promise.all([
-      homeSectionsService.getNavigationTargets(),
-      homeSectionsService.getCardTypes(),
-    ]).then(([navRes, ctRes]) => {
-      const targets = navRes.success && navRes.data ? navRes.data.targets : []
+    // Fetch card types, packages, package types, and books
+    homeSectionsService.getCardTypes().then(ctRes => {
       const types = ctRes.success && ctRes.data ? ctRes.data.card_types : []
-      setNavTargets(targets)
       setCardTypes(types)
       setRefDataReady(true)
     })
+
+    // Fetch packages
+    setPackagesLoading(true)
+    packagesService.getAll({ is_active: true, limit: 100 } as any).then(res => {
+      if (res.success && res.data) setPackages(res.data.entities || [])
+    }).catch(() => {}).finally(() => setPackagesLoading(false))
+
+    packageTypesService.getAllPublic().then(res => {
+      if (res.success && res.data) setPackageTypes(res.data)
+    }).catch(() => {})
+
+    // Fetch books
+    setBooksLoading(true)
+    booksService.getAll({ limit: 100, is_available: true } as any).then(res => {
+      if (res.success && res.data) setBooks((res.data.entities || []).filter((b: Book) => b.ebook))
+    }).catch(() => {}).finally(() => setBooksLoading(false))
   }, [open])
 
   // ── 2. Initialize form once reference data is ready ─────────────────────
@@ -359,16 +227,8 @@ export function HomeSectionItemFormModal({
     setImageFile([])
     setIconFile([])
     setUploadProgress(null)
-    fetchedKeysRef.current.clear()
-    prevPrimaryPkgRef.current = undefined
-    prevSecondaryPkgRef.current = undefined
-    setEntityLists({})
-    setEntityLoading({})
 
     if (mode === 'edit' && item) {
-      const primaryKey = findNavTargetKey(item.internal_route, navTargets)
-      const secondaryKey = findNavTargetKey(item.secondary_internal_route, navTargets)
-
       reset({
         card_type: item.card_type || 'info_card',
         title: item.title || '',
@@ -382,14 +242,8 @@ export function HomeSectionItemFormModal({
         button_text: item.button_text || '',
         button_color: item.button_color || '',
         button_text_color: item.button_text_color || '',
-        link_type: item.link_type || 'none',
-        navigation_target_key: primaryKey,
-        navigation_params: item.internal_params || {},
         external_url: item.external_url || '',
         secondary_button_text: item.secondary_button_text || '',
-        secondary_link_type: item.secondary_link_type || 'none',
-        secondary_navigation_target_key: secondaryKey,
-        secondary_navigation_params: item.secondary_internal_params || {},
         secondary_external_url: item.secondary_external_url || '',
         metadata: (item.metadata || []).map(m => ({
           label: m.label,
@@ -401,14 +255,39 @@ export function HomeSectionItemFormModal({
       })
       setExistingImageUrl(item.image_url || null)
       setExistingIconUrl(item.icon_url || null)
+
+      // Derive click actions from stored data
+      setPrimaryClickAction(deriveClickAction(item))
+      setSelectedPackageId(item.internal_params?.packageId || '')
+      setSelectedBookId(item.internal_params?.bookId || '')
+
+      // Secondary
+      const secAction = (() => {
+        if (item.secondary_link_type === 'external') return 'external_url' as ClickAction
+        if (item.secondary_link_type === 'internal') {
+          if (item.secondary_internal_route === '/revision-series') return 'theory_package' as ClickAction
+          if (item.secondary_internal_route === '/practical-series') return 'practical_package' as ClickAction
+          if (item.secondary_internal_route === '/ebook-store') return 'ebook' as ClickAction
+        }
+        return 'none' as ClickAction
+      })()
+      setSecondaryClickAction(secAction)
+      setSelectedSecondaryPackageId(item.secondary_internal_params?.packageId || '')
+      setSelectedSecondaryBookId(item.secondary_internal_params?.bookId || '')
     } else {
       reset(DEFAULT_VALUES)
       setExistingImageUrl(null)
       setExistingIconUrl(null)
+      setPrimaryClickAction('none')
+      setSecondaryClickAction('none')
+      setSelectedPackageId('')
+      setSelectedBookId('')
+      setSelectedSecondaryPackageId('')
+      setSelectedSecondaryBookId('')
     }
 
     setFormReady(true)
-  }, [open, refDataReady]) // intentionally only open + refDataReady
+  }, [open, refDataReady])
 
   // Clean up on close
   useEffect(() => {
@@ -417,164 +296,6 @@ export function HomeSectionItemFormModal({
       setRefDataReady(false)
     }
   }, [open])
-
-  // ── 3. Load entity lists when navigation target changes ─────────────────
-
-  const loadEntityList = useCallback(async (
-    key: string,
-    filters?: Record<string, string>,
-  ) => {
-    const cacheKey = filters ? `${key}:${JSON.stringify(filters)}` : key
-    if (fetchedKeysRef.current.has(cacheKey)) return
-    fetchedKeysRef.current.add(cacheKey)
-
-    setEntityLoading(prev => ({ ...prev, [key]: true }))
-    const items = await fetchEntityList(key, filters)
-    setEntityLists(prev => ({ ...prev, [key]: items }))
-    setEntityLoading(prev => ({ ...prev, [key]: false }))
-  }, [])
-
-  const loadEntitiesForTarget = useCallback((target: NavigationTarget | null) => {
-    if (!target) return
-    const neededKeys = new Set<string>()
-    for (const param of target.params) {
-      if (param.autoFrom || param.options || param.type === 'boolean') continue
-      const key = getEntityListKey(target.key, param.name)
-      if (key) neededKeys.add(key)
-    }
-    neededKeys.forEach(key => loadEntityList(key))
-  }, [loadEntityList])
-
-  // Load entities when primary nav target changes
-  useEffect(() => {
-    if (!formReady) return
-    loadEntitiesForTarget(selectedNavTarget)
-  }, [watchedNavTargetKey, formReady, loadEntitiesForTarget, selectedNavTarget])
-
-  // Load entities when secondary nav target changes
-  useEffect(() => {
-    if (!formReady) return
-    loadEntitiesForTarget(selectedSecondaryNavTarget)
-  }, [watchedSecondaryNavTargetKey, formReady, loadEntitiesForTarget, selectedSecondaryNavTarget])
-
-  // ── 4. Cascading: series filtered by packageId ──────────────────────────
-
-  useEffect(() => {
-    if (!formReady || !selectedNavTarget) return
-    const needsSeries = selectedNavTarget.params.some(
-      p => getEntityListKey(selectedNavTarget.key, p.name) === 'series'
-    )
-    if (!needsSeries) return
-
-    const pkgId = watchedNavParams?.packageId
-    if (pkgId) {
-      const cacheKey = `series:{"package_id":"${pkgId}"}`
-      if (!fetchedKeysRef.current.has(cacheKey)) {
-        fetchedKeysRef.current.add(cacheKey)
-        setEntityLoading(prev => ({ ...prev, series: true }))
-        fetchEntityList('series', { package_id: pkgId }).then(items => {
-          setEntityLists(prev => ({ ...prev, series: items }))
-          setEntityLoading(prev => ({ ...prev, series: false }))
-        })
-      }
-    }
-  }, [watchedNavParams?.packageId, formReady, selectedNavTarget])
-
-  // Same for secondary
-  useEffect(() => {
-    if (!formReady || !selectedSecondaryNavTarget) return
-    const needsSeries = selectedSecondaryNavTarget.params.some(
-      p => getEntityListKey(selectedSecondaryNavTarget.key, p.name) === 'series'
-    )
-    if (!needsSeries) return
-
-    const pkgId = watchedSecondaryNavParams?.packageId
-    if (pkgId) {
-      const cacheKey = `series:{"package_id":"${pkgId}"}`
-      if (!fetchedKeysRef.current.has(cacheKey)) {
-        fetchedKeysRef.current.add(cacheKey)
-        setEntityLoading(prev => ({ ...prev, series: true }))
-        fetchEntityList('series', { package_id: pkgId }).then(items => {
-          setEntityLists(prev => ({ ...prev, series: items }))
-          setEntityLoading(prev => ({ ...prev, series: false }))
-        })
-      }
-    }
-  }, [watchedSecondaryNavParams?.packageId, formReady, selectedSecondaryNavTarget])
-
-  // ── 5. Auto-populate packageType from selected package ──────────────────
-
-  useEffect(() => {
-    if (!formReady || !selectedNavTarget) return
-    const hasAutoType = selectedNavTarget.params.some(p => p.autoFrom === 'packageId')
-    if (!hasAutoType) return
-
-    const pkgId = watchedNavParams?.packageId
-    if (!pkgId || pkgId === prevPrimaryPkgRef.current) return
-
-    const pkg = entityLists['packages']?.find(e => e._id === pkgId)
-    if (pkg?.extra?.package_type) {
-      prevPrimaryPkgRef.current = pkgId
-      setValue('navigation_params', {
-        ...watchedNavParams,
-        packageType: pkg.extra.package_type,
-      })
-    }
-  }, [watchedNavParams?.packageId, entityLists['packages'], formReady, selectedNavTarget])
-
-  // Same for secondary
-  useEffect(() => {
-    if (!formReady || !selectedSecondaryNavTarget) return
-    const hasAutoType = selectedSecondaryNavTarget.params.some(p => p.autoFrom === 'packageId')
-    if (!hasAutoType) return
-
-    const pkgId = watchedSecondaryNavParams?.packageId
-    if (!pkgId || pkgId === prevSecondaryPkgRef.current) return
-
-    const pkg = entityLists['packages']?.find(e => e._id === pkgId)
-    if (pkg?.extra?.package_type) {
-      prevSecondaryPkgRef.current = pkgId
-      setValue('secondary_navigation_params', {
-        ...watchedSecondaryNavParams,
-        packageType: pkg.extra.package_type,
-      })
-    }
-  }, [watchedSecondaryNavParams?.packageId, entityLists['packages'], formReady, selectedSecondaryNavTarget])
-
-  // ── 6. PDF Viewer: auto-fill pdfUrl + title from documentId ─────────────
-
-  useEffect(() => {
-    if (!formReady) return
-    if (watchedNavTargetKey !== 'pdf_viewer') return
-
-    const docId = watchedNavParams?.documentId
-    if (!docId) return
-    const doc = entityLists['documents']?.find(e => e._id === docId)
-    if (doc) {
-      setValue('navigation_params', {
-        ...watchedNavParams,
-        pdfUrl: doc.extra?.file_url || '',
-        title: doc.label || '',
-      })
-    }
-  }, [watchedNavParams?.documentId, entityLists['documents'], formReady, watchedNavTargetKey])
-
-  // Same for secondary
-  useEffect(() => {
-    if (!formReady) return
-    if (watchedSecondaryNavTargetKey !== 'pdf_viewer') return
-
-    const docId = watchedSecondaryNavParams?.documentId
-    if (!docId) return
-    const doc = entityLists['documents']?.find(e => e._id === docId)
-    if (doc) {
-      setValue('secondary_navigation_params', {
-        ...watchedSecondaryNavParams,
-        pdfUrl: doc.extra?.file_url || '',
-        title: doc.label || '',
-      })
-    }
-  }, [watchedSecondaryNavParams?.documentId, entityLists['documents'], formReady, watchedSecondaryNavTargetKey])
 
   // ── Image handling ──────────────────────────────────────────────────────
 
@@ -624,9 +345,28 @@ export function HomeSectionItemFormModal({
         setUploadProgress(null)
       }
 
-      // Build submission data
-      const target = navTargets.find(t => t.key === data.navigation_target_key)
-      const secondaryTarget = navTargets.find(t => t.key === data.secondary_navigation_target_key)
+      // Build submission data — map click actions to backend fields (same as banners)
+      const resolveAction = (action: ClickAction, pkgId: string, bookId: string): {
+        link_type: string
+        internal_route?: string
+        internal_params?: Record<string, string>
+      } => {
+        switch (action) {
+          case 'theory_package':
+            return { link_type: 'internal', internal_route: '/revision-series', internal_params: { packageId: pkgId } }
+          case 'practical_package':
+            return { link_type: 'internal', internal_route: '/practical-series', internal_params: { packageId: pkgId } }
+          case 'ebook':
+            return { link_type: 'internal', internal_route: '/ebook-store', internal_params: { bookId } }
+          case 'external_url':
+            return { link_type: 'external' }
+          default:
+            return { link_type: 'none' }
+        }
+      }
+
+      const primary = resolveAction(primaryClickAction, selectedPackageId, selectedBookId)
+      const secondary = resolveAction(secondaryClickAction, selectedSecondaryPackageId, selectedSecondaryBookId)
 
       const submitData: HomeSectionItemFormData = {
         card_type: data.card_type,
@@ -645,21 +385,15 @@ export function HomeSectionItemFormModal({
         button_text: data.button_text || undefined,
         button_color: data.button_color || undefined,
         button_text_color: data.button_text_color || undefined,
-        link_type: data.link_type || 'none',
-        external_url: data.link_type === 'external' ? data.external_url || undefined : undefined,
-        internal_route: data.link_type === 'internal' && target ? target.route : undefined,
-        internal_params: data.link_type === 'internal' && target
-          ? data.navigation_params || undefined
-          : undefined,
+        link_type: primary.link_type,
+        external_url: primaryClickAction === 'external_url' ? data.external_url || undefined : undefined,
+        internal_route: 'internal_route' in primary ? primary.internal_route : undefined,
+        internal_params: 'internal_params' in primary ? primary.internal_params : undefined,
         secondary_button_text: data.secondary_button_text || undefined,
-        secondary_link_type: data.secondary_link_type || 'none',
-        secondary_external_url: data.secondary_link_type === 'external'
-          ? data.secondary_external_url || undefined : undefined,
-        secondary_internal_route: data.secondary_link_type === 'internal' && secondaryTarget
-          ? secondaryTarget.route : undefined,
-        secondary_internal_params: data.secondary_link_type === 'internal' && secondaryTarget
-          ? data.secondary_navigation_params || undefined
-          : undefined,
+        secondary_link_type: secondary.link_type,
+        secondary_external_url: secondaryClickAction === 'external_url' ? data.secondary_external_url || undefined : undefined,
+        secondary_internal_route: 'internal_route' in secondary ? secondary.internal_route : undefined,
+        secondary_internal_params: 'internal_params' in secondary ? secondary.internal_params : undefined,
         metadata: data.metadata && data.metadata.length > 0 ? data.metadata : undefined,
         display_order: data.display_order,
         is_active: data.is_active,
@@ -701,185 +435,59 @@ export function HomeSectionItemFormModal({
     }
   }
 
-  // ── Render nav params for a given target ────────────────────────────────
+  // ── Render click action section (same pattern as BannerFormModal) ────────
 
-  const renderNavParams = (
-    target: NavigationTarget,
-    paramsFieldName: 'navigation_params' | 'secondary_navigation_params',
-    currentParams: Record<string, string> | undefined,
+  const renderClickActionSection = (
+    isSecondary: boolean,
+    clickAction: ClickAction,
+    setClickAction: (v: ClickAction) => void,
+    pkgId: string,
+    setPkgId: (v: string) => void,
+    bookId: string,
+    setBookId: (v: string) => void,
   ) => {
-    return target.params.map(param => {
-      const paramValue = currentParams?.[param.name] || ''
-
-      const setParamValue = (val: string) => {
-        setValue(paramsFieldName, { ...currentParams, [param.name]: val })
-      }
-
-      // Auto-derived param (e.g., packageType from packageId) — show read-only
-      if (param.autoFrom) {
-        return (
-          <div key={param.name} className="space-y-1">
-            <Label className="text-xs">{param.label} <span className="text-muted-foreground">(auto)</span></Label>
-            <Input
-              className="h-8 text-xs bg-muted"
-              value={paramValue}
-              readOnly
-              placeholder="Auto-derived..."
-            />
-          </div>
-        )
-      }
-
-      // Boolean param
-      if (param.type === 'boolean') {
-        return (
-          <div key={param.name} className="space-y-1">
-            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
-            <Select value={paramValue} onValueChange={setParamValue}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="true">Yes</SelectItem>
-                <SelectItem value="false">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )
-      }
-
-      // Enum options param (e.g., packageType with predefined options)
-      if (param.options && param.options.length > 0) {
-        return (
-          <div key={param.name} className="space-y-1">
-            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
-            <Select value={paramValue} onValueChange={setParamValue}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select..." />
-              </SelectTrigger>
-              <SelectContent>
-                {param.options.map(opt => (
-                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )
-      }
-
-      // Entity dropdown param (packageId, documentId, id, etc.)
-      const entityKey = getEntityListKey(target.key, param.name)
-      if (entityKey) {
-        let items = entityLists[entityKey] || []
-        const loading = entityLoading[entityKey] || false
-
-        // Client-side filter: for theory_series/practical_series, only show matching package type
-        if (entityKey === 'packages' && param.filterPackageType) {
-          items = items.filter(i => i.extra?.package_type === param.filterPackageType)
-        }
-
-        // PDF viewer: pdfUrl and title are auto-filled from document
-        const isPdfAuto = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
-        if (isPdfAuto) {
-          return (
-            <div key={param.name} className="space-y-1">
-              <Label className="text-xs">{param.label} <span className="text-muted-foreground">(auto)</span></Label>
-              <Input
-                className="h-8 text-xs bg-muted"
-                value={paramValue}
-                readOnly
-                placeholder="Auto-filled from document..."
-              />
-            </div>
-          )
-        }
-
-        return (
-          <div key={param.name} className="space-y-1">
-            <Label className="text-xs">{param.label}{param.required && ' *'}</Label>
-            <EntityCombobox
-              items={items}
-              loading={loading}
-              value={paramValue}
-              onSelect={setParamValue}
-              placeholder={`Select ${param.label.toLowerCase()}...`}
-            />
-          </div>
-        )
-      }
-
-      // Fallback: plain text input for pdfUrl, title (pdf_viewer), etc.
-      const isPdfAutoFill = target.key === 'pdf_viewer' && (param.name === 'pdfUrl' || param.name === 'title')
-      return (
-        <div key={param.name} className="space-y-1">
-          <Label className="text-xs">
-            {param.label}{param.required && ' *'}
-            {isPdfAutoFill && <span className="text-muted-foreground"> (auto)</span>}
-          </Label>
-          <Input
-            className={cn("h-8 text-xs", isPdfAutoFill && "bg-muted")}
-            value={paramValue}
-            onChange={e => setParamValue(e.target.value)}
-            readOnly={isPdfAutoFill}
-            placeholder={isPdfAutoFill ? 'Auto-filled from document...' : `Enter ${param.label.toLowerCase()}...`}
-          />
-        </div>
-      )
-    })
-  }
-
-  // ── Render a link type section (primary or secondary) ───────────────────
-
-  const renderLinkSection = (
-    prefix: '' | 'secondary_',
-    linkType: string | undefined,
-    navTargetKey: string | undefined,
-    navParams: Record<string, string> | undefined,
-    target: NavigationTarget | null,
-  ) => {
-    const linkTypeField = `${prefix}link_type` as const
-    const navKeyField = `${prefix}navigation_target_key` as const
-    const navParamsField = `${prefix}navigation_params` as const
-    const externalUrlField = `${prefix}external_url` as const
-    const buttonTextField = `${prefix}button_text` as const
+    const externalUrlField = isSecondary ? 'secondary_external_url' : 'external_url'
+    const buttonTextField = isSecondary ? 'secondary_button_text' : 'button_text'
+    const isPackageAction = clickAction === 'theory_package' || clickAction === 'practical_package'
+    const relevantPackages = clickAction === 'theory_package' ? theoryPackages : practicalPackages
 
     return (
       <div className="space-y-3">
         {/* Button Text */}
         <div className="space-y-1">
-          <Label className="text-xs">{prefix === 'secondary_' ? 'Secondary ' : ''}Button Text</Label>
+          <Label className="text-xs">{isSecondary ? 'Secondary ' : ''}Button Text</Label>
           <Input className="h-8 text-xs" {...register(buttonTextField as any)} placeholder="e.g. View Details" />
         </div>
 
-        {/* Link Type */}
+        {/* Click Action */}
         <div className="space-y-1">
-          <Label className="text-xs">{prefix === 'secondary_' ? 'Secondary ' : ''}Link Type</Label>
+          <Label className="text-xs">{isSecondary ? 'Secondary ' : ''}Click Action</Label>
           <Select
-            value={linkType || 'none'}
-            onValueChange={(val) => {
-              setValue(linkTypeField as any, val)
-              if (val !== 'internal') {
-                setValue(navKeyField as any, '')
-                setValue(navParamsField as any, {})
-              }
-              if (val !== 'external') {
-                setValue(externalUrlField as any, '')
-              }
-            }}
+            value={clickAction}
+            onValueChange={(v) => { setClickAction(v as ClickAction); setPkgId(''); setBookId('') }}
           >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="internal">Internal Navigation</SelectItem>
-              <SelectItem value="external">External URL</SelectItem>
+              <SelectItem value="none">No Action</SelectItem>
+              <SelectItem value="external_url">External URL</SelectItem>
+              <SelectItem value="theory_package">Theory Package</SelectItem>
+              <SelectItem value="practical_package">Practical Package</SelectItem>
+              <SelectItem value="ebook">Book</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            {clickAction === 'none' && 'No navigation on tap.'}
+            {clickAction === 'external_url' && 'Opens an external URL in the browser.'}
+            {clickAction === 'theory_package' && 'Navigates to the selected theory package screen.'}
+            {clickAction === 'practical_package' && 'Navigates to the selected practical package screen.'}
+            {clickAction === 'ebook' && 'Opens the selected book details page.'}
+          </p>
         </div>
 
-        {/* External URL */}
-        {linkType === 'external' && (
+        {/* External URL input */}
+        {clickAction === 'external_url' && (
           <div className="space-y-1">
             <Label className="text-xs">External URL *</Label>
             <Input className="h-8 text-xs" {...register(externalUrlField as any)} placeholder="https://..." />
@@ -889,37 +497,64 @@ export function HomeSectionItemFormModal({
           </div>
         )}
 
-        {/* Internal Navigation */}
-        {linkType === 'internal' && (
-          <div className="space-y-3">
-            {/* Navigation Target Selector */}
-            <div className="space-y-1">
-              <Label className="text-xs">Navigation Target *</Label>
-              <Select
-                value={navTargetKey || ''}
-                onValueChange={(val) => {
-                  setValue(navKeyField as any, val)
-                  setValue(navParamsField as any, {})
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select screen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {navTargets.map(t => (
-                    <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Package selector */}
+        {isPackageAction && (
+          <div className="space-y-1">
+            <Label className="text-xs">
+              Select {clickAction === 'theory_package' ? 'Theory' : 'Practical'} Package *
+            </Label>
+            <Select
+              value={pkgId}
+              onValueChange={setPkgId}
+              disabled={packagesLoading}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder={
+                  packagesLoading ? 'Loading packages...' : `Select a ${clickAction === 'theory_package' ? 'theory' : 'practical'} package`
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {relevantPackages.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">
+                    No {clickAction === 'theory_package' ? 'theory' : 'practical'} packages found
+                  </div>
+                ) : (
+                  relevantPackages.map((pkg) => (
+                    <SelectItem key={pkg._id} value={pkg._id}>
+                      {pkg.name}
+                      {pkg.subject_id && typeof pkg.subject_id === 'object' && 'name' in pkg.subject_id ? ` (${(pkg.subject_id as any).name})` : ''}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-            {/* Route Params */}
-            {target && target.params.length > 0 && (
-              <div className="space-y-2 pl-3 border-l-2 border-muted">
-                <Label className="text-xs text-muted-foreground">Route Parameters</Label>
-                {renderNavParams(target, navParamsField as any, navParams)}
-              </div>
-            )}
+        {/* Book selector */}
+        {clickAction === 'ebook' && (
+          <div className="space-y-1">
+            <Label className="text-xs">Select Book *</Label>
+            <Select
+              value={bookId}
+              onValueChange={setBookId}
+              disabled={booksLoading}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder={booksLoading ? 'Loading books...' : 'Select a book'} />
+              </SelectTrigger>
+              <SelectContent>
+                {books.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No ebooks found</div>
+                ) : (
+                  books.map((book) => (
+                    <SelectItem key={book._id} value={book._id}>
+                      {book.title}{book.author ? ` — ${book.author}` : ''}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>
@@ -1121,24 +756,22 @@ export function HomeSectionItemFormModal({
               {/* ── Primary Action ── */}
               <div className="space-y-3">
                 <h4 className="text-sm font-medium">Primary Action</h4>
-                {renderLinkSection(
-                  '',
-                  watchedLinkType,
-                  watchedNavTargetKey,
-                  watchedNavParams,
-                  selectedNavTarget,
+                {renderClickActionSection(
+                  false,
+                  primaryClickAction, setPrimaryClickAction,
+                  selectedPackageId, setSelectedPackageId,
+                  selectedBookId, setSelectedBookId,
                 )}
               </div>
 
               {/* ── Secondary Action ── */}
               <div className="space-y-3">
                 <h4 className="text-sm font-medium">Secondary Action</h4>
-                {renderLinkSection(
-                  'secondary_',
-                  watchedSecondaryLinkType,
-                  watchedSecondaryNavTargetKey,
-                  watchedSecondaryNavParams,
-                  selectedSecondaryNavTarget,
+                {renderClickActionSection(
+                  true,
+                  secondaryClickAction, setSecondaryClickAction,
+                  selectedSecondaryPackageId, setSelectedSecondaryPackageId,
+                  selectedSecondaryBookId, setSelectedSecondaryBookId,
                 )}
               </div>
 
