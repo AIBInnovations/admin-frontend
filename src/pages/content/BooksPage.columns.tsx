@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Book } from '@/services/books.service'
+import type { PopulatedRef } from '@/types/api.types'
 import { MoreVertical, Pencil, Trash2, BookOpen, Package } from 'lucide-react'
 
 interface BooksColumnsProps {
@@ -73,6 +74,19 @@ export function useBooksColumns({
           </span>
         </div>
       ),
+    },
+    {
+      id: 'subject',
+      header: 'Subject',
+      width: 'w-28',
+      cell: (book) => {
+        const subject = book.subject_id as PopulatedRef | null
+        return (
+          <span className="text-xs text-muted-foreground truncate">
+            {subject && typeof subject === 'object' ? subject.name : '—'}
+          </span>
+        )
+      },
     },
     {
       id: 'category',

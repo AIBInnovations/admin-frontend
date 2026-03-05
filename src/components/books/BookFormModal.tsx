@@ -11,10 +11,14 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
-import { Loader2, Upload, FileText, X } from 'lucide-react'
+import { Loader2, Upload, FileText, X, ChevronsUpDown, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Book, BookFormData, booksService } from '@/services/books.service'
+import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 /** Book thumbnail aspect ratio: 3:4 (standard book cover portrait) */
@@ -31,6 +35,7 @@ const bookSchema = z.object({
   sale_price: z.number().min(0).optional().nullable(),
   ebook: z.boolean(),
   category: z.string().max(100).optional().or(z.literal('')),
+  subject_id: z.string().optional().or(z.literal('')),
   stock_quantity: z.number().int().min(0).optional().or(z.nan()),
   is_available: z.boolean(),
   publisher: z.string().max(100).optional().or(z.literal('')),
@@ -62,7 +67,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
     defaultValues: {
       title: '', author: '', description: '', isbn: '',
       price: 0, original_price: null, is_on_sale: false, sale_price: null,
-      ebook: false, category: '', stock_quantity: 0, is_available: true,
+      ebook: false, category: '', subject_id: '', stock_quantity: 0, is_available: true,
       publisher: '', publication_year: NaN, pages: NaN, weight_grams: 500,
     },
   })
@@ -73,6 +78,9 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
 
   const [ebookFile, setEbookFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjectOpen, setSubjectOpen] = useState(false)
+  const selectedSubjectId = watch('subject_id')
 
   // Thumbnail state
   const [thumbnailFile, setThumbnailFile] = useState<File[]>([])
@@ -95,17 +103,29 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
 
   useEffect(() => {
     if (open) {
+      subjectsService.getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' })
+        .then((res) => { if (res.success && res.data) setSubjects(res.data.entities) })
+        .catch(() => {})
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (open) {
       setEbookFile(null)
       setUploadProgress(null)
       setThumbnailFile([])
       setThumbnailUploadProgress(null)
       if (mode === 'edit' && book) {
+        const subId = typeof book.subject_id === 'object' && book.subject_id
+          ? (book.subject_id as any)._id
+          : (book.subject_id as string) || ''
         reset({
           title: book.title, author: book.author,
           description: book.description || '', isbn: book.isbn || '',
           price: book.price, original_price: book.original_price,
           is_on_sale: book.is_on_sale, sale_price: book.sale_price,
-          ebook: book.ebook ?? false, category: book.category || '', stock_quantity: book.stock_quantity,
+          ebook: book.ebook ?? false, category: book.category || '', subject_id: subId,
+          stock_quantity: book.stock_quantity,
           is_available: book.is_available, publisher: book.publisher || '',
           publication_year: book.publication_year ?? NaN,
           pages: book.pages ?? NaN, weight_grams: book.weight_grams,
@@ -116,7 +136,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
         reset({
           title: '', author: '', description: '', isbn: '',
           price: 0, original_price: null, is_on_sale: false, sale_price: null,
-          ebook: false, category: '', stock_quantity: 0, is_available: true,
+          ebook: false, category: '', subject_id: '', stock_quantity: 0, is_available: true,
           publisher: '', publication_year: NaN, pages: NaN, weight_grams: 500,
         })
         setExistingThumbnailUrl(null)
@@ -157,6 +177,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
         thumbnail_s3_key: thumbnailS3Key,
         ebook: data.ebook,
         category: data.category || undefined,
+        subject_id: data.subject_id || undefined,
         stock_quantity: data.stock_quantity || 0,
         is_available: data.is_available,
         publisher: data.publisher || undefined,
@@ -403,6 +424,53 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
               {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Subject</Label>
+            <Popover open={subjectOpen} onOpenChange={setSubjectOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={subjectOpen}
+                  className="w-full justify-between font-normal"
+                  disabled={isSubmitting || isThumbnailUploading}
+                >
+                  {selectedSubjectId
+                    ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
+                    : 'Select subject...'}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search subjects..." />
+                  <CommandList>
+                    <CommandEmpty>No subjects found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__none__"
+                        onSelect={() => { setValue('subject_id', ''); setSubjectOpen(false) }}
+                      >
+                        <Check className={cn('mr-2 h-4 w-4', !selectedSubjectId ? 'opacity-100' : 'opacity-0')} />
+                        <span className="text-muted-foreground">None</span>
+                      </CommandItem>
+                      {subjects.map((subject) => (
+                        <CommandItem
+                          key={subject._id}
+                          value={subject.name}
+                          onSelect={() => { setValue('subject_id', subject._id); setSubjectOpen(false) }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', selectedSubjectId === subject._id ? 'opacity-100' : 'opacity-0')} />
+                          {subject.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">

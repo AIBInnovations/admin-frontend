@@ -140,7 +140,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Series' : 'Edit Series'}</DialogTitle>
           <DialogDescription>
