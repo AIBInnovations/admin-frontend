@@ -2,21 +2,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Book } from '@/services/books.service'
 import type { PopulatedRef } from '@/types/api.types'
-import { MoreVertical, Pencil, Trash2, BookOpen, Package } from 'lucide-react'
+import { MoreVertical, Pencil, BookOpen, Package } from 'lucide-react'
 
 interface BooksColumnsProps {
   onEdit: (book: Book) => void
-  onDelete: (book: Book) => void
 }
 
 export function useBooksColumns({
   onEdit,
-  onDelete,
 }: BooksColumnsProps): ColumnDef<Book>[] {
   return [
     {
@@ -126,10 +124,6 @@ export function useBooksColumns({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit(book)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(book)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

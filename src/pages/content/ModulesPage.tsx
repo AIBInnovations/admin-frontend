@@ -4,11 +4,9 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
 import { ModuleFormModal } from '@/components/modules/ModuleFormModal'
 import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { modulesService, Module, ModuleFormData } from '@/services/modules.service'
 import { seriesService, Series } from '@/services/series.service'
 import { useModulesColumns } from './ModulesPage.columns'
@@ -31,11 +29,8 @@ export function ModulesPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedModule, setSelectedModule] = useState<Module | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch series for filter dropdown
   useEffect(() => {
@@ -100,26 +95,6 @@ export function ModulesPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (mod: Module) => {
-    setSelectedModule(mod)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await modulesService.getDeleteImpact(mod._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
-
   const handleFormSubmit = async (data: ModuleFormData) => {
     try {
       if (modalMode === 'create') {
@@ -143,23 +118,6 @@ export function ModulesPage() {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to save module')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedModule) return
-    try {
-      const response = await modulesService.delete(selectedModule._id)
-      if (response.success) {
-        toast.success('Module deleted successfully')
-        fetchModules()
-      } else {
-        toast.error(response.message || 'Failed to delete module')
-        throw new Error(response.message || 'Failed to delete module')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete module')
       throw error
     }
   }
@@ -222,7 +180,6 @@ export function ModulesPage() {
 
   const columns = useModulesColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
     onRecalculate: handleRecalculate,
   })
@@ -292,25 +249,6 @@ export function ModulesPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Module"
-        itemName={selectedModule?.name}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
     </div>
   )
 }

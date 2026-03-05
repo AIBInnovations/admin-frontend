@@ -5,7 +5,8 @@ import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse }
 // Types
 export interface Document {
   _id: string
-  series_id: PopulatedRef & { package_id?: string }
+  series_id: (PopulatedRef & { package_id?: string }) | null
+  subject_id: PopulatedRef | string | null
   title: string
   description: string
   file_url: string
@@ -24,8 +25,9 @@ export interface Document {
 
 export interface DocumentFormData {
   title: string
-  description: string
-  series_id: string
+  description?: string
+  series_id?: string
+  subject_id?: string
   is_free?: boolean
   display_order?: number
   thumbnail_url?: string
@@ -108,8 +110,9 @@ class DocumentsService {
     return apiService.post<any>(`${this.basePath}/confirm-upload`, {
       s3Key,
       title: data.title,
-      description: data.description,
-      series_id: data.series_id,
+      description: data.description || '',
+      series_id: data.series_id || undefined,
+      subject_id: data.subject_id || undefined,
       is_free: data.is_free,
       fileSize: file.size,
       mimeType,
@@ -147,7 +150,14 @@ class DocumentsService {
   }
 
   /**
-   * Delete document
+   * Archive document (soft delete)
+   */
+  async archive(documentId: string): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/${documentId}/archive`, {})
+  }
+
+  /**
+   * Delete document (permanent - only works on archived items)
    */
   async delete(documentId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${documentId}`)

@@ -4,12 +4,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
 import { PackageFormModal } from '@/components/packages/PackageFormModal'
 import { Link } from 'react-router-dom'
 import { Plus, Package as PackageIcon, Layers } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { packagesService, Package, PackageFormData } from '@/services/packages.service'
 import { subjectsService, Subject } from '@/services/subjects.service'
 import { usePackagesColumns } from './PackagesPage.columns'
@@ -34,11 +32,8 @@ export function PackagesPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch subjects for filter dropdown
   useEffect(() => {
@@ -112,26 +107,6 @@ export function PackagesPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (pkg: Package) => {
-    setSelectedPackage(pkg)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await packagesService.getDeleteImpact(pkg._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
-
   const handleFormSubmit = async (data: PackageFormData) => {
     try {
       if (modalMode === 'create') {
@@ -155,23 +130,6 @@ export function PackagesPage() {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to save package')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedPackage) return
-    try {
-      const response = await packagesService.delete(selectedPackage._id)
-      if (response.success) {
-        toast.success('Package deleted successfully')
-        fetchPackages()
-      } else {
-        toast.error(response.message || 'Failed to delete package')
-        throw new Error(response.message || 'Failed to delete package')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete package')
       throw error
     }
   }
@@ -237,7 +195,6 @@ export function PackagesPage() {
   const columns = usePackagesColumns({
     onNavigate: handleNavigate,
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
   })
 
@@ -310,25 +267,6 @@ export function PackagesPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Package"
-        itemName={selectedPackage?.name}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
     </div>
   )
 }

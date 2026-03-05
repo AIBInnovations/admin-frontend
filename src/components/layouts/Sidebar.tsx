@@ -27,6 +27,7 @@ import {
   UserCog,
   ShieldCheck,
   Wrench,
+  Archive,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -72,6 +73,7 @@ const navigation: NavItem[] = [
       { name: 'Books', href: '/content/books' },
       { name: 'Banners', href: '/content/banners' },
       { name: 'Home Sections', href: '/content/home-sections' },
+      { name: 'Archives', href: '/content/archives' },
     ],
   },
   { name: 'Live Sessions', href: '/sessions', icon: Calendar },

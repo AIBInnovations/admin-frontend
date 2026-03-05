@@ -4,11 +4,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
+import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { VideoFormModal } from '@/components/videos/VideoFormModal'
 import { Plus, Video as VideoIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { videosService, Video, VideoFormData } from '@/services/videos.service'
 import { modulesService, Module } from '@/services/modules.service'
 import { useVideosColumns } from './VideosPage.columns'
@@ -32,11 +31,12 @@ export function VideosPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
+  const [archiveBlocked, setArchiveBlocked] = useState(false)
+  const [archiveBlockReason, setArchiveBlockReason] = useState('')
+  const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
 
   // Fetch modules for filter dropdown
   useEffect(() => {
@@ -103,23 +103,26 @@ export function VideosPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (video: Video) => {
+  const handleArchiveClick = async (video: Video) => {
     setSelectedVideo(video)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
+    setArchiveModalOpen(true)
+    setLoadingArchiveImpact(true)
+    setArchiveBlocked(false)
+    setArchiveBlockReason('')
     try {
       const response = await videosService.getDeleteImpact(video._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
+      if (response.success && response.data && response.data.blocked) {
+        setArchiveBlocked(true)
+        const reasons = response.data.dependencies
+          ?.filter((d: any) => d.blocking)
+          .map((d: any) => `${d.count} ${d.label}`)
+          .join(', ')
+        setArchiveBlockReason(`Cannot archive. Remove dependencies first: ${reasons}`)
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
+      toast.error(error.message || 'Failed to check dependencies')
     } finally {
-      setLoadingDeleteImpact(false)
+      setLoadingArchiveImpact(false)
     }
   }
 
@@ -156,19 +159,19 @@ export function VideosPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleArchiveConfirm = async () => {
     if (!selectedVideo) return
     try {
-      const response = await videosService.delete(selectedVideo._id)
+      const response = await videosService.archive(selectedVideo._id)
       if (response.success) {
-        toast.success('Video deleted successfully')
+        toast.success('Video archived successfully')
         fetchVideos()
       } else {
-        toast.error(response.message || 'Failed to delete video')
-        throw new Error(response.message || 'Failed to delete video')
+        toast.error(response.message || 'Failed to archive video')
+        throw new Error(response.message || 'Failed to archive video')
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete video')
+      toast.error(error.message || 'Failed to archive video')
       throw error
     }
   }
@@ -224,7 +227,7 @@ export function VideosPage() {
 
   const columns = useVideosColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
+    onArchive: handleArchiveClick,
   })
 
   const hasFilters = search || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all'
@@ -286,24 +289,15 @@ export function VideosPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Video"
+      <ArchiveModal
+        open={archiveModalOpen}
+        onClose={() => setArchiveModalOpen(false)}
+        onConfirm={handleArchiveConfirm}
+        title="Archive Video"
         itemName={selectedVideo?.title}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
+        isLoadingImpact={loadingArchiveImpact}
+        blocked={archiveBlocked}
+        blockReason={archiveBlockReason}
       />
     </div>
   )

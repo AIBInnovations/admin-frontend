@@ -4,23 +4,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusToggle } from '@/components/common/StatusToggle'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Series } from '@/services/series.service'
-import { GripVertical, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, MoreVertical, Pencil } from 'lucide-react'
 
 interface SeriesColumnsProps {
   onEdit: (series: Series) => void
-  onDelete: (series: Series) => void
   onToggleActive: (series: Series) => void
 }
 
 export function useSeriesColumns({
   onEdit,
-  onDelete,
   onToggleActive,
 }: SeriesColumnsProps): ColumnDef<Series>[] {
   return [
@@ -102,11 +99,6 @@ export function useSeriesColumns({
             <DropdownMenuItem onClick={() => onEdit(series)}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(series)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -4,11 +4,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
+import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { BannerFormModal } from '@/components/banners/BannerFormModal'
 import { Plus, Image } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { bannersService, Banner, BannerFormData } from '@/services/banners.service'
 import { useBannersColumns } from './BannersPage.columns'
 
@@ -26,11 +25,9 @@ export function BannersPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Client-side search filter
   const filteredBanners = search
@@ -92,24 +89,9 @@ export function BannersPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (banner: Banner) => {
+  const handleArchiveClick = (banner: Banner) => {
     setSelectedBanner(banner)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await bannersService.getDeleteImpact(banner._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
+    setArchiveModalOpen(true)
   }
 
   const handleFormSubmit = async (data: BannerFormData) => {
@@ -139,19 +121,19 @@ export function BannersPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleArchiveConfirm = async () => {
     if (!selectedBanner) return
     try {
-      const response = await bannersService.delete(selectedBanner._id)
+      const response = await bannersService.archive(selectedBanner._id)
       if (response.success) {
-        toast.success('Banner deleted successfully')
+        toast.success('Banner archived successfully')
         fetchBanners()
       } else {
-        toast.error(response.message || 'Failed to delete banner')
-        throw new Error(response.message || 'Failed to delete banner')
+        toast.error(response.message || 'Failed to archive banner')
+        throw new Error(response.message || 'Failed to archive banner')
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete banner')
+      toast.error(error.message || 'Failed to archive banner')
       throw error
     }
   }
@@ -174,7 +156,7 @@ export function BannersPage() {
 
   const columns = useBannersColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
+    onArchive: handleArchiveClick,
   })
 
   return (
@@ -236,24 +218,12 @@ export function BannersPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Banner"
+      <ArchiveModal
+        open={archiveModalOpen}
+        onClose={() => setArchiveModalOpen(false)}
+        onConfirm={handleArchiveConfirm}
+        title="Archive Banner"
         itemName={selectedBanner?.title}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
       />
     </div>
   )

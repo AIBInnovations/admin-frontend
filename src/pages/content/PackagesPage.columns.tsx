@@ -4,13 +4,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusToggle } from '@/components/common/StatusToggle'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Package } from '@/services/packages.service'
-import { MoreVertical, Pencil, Trash2, Eye } from 'lucide-react'
+import { MoreVertical, Pencil, Eye } from 'lucide-react'
 
 function formatDuration(days: number): string {
   if (days >= 365) return `${Math.round(days / 365)} year`
@@ -21,14 +20,12 @@ function formatDuration(days: number): string {
 interface PackagesColumnsProps {
   onNavigate: (pkg: Package) => void
   onEdit: (pkg: Package) => void
-  onDelete: (pkg: Package) => void
   onToggleActive: (pkg: Package) => void
 }
 
 export function usePackagesColumns({
   onNavigate,
   onEdit,
-  onDelete,
   onToggleActive,
 }: PackagesColumnsProps): ColumnDef<Package>[] {
   return [
@@ -170,11 +167,6 @@ export function usePackagesColumns({
               <DropdownMenuItem onClick={() => onEdit(pkg)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onDelete(pkg)} className="text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

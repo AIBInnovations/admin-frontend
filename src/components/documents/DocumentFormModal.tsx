@@ -17,12 +17,14 @@ import { Loader2, Upload, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Document, DocumentFormData, documentsService } from '@/services/documents.service'
 import { Series, seriesService } from '@/services/series.service'
+import { Subject, subjectsService } from '@/services/subjects.service'
 import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
 
 const documentSchema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters').max(300),
   description: z.string().max(2000).optional().or(z.literal('')),
-  series_id: z.string().min(1, 'Series is required'),
+  series_id: z.string().optional().or(z.literal('')),
+  subject_id: z.string().optional().or(z.literal('')),
   is_free: z.boolean(),
   display_order: z.number().int().min(0).optional().or(z.nan()),
 })
@@ -40,7 +42,9 @@ interface DocumentFormModalProps {
 
 export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode, defaultSeriesId }: DocumentFormModalProps) {
   const [seriesList, setSeriesList] = useState<Series[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
   const [seriesPopoverOpen, setSeriesPopoverOpen] = useState(false)
+  const [subjectPopoverOpen, setSubjectPopoverOpen] = useState(false)
   const [docFile, setDocFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
@@ -52,17 +56,21 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
   } = useForm<DocumentFormValues>({
     resolver: zodResolver(documentSchema),
     defaultValues: {
-      title: '', description: '', series_id: '', is_free: false, display_order: 0,
+      title: '', description: '', series_id: '', subject_id: '', is_free: false, display_order: 0,
     },
   })
 
   const isFree = watch('is_free')
+  const selectedSubjectId = watch('subject_id')
 
   // Fetch dropdown data
   useEffect(() => {
     if (open) {
       seriesService.getAll({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
         if (res.success && res.data) setSeriesList(res.data.entities)
+      })
+      subjectsService.getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' }).then((res) => {
+        if (res.success && res.data) setSubjects(res.data.entities)
       })
     }
   }, [open])
@@ -73,16 +81,19 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
       setDocFile(null)
       setThumbnailFile(null)
       if (mode === 'edit' && doc) {
+        const seriesId = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id._id : (doc.series_id as string) || ''
+        const subjectId = doc.subject_id && typeof doc.subject_id === 'object' ? (doc.subject_id as any)._id : (doc.subject_id as string) || ''
         reset({
           title: doc.title,
           description: doc.description || '',
-          series_id: typeof doc.series_id === 'object' ? doc.series_id._id : doc.series_id,
+          series_id: seriesId,
+          subject_id: subjectId,
           is_free: doc.is_free,
           display_order: doc.display_order,
         })
       } else {
         reset({
-          title: '', description: '', series_id: defaultSeriesId || '', is_free: false, display_order: 0,
+          title: '', description: '', series_id: defaultSeriesId || '', subject_id: '', is_free: false, display_order: 0,
         })
       }
     }
@@ -90,19 +101,16 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
 
   /**
    * Upload thumbnail to S3 via presigned URL (3-step flow)
-   * Returns { thumbnail_url, thumbnail_s3_key } or null
    */
   const uploadThumbnail = async (file: File): Promise<{ thumbnail_url: string; thumbnail_s3_key: string } | null> => {
     const mimeType = file.type || 'image/jpeg'
 
-    // Step 1: Get presigned URL
     const urlRes = await documentsService.getThumbnailUploadUrl(mimeType)
     if (!urlRes.success || !urlRes.data) {
       throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
     }
     const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
 
-    // Step 2: Upload to S3
     await axios.put(uploadUrl, file, {
       headers: { 'Content-Type': mimeType },
     })
@@ -115,7 +123,6 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
     setUploadProgress(null)
 
     try {
-      // Upload thumbnail first if provided
       let thumbnailData: { thumbnail_url: string; thumbnail_s3_key: string } | null = null
       if (thumbnailFile) {
         thumbnailData = await uploadThumbnail(thumbnailFile)
@@ -124,7 +131,8 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
       const formData: DocumentFormData = {
         title: data.title,
         description: data.description || '',
-        series_id: data.series_id,
+        series_id: data.series_id || undefined,
+        subject_id: data.subject_id || undefined,
         is_free: data.is_free,
         display_order: data.display_order || undefined,
         ...(thumbnailData && {
@@ -164,7 +172,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" placeholder="Document description..." rows={3} disabled={isSubmitting} {...register('description')} />
+            <Textarea id="description" placeholder="Document description..." rows={2} disabled={isSubmitting} {...register('description')} />
             {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
           </div>
 
@@ -183,9 +191,57 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             />
           </div>
 
+          {/* Subject */}
+          <div className="space-y-2">
+            <Label>Subject</Label>
+            <Popover open={subjectPopoverOpen} onOpenChange={setSubjectPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={subjectPopoverOpen}
+                  className="w-full justify-between font-normal"
+                  disabled={isSubmitting}
+                >
+                  {selectedSubjectId
+                    ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
+                    : 'Select subject...'}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search subjects..." />
+                  <CommandList>
+                    <CommandEmpty>No subjects found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__none__"
+                        onSelect={() => { setValue('subject_id', ''); setSubjectPopoverOpen(false) }}
+                      >
+                        <Check className={cn('mr-2 h-4 w-4', !selectedSubjectId ? 'opacity-100' : 'opacity-0')} />
+                        <span className="text-muted-foreground">None</span>
+                      </CommandItem>
+                      {subjects.map((subject) => (
+                        <CommandItem
+                          key={subject._id}
+                          value={subject.name}
+                          onSelect={() => { setValue('subject_id', subject._id); setSubjectPopoverOpen(false) }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', selectedSubjectId === subject._id ? 'opacity-100' : 'opacity-0')} />
+                          {subject.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
           {/* Series */}
           <div className="space-y-2">
-            <Label>Series <span className="text-red-500">*</span></Label>
+            <Label>Series</Label>
             <Controller
               name="series_id" control={control}
               render={({ field }) => {
@@ -202,7 +258,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                       >
                         {selectedSeries
                           ? `${selectedSeries.name}${typeof selectedSeries.package_id === 'object' ? ` (${selectedSeries.package_id.name})` : ''}`
-                          : 'Select series'}
+                          : 'Select series...'}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -212,6 +268,16 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                         <CommandList>
                           <CommandEmpty>No series found.</CommandEmpty>
                           <CommandGroup>
+                            <CommandItem
+                              value="__no_series__"
+                              onSelect={() => {
+                                field.onChange('')
+                                setSeriesPopoverOpen(false)
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !field.value ? 'opacity-100' : 'opacity-0')} />
+                              <span className="text-muted-foreground">None</span>
+                            </CommandItem>
                             {seriesList.map((s) => (
                               <CommandItem
                                 key={s._id}

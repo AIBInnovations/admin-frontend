@@ -4,11 +4,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
+import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal'
 import { Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { documentsService, Document, DocumentFormData } from '@/services/documents.service'
 import { seriesService, Series } from '@/services/series.service'
 import { useDocumentsColumns } from './DocumentsPage.columns'
@@ -32,11 +31,9 @@ export function DocumentsPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch series for filter dropdown
   useEffect(() => {
@@ -103,24 +100,9 @@ export function DocumentsPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (doc: Document) => {
+  const handleArchiveClick = (doc: Document) => {
     setSelectedDocument(doc)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await documentsService.getDeleteImpact(doc._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
+    setArchiveModalOpen(true)
   }
 
   const handleFormSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
@@ -150,19 +132,19 @@ export function DocumentsPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleArchiveConfirm = async () => {
     if (!selectedDocument) return
     try {
-      const response = await documentsService.delete(selectedDocument._id)
+      const response = await documentsService.archive(selectedDocument._id)
       if (response.success) {
-        toast.success('Document deleted successfully')
+        toast.success('Document archived successfully')
         fetchDocuments()
       } else {
-        toast.error(response.message || 'Failed to delete document')
-        throw new Error(response.message || 'Failed to delete document')
+        toast.error(response.message || 'Failed to archive document')
+        throw new Error(response.message || 'Failed to archive document')
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete document')
+      toast.error(error.message || 'Failed to archive document')
       throw error
     }
   }
@@ -213,7 +195,7 @@ export function DocumentsPage() {
 
   const columns = useDocumentsColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
+    onArchive: handleArchiveClick,
   })
 
   const filteredDocuments = search ? documents.filter((d) => d.title.toLowerCase().includes(search.toLowerCase())) : documents
@@ -277,24 +259,12 @@ export function DocumentsPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Document"
+      <ArchiveModal
+        open={archiveModalOpen}
+        onClose={() => setArchiveModalOpen(false)}
+        onConfirm={handleArchiveConfirm}
+        title="Archive Document"
         itemName={selectedDocument?.title}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
       />
     </div>
   )

@@ -4,11 +4,9 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
 import { SeriesFormModal } from '@/components/series/SeriesFormModal'
 import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { seriesService, Series, SeriesFormData } from '@/services/series.service'
 import { packagesService, Package } from '@/services/packages.service'
 import { useSeriesColumns } from './SeriesPage.columns'
@@ -31,11 +29,8 @@ export function SeriesPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch packages for filter dropdown
   useEffect(() => {
@@ -100,26 +95,6 @@ export function SeriesPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (series: Series) => {
-    setSelectedSeries(series)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await seriesService.getDeleteImpact(series._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
-
   const handleFormSubmit = async (data: SeriesFormData) => {
     try {
       if (modalMode === 'create') {
@@ -143,23 +118,6 @@ export function SeriesPage() {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to save series')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedSeries) return
-    try {
-      const response = await seriesService.delete(selectedSeries._id)
-      if (response.success) {
-        toast.success('Series deleted successfully')
-        fetchSeries()
-      } else {
-        toast.error(response.message || 'Failed to delete series')
-        throw new Error(response.message || 'Failed to delete series')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete series')
       throw error
     }
   }
@@ -208,7 +166,6 @@ export function SeriesPage() {
 
   const columns = useSeriesColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
   })
 
@@ -275,25 +232,6 @@ export function SeriesPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Series"
-        itemName={selectedSeries?.name}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
     </div>
   )
 }

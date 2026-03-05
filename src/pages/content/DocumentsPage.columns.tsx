@@ -6,7 +6,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Document } from '@/services/documents.service'
-import { MoreVertical, Pencil, Trash2, FileText, Download } from 'lucide-react'
+import type { PopulatedRef } from '@/types/api.types'
+import { MoreVertical, Pencil, Archive, FileText, Download } from 'lucide-react'
 
 const formatBadge: Record<string, string> = {
   pdf: 'bg-red-500/10 text-red-600 border-red-200',
@@ -24,12 +25,12 @@ function formatFileSize(mb: number): string {
 
 interface DocumentsColumnsProps {
   onEdit: (doc: Document) => void
-  onDelete: (doc: Document) => void
+  onArchive: (doc: Document) => void
 }
 
 export function useDocumentsColumns({
   onEdit,
-  onDelete,
+  onArchive,
 }: DocumentsColumnsProps): ColumnDef<Document>[] {
   return [
     {
@@ -50,11 +51,24 @@ export function useDocumentsColumns({
       ),
     },
     {
+      id: 'subject',
+      header: 'Subject',
+      width: 'w-28',
+      cell: (doc) => {
+        const subject = doc.subject_id as PopulatedRef | null
+        return (
+          <span className="text-xs text-muted-foreground truncate">
+            {subject && typeof subject === 'object' ? subject.name : '—'}
+          </span>
+        )
+      },
+    },
+    {
       id: 'series',
       header: 'Series',
       cell: (doc) => (
         <Badge variant="secondary" className="text-[10px]">
-          {typeof doc.series_id === 'object' ? doc.series_id.name : '—'}
+          {doc.series_id && typeof doc.series_id === 'object' ? doc.series_id.name : '—'}
         </Badge>
       ),
     },
@@ -121,8 +135,8 @@ export function useDocumentsColumns({
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(doc)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />Delete
+            <DropdownMenuItem onClick={() => onArchive(doc)} className="text-amber-600">
+              <Archive className="mr-2 h-4 w-4" />Archive
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

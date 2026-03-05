@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Video } from '@/services/videos.service'
-import { MoreVertical, Pencil, Trash2, Eye } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, Eye } from 'lucide-react'
 
 function formatFileSize(mb: number): string {
   if (!mb) return '—'
@@ -23,12 +23,12 @@ const statusColors: Record<string, string> = {
 
 interface VideosColumnsProps {
   onEdit: (video: Video) => void
-  onDelete: (video: Video) => void
+  onArchive: (video: Video) => void
 }
 
 export function useVideosColumns({
   onEdit,
-  onDelete,
+  onArchive,
 }: VideosColumnsProps): ColumnDef<Video>[] {
   return [
     {
@@ -115,8 +115,8 @@ export function useVideosColumns({
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(video)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />Delete
+            <DropdownMenuItem onClick={() => onArchive(video)} className="text-amber-600">
+              <Archive className="mr-2 h-4 w-4" />Archive
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

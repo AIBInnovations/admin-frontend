@@ -296,7 +296,14 @@ class VideosService {
   }
 
   /**
-   * Delete video
+   * Archive video (soft delete)
+   */
+  async archive(videoId: string): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/${videoId}/archive`, {})
+  }
+
+  /**
+   * Delete video (permanent - only works on archived items)
    */
   async delete(videoId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${videoId}`)

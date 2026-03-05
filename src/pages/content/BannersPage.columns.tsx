@@ -6,16 +6,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Banner } from '@/services/banners.service'
-import { MoreVertical, Pencil, Trash2, Image, ExternalLink, BookOpen, FlaskConical, BookMarked } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, Image, ExternalLink, BookOpen, FlaskConical, BookMarked } from 'lucide-react'
 
 interface BannersColumnsProps {
   onEdit: (banner: Banner) => void
-  onDelete: (banner: Banner) => void
+  onArchive: (banner: Banner) => void
 }
 
 export function useBannersColumns({
   onEdit,
-  onDelete,
+  onArchive,
 }: BannersColumnsProps): ColumnDef<Banner>[] {
   return [
     {
@@ -132,8 +132,8 @@ export function useBannersColumns({
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(banner)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />Delete
+            <DropdownMenuItem onClick={() => onArchive(banner)} className="text-amber-600">
+              <Archive className="mr-2 h-4 w-4" />Archive
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

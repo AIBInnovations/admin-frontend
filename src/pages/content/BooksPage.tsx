@@ -4,11 +4,9 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
 import { BookFormModal } from '@/components/books/BookFormModal'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import { booksService, Book, BookFormData } from '@/services/books.service'
 import { useBooksColumns } from './BooksPage.columns'
 
@@ -26,11 +24,8 @@ export function BooksPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
   // Fetch books
   const fetchBooks = useCallback(async () => {
@@ -95,26 +90,6 @@ export function BooksPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (book: Book) => {
-    setSelectedBook(book)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await booksService.getDeleteImpact(book._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
-
   const handleFormSubmit = async (data: BookFormData, ebookFile?: File, onProgress?: (pct: number) => void) => {
     try {
       let bookId: string | undefined
@@ -151,23 +126,6 @@ export function BooksPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
-    if (!selectedBook) return
-    try {
-      const response = await booksService.delete(selectedBook._id)
-      if (response.success) {
-        toast.success('Book deleted successfully')
-        fetchBooks()
-      } else {
-        toast.error(response.message || 'Failed to delete book')
-        throw new Error(response.message || 'Failed to delete book')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete book')
-      throw error
-    }
-  }
-
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -186,7 +144,6 @@ export function BooksPage() {
 
   const columns = useBooksColumns({
     onEdit: handleEdit,
-    onDelete: handleDeleteClick,
   })
 
   return (
@@ -248,25 +205,6 @@ export function BooksPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Book"
-        itemName={selectedBook?.title}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
     </div>
   )
 }

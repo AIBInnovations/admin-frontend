@@ -95,6 +95,16 @@ class BannersService {
     return apiService.get<DeleteImpactResponse>(`${this.basePath}/${bannerId}/delete-impact`)
   }
 
+  /**
+   * Archive banner (soft delete)
+   */
+  async archive(bannerId: string): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/${bannerId}/archive`, {})
+  }
+
+  /**
+   * Delete banner (permanent - only works on archived items)
+   */
   async delete(bannerId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${bannerId}`)
   }

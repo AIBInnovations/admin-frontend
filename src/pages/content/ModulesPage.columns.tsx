@@ -4,13 +4,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusToggle } from '@/components/common/StatusToggle'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Module } from '@/services/modules.service'
-import { GripVertical, MoreVertical, Pencil, Trash2, BookOpen, Clock, RefreshCw } from 'lucide-react'
+import { GripVertical, MoreVertical, Pencil, BookOpen, Clock, RefreshCw } from 'lucide-react'
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -20,14 +19,12 @@ function formatDuration(minutes: number): string {
 
 interface ModulesColumnsProps {
   onEdit: (mod: Module) => void
-  onDelete: (mod: Module) => void
   onToggleActive: (mod: Module) => void
   onRecalculate: (mod: Module) => void
 }
 
 export function useModulesColumns({
   onEdit,
-  onDelete,
   onToggleActive,
   onRecalculate,
 }: ModulesColumnsProps): ColumnDef<Module>[] {
@@ -131,11 +128,6 @@ export function useModulesColumns({
             <DropdownMenuItem onClick={() => onRecalculate(mod)}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Recalculate Stats
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(mod)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

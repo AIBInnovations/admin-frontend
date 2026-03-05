@@ -39,6 +39,7 @@ import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
 import { VideoReviewsPage } from '@/pages/content/VideoReviewsPage'
+import { ArchivesPage } from '@/pages/content/ArchivesPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
@@ -81,6 +82,7 @@ function App() {
               <Route path="/content/home-sections" element={<HomeSectionsPage />} />
               <Route path="/content/home-sections/:sectionId" element={<HomeSectionDetailPage />} />
               <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
+              <Route path="/content/archives" element={<ArchivesPage />} />
 
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />
