@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import axios from 'axios'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -18,14 +19,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Series, SeriesFormData } from '@/services/series.service'
+import { Series, SeriesFormData, seriesService } from '@/services/series.service'
 import { Package, packagesService } from '@/services/packages.service'
+import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
 
 const seriesSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(200),
   description: z.string().min(10, 'Description must be at least 10 characters').max(2000),
   package_id: z.string().min(1, 'Package is required'),
-  thumbnail_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
 })
@@ -44,6 +45,7 @@ interface SeriesFormModalProps {
 export function SeriesFormModal({ open, onClose, onSubmit, series, mode, defaultPackageId }: SeriesFormModalProps) {
   const [packages, setPackages] = useState<Package[]>([])
   const [packagePopoverOpen, setPackagePopoverOpen] = useState(false)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
 
   const {
     register, handleSubmit, control,
@@ -53,7 +55,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
     resolver: zodResolver(seriesSchema),
     defaultValues: {
       name: '', description: '', package_id: '',
-      thumbnail_url: '', display_order: 0, is_active: true,
+      display_order: 0, is_active: true,
     },
   })
 
@@ -71,33 +73,61 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
   // Reset form
   useEffect(() => {
     if (open) {
+      setThumbnailFile(null)
       if (mode === 'edit' && series) {
         reset({
           name: series.name,
           description: series.description,
           package_id: typeof series.package_id === 'object' ? series.package_id._id : series.package_id,
-          thumbnail_url: series.thumbnail_url || '',
           display_order: series.display_order,
           is_active: series.is_active,
         })
       } else {
         reset({
           name: '', description: '', package_id: defaultPackageId || '',
-          thumbnail_url: '', display_order: 0, is_active: true,
+          display_order: 0, is_active: true,
         })
       }
     }
   }, [open, mode, series, reset, defaultPackageId])
 
+  /**
+   * Upload thumbnail to S3 via presigned URL (3-step flow)
+   */
+  const uploadThumbnail = async (file: File): Promise<{ thumbnail_url: string; thumbnail_s3_key: string } | null> => {
+    const mimeType = file.type || 'image/jpeg'
+
+    const urlRes = await seriesService.getThumbnailUploadUrl(mimeType)
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+    })
+
+    return { thumbnail_url: thumbnailUrl, thumbnail_s3_key: s3Key }
+  }
+
   const handleFormSubmit = async (data: SeriesFormValues) => {
     try {
+      // Upload thumbnail first if provided
+      let thumbnailData: { thumbnail_url: string; thumbnail_s3_key: string } | null = null
+      if (thumbnailFile) {
+        thumbnailData = await uploadThumbnail(thumbnailFile)
+      }
+
       const formData: SeriesFormData = {
         name: data.name,
         description: data.description,
         package_id: data.package_id,
-        thumbnail_url: data.thumbnail_url || null,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
+        ...(thumbnailData && {
+          thumbnail_url: thumbnailData.thumbnail_url,
+          thumbnail_s3_key: thumbnailData.thumbnail_s3_key,
+        }),
       }
       await onSubmit(formData)
       onClose()
@@ -181,11 +211,19 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
             {errors.package_id && <p className="text-sm text-red-500">{errors.package_id.message}</p>}
           </div>
 
-          {/* Thumbnail URL */}
+          {/* Thumbnail */}
           <div className="space-y-2">
-            <Label htmlFor="thumbnail_url">Thumbnail URL</Label>
-            <Input id="thumbnail_url" placeholder="https://..." disabled={isSubmitting} {...register('thumbnail_url')} />
-            {errors.thumbnail_url && <p className="text-sm text-red-500">{errors.thumbnail_url.message}</p>}
+            <Label>Thumbnail</Label>
+            <ImageUploadWithCrop
+              value={thumbnailFile}
+              onChange={setThumbnailFile}
+              aspectRatio={3 / 4}
+              maxSize={5 * 1024 * 1024}
+              label="Upload thumbnail"
+              description="Recommended ratio: 3:4. Max 5MB. JPEG, PNG, or WebP."
+              disabled={isSubmitting}
+              currentImageUrl={mode === 'edit' ? series?.thumbnail_url : undefined}
+            />
           </div>
 
           {/* Display Order */}

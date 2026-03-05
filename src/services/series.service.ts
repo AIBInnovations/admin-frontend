@@ -9,6 +9,7 @@ export interface Series {
   name: string
   description: string
   thumbnail_url: string | null
+  thumbnail_s3_key: string | null
   display_order: number
   is_active: boolean
   createdAt: string
@@ -20,6 +21,7 @@ export interface SeriesFormData {
   name: string
   description: string
   thumbnail_url?: string | null
+  thumbnail_s3_key?: string | null
   display_order?: number
   is_active?: boolean
 }
@@ -35,22 +37,23 @@ class SeriesService extends BaseCrudService<Series, SeriesFormData, SeriesListPa
   }
 
   /**
-   * Upload thumbnail image to Cloudinary
+   * Get presigned S3 URL for thumbnail upload
    */
-  async uploadThumbnail(seriesId: string, file: File): Promise<ApiResponse<Series>> {
-    const formData = new FormData()
-    formData.append('thumbnail', file)
-
-    const response = await apiService.post<Record<string, Series>>(
-      `${this.basePath}/${seriesId}/thumbnail`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }
+  async getThumbnailUploadUrl(mimeType: string): Promise<ApiResponse<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>> {
+    return apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType }
     )
+  }
 
+  /**
+   * Confirm thumbnail upload after S3 upload
+   */
+  async confirmThumbnailUpload(seriesId: string, s3Key: string, thumbnailUrl: string): Promise<ApiResponse<Series>> {
+    const response = await apiService.post<Record<string, Series>>(
+      `${this.basePath}/${seriesId}/thumbnail-confirm`,
+      { s3Key, thumbnailUrl }
+    )
     if (response.success && response.data) {
       return { ...response, data: response.data[this.entityKey] }
     }
