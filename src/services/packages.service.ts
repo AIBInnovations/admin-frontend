@@ -224,20 +224,38 @@ class PackagesService extends BaseCrudService<Package, PackageFormData, Packages
   }
 
   /**
-   * Upload thumbnail image to Cloudinary
+   * Get presigned URL for package thumbnail upload
+   */
+  async getThumbnailUploadUrl(mimeType: string): Promise<ApiResponse<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>> {
+    return apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType },
+    )
+  }
+
+  /**
+   * Upload thumbnail via presigned S3 URL (3-step flow)
    */
   async uploadThumbnail(packageId: string, file: File): Promise<ApiResponse<Package>> {
-    const formData = new FormData()
-    formData.append('thumbnail', file)
+    const mimeType = file.type || 'image/jpeg'
 
+    // Step 1: Get presigned URL
+    const urlRes = await this.getThumbnailUploadUrl(mimeType)
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    // Step 2: Upload to S3
+    const axios = (await import('axios')).default
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+    })
+
+    // Step 3: Confirm with backend
     const response = await apiService.post<Record<string, Package>>(
-      `${this.basePath}/${packageId}/thumbnail`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }
+      `${this.basePath}/${packageId}/thumbnail-confirm`,
+      { s3Key, thumbnailUrl },
     )
 
     if (response.success && response.data) {
