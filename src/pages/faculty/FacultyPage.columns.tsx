@@ -100,8 +100,8 @@ export function useFacultyColumns({
       width: 'w-24',
       cell: (faculty) => (
         <StatusToggle
-          isActive={faculty.is_active}
-          onToggle={() => onToggleActive(faculty)}
+          checked={faculty.is_active}
+          onCheckedChange={() => onToggleActive(faculty)}
         />
       ),
     },
