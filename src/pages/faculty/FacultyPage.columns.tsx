@@ -37,18 +37,36 @@ export function useFacultyColumns({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium truncate">{faculty.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{faculty.email}</p>
+            {faculty.email && <p className="text-xs text-muted-foreground truncate">{faculty.email}</p>}
           </div>
         </div>
       ),
     },
     {
-      id: 'specialization',
-      header: 'Specialization',
+      id: 'subject',
+      header: 'Subject',
+      cell: (faculty) => {
+        const subject = faculty.subject_id && typeof faculty.subject_id === 'object' ? faculty.subject_id : null
+        return (
+          <div className="space-y-0.5">
+            {subject ? (
+              <Badge variant="secondary" className="text-[10px]">{subject.name}</Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+            {faculty.specialization && (
+              <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{faculty.specialization}</p>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      id: 'order',
+      header: 'Order',
+      width: 'w-16',
       cell: (faculty) => (
-        <Badge variant="secondary" className="text-[10px]">
-          {faculty.specialization}
-        </Badge>
+        <span className="text-sm">{faculty.display_order ?? 0}</span>
       ),
     },
     {

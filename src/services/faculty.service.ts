@@ -7,7 +7,7 @@ import type { BaseListParams } from '@/types/api.types'
 export interface Faculty {
   _id: string
   name: string
-  email: string
+  email: string | null
   phone: string | null
   photo_url: string | null
   photo_s3_key: string | null
@@ -15,6 +15,8 @@ export interface Faculty {
   qualifications: string | null
   experience_years: number | null
   specialization: string
+  subject_id: { _id: string; name: string; icon_url?: string } | string | null
+  display_order: number
   is_active: boolean
   is_verified: boolean
   last_login: string | null
@@ -26,7 +28,9 @@ export interface Faculty {
 
 export interface FacultyFormData {
   name: string
-  specialization: string
+  specialization?: string
+  subject_id?: string | null
+  display_order?: number
   email?: string
   phone?: string
   photo_url?: string
@@ -39,6 +43,7 @@ export interface FacultyFormData {
 
 export interface FacultyListParams extends BaseListParams {
   specialization?: string
+  subject_id?: string
   is_active?: boolean | null
 }
 

@@ -11,15 +11,21 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, X } from 'lucide-react'
 import { Faculty, FacultyFormData, facultyService } from '@/services/faculty.service'
+import { subjectsService, Subject } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 const facultySchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-  specialization: z.string().min(2, 'Specialization is required').max(100),
+  specialization: z.string().max(100).optional().or(z.literal('')),
+  subject_id: z.string().optional().or(z.literal('')),
+  display_order: z.number().int().min(0).optional().or(z.nan()),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   phone: z.string().regex(/^\d{10}$/, 'Must be 10 digits').optional().or(z.literal('')),
   bio: z.string().max(2000).optional().or(z.literal('')),
@@ -46,6 +52,18 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
   const [cropperFile, setCropperFile] = useState<File | null>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [subjects, setSubjects] = useState<Subject[]>([])
+
+  // Load subjects for dropdown
+  useEffect(() => {
+    if (open) {
+      subjectsService.getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' }).then((res) => {
+        if (res.success && res.data) {
+          setSubjects(res.data.entities)
+        }
+      })
+    }
+  }, [open])
 
   // Manage preview URL for cropped photo
   useEffect(() => {
@@ -64,12 +82,14 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
   } = useForm<FacultyFormValues>({
     resolver: zodResolver(facultySchema),
     defaultValues: {
-      name: '', specialization: '', email: '', phone: '',
+      name: '', specialization: '', subject_id: '', display_order: 0,
+      email: '', phone: '',
       bio: '', qualifications: '', experience_years: 0, is_active: true,
     },
   })
 
   const isActive = watch('is_active')
+  const selectedSubjectId = watch('subject_id')
 
   // Reset form
   useEffect(() => {
@@ -77,9 +97,14 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
       setPhotoFile([])
       setUploadProgress(null)
       if (mode === 'edit' && faculty) {
+        const subjectIdValue = faculty.subject_id
+          ? (typeof faculty.subject_id === 'object' ? faculty.subject_id._id : faculty.subject_id)
+          : ''
         reset({
           name: faculty.name,
-          specialization: faculty.specialization,
+          specialization: faculty.specialization || '',
+          subject_id: subjectIdValue,
+          display_order: faculty.display_order ?? 0,
           email: faculty.email || '',
           phone: faculty.phone || '',
           bio: faculty.bio || '',
@@ -91,7 +116,8 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
         setExistingS3Key(faculty.photo_s3_key)
       } else {
         reset({
-          name: '', specialization: '', email: '', phone: '',
+          name: '', specialization: '', subject_id: '', display_order: 0,
+          email: '', phone: '',
           bio: '', qualifications: '', experience_years: 0, is_active: true,
         })
         setExistingPhotoUrl(null)
@@ -122,7 +148,9 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
 
       const formData: FacultyFormData = {
         name: data.name,
-        specialization: data.specialization,
+        specialization: data.specialization || undefined,
+        subject_id: data.subject_id || null,
+        display_order: data.display_order && !isNaN(data.display_order) ? data.display_order : 0,
         email: data.email || undefined,
         phone: data.phone || undefined,
         photo_url: photoUrl,
@@ -235,7 +263,7 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
             )}
           </div>
 
-          {/* Name + Specialization */}
+          {/* Name + Subject */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
@@ -243,9 +271,35 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
               {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="specialization">Specialization <span className="text-red-500">*</span></Label>
+              <Label htmlFor="subject_id">Subject</Label>
+              <Select
+                value={selectedSubjectId || ''}
+                onValueChange={(value) => setValue('subject_id', value === '__none__' ? '' : value)}
+                disabled={isSubmitting || isUploading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {subjects.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Specialization + Display Order */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="specialization">Specialization</Label>
               <Input id="specialization" placeholder="e.g., Cardiology" disabled={isSubmitting || isUploading} {...register('specialization')} />
               {errors.specialization && <p className="text-sm text-red-500">{errors.specialization.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="display_order">Display Order</Label>
+              <Input id="display_order" type="number" min={0} disabled={isSubmitting || isUploading} {...register('display_order', { valueAsNumber: true })} />
             </div>
           </div>
 
