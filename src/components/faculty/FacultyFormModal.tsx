@@ -274,7 +274,12 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
               <Label htmlFor="subject_id">Subject</Label>
               <Select
                 value={selectedSubjectId || ''}
-                onValueChange={(value) => setValue('subject_id', value === '__none__' ? '' : value)}
+                onValueChange={(value) => {
+                  const id = value === '__none__' ? '' : value
+                  setValue('subject_id', id)
+                  const subject = subjects.find((s) => s._id === id)
+                  setValue('specialization', subject ? subject.name : '')
+                }}
                 disabled={isSubmitting || isUploading}
               >
                 <SelectTrigger>

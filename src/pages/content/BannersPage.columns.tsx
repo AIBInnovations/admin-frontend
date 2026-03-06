@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Banner } from '@/services/banners.service'
-import { MoreVertical, Pencil, Archive, Image, ExternalLink, BookOpen, FlaskConical, BookMarked } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, Image, ExternalLink, BookOpen, FlaskConical, BookMarked, Users, Eye } from 'lucide-react'
 
 interface BannersColumnsProps {
   onEdit: (banner: Banner) => void
@@ -79,6 +79,35 @@ export function useBannersColumns({
           )
         }
         return <span className="text-xs text-muted-foreground">No Action</span>
+      },
+    },
+    {
+      id: 'visibility',
+      header: 'Visible To',
+      width: 'w-32',
+      cell: (banner) => {
+        const visibleTo = banner.visible_to || 'all'
+        if (visibleTo === 'subject') {
+          const count = banner.visible_to_subjects?.length || 0
+          return (
+            <Badge className="text-[10px] bg-teal-500/10 text-teal-600 border-teal-200">
+              <Eye className="mr-1 h-3 w-3" />{count} Subject{count !== 1 ? 's' : ''}
+            </Badge>
+          )
+        }
+        if (visibleTo === 'package') {
+          const count = banner.visible_to_packages?.length || 0
+          return (
+            <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
+              <Eye className="mr-1 h-3 w-3" />{count} Package{count !== 1 ? 's' : ''}
+            </Badge>
+          )
+        }
+        return (
+          <Badge className="text-[10px] bg-gray-500/10 text-gray-600 border-gray-200">
+            <Users className="mr-1 h-3 w-3" />All Users
+          </Badge>
+        )
       },
     },
     {

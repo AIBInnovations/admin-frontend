@@ -5,6 +5,7 @@ import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types
 // Types
 export type BannerType = 'generic' | 'theory_package' | 'practical_package' | 'ebook'
 export type LinkType = 'internal' | 'external' | 'none'
+export type VisibleTo = 'all' | 'subject' | 'package'
 
 export interface Banner {
   _id: string
@@ -17,6 +18,9 @@ export interface Banner {
   banner_type: BannerType
   target_package_id: string | null
   target_book_id: string | null
+  visible_to: VisibleTo
+  visible_to_subjects: string[]
+  visible_to_packages: string[]
   display_order: number
   is_active: boolean
   start_date: string
@@ -35,6 +39,9 @@ export interface BannerFormData {
   banner_type?: BannerType
   target_package_id?: string | null
   target_book_id?: string | null
+  visible_to?: VisibleTo
+  visible_to_subjects?: string[]
+  visible_to_packages?: string[]
   display_order?: number
   is_active?: boolean
   start_date: string

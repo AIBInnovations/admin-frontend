@@ -15,11 +15,13 @@ import {
 } from '@/components/ui/select'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, X } from 'lucide-react'
-import { Banner, BannerFormData, BannerType, bannersService } from '@/services/banners.service'
+import { Banner, BannerFormData, BannerType, VisibleTo, bannersService } from '@/services/banners.service'
 import { Package, packagesService } from '@/services/packages.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { Book, booksService } from '@/services/books.service'
+import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: full-width x 140px on phone (~360px wide) ≈ 18:7 */
@@ -80,6 +82,13 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [booksLoading, setBooksLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
 
+  // Visibility state
+  const [visibleTo, setVisibleTo] = useState<VisibleTo>('all')
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([])
+  const [selectedVisibilityPackageIds, setSelectedVisibilityPackageIds] = useState<string[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjectsLoading, setSubjectsLoading] = useState(false)
+
   // Manage preview URL for cropped image
   useEffect(() => {
     if (imageFile.length > 0) {
@@ -104,11 +113,12 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
 
   const isActive = watch('is_active')
 
-  // Fetch packages, package types, and books when modal opens
+  // Fetch packages, package types, books, and subjects when modal opens
   useEffect(() => {
     if (open) {
       fetchPackagesAndTypes()
       fetchBooks()
+      fetchSubjects()
     }
   }, [open])
 
@@ -149,6 +159,19 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       console.error('Failed to fetch books')
     }
     setBooksLoading(false)
+  }
+
+  const fetchSubjects = async () => {
+    setSubjectsLoading(true)
+    try {
+      const response = await subjectsService.getSubjects({ is_active: true, limit: 100 })
+      if (response.success && response.data) {
+        setSubjects(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch subjects')
+    }
+    setSubjectsLoading(false)
   }
 
   // Filter packages by type name from the populated package_type_id
@@ -201,6 +224,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setLinkAction(deriveLinkAction(banner))
         setSelectedPackageId(banner.target_package_id || '')
         setSelectedBookId(banner.target_book_id || '')
+        setVisibleTo(banner.visible_to || 'all')
+        setSelectedSubjectIds(banner.visible_to_subjects || [])
+        setSelectedVisibilityPackageIds(banner.visible_to_packages || [])
       } else {
         reset({
           title: '', subtitle: '', click_url: '',
@@ -212,6 +238,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setLinkAction('none')
         setSelectedPackageId('')
         setSelectedBookId('')
+        setVisibleTo('all')
+        setSelectedSubjectIds([])
+        setSelectedVisibilityPackageIds([])
       }
     }
   }, [open, mode, banner, reset])
@@ -295,6 +324,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         banner_type: bannerType,
         target_package_id: targetPackageId,
         target_book_id: targetBookId,
+        visible_to: visibleTo,
+        visible_to_subjects: visibleTo === 'subject' ? selectedSubjectIds : [],
+        visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
         display_order: data.display_order && !isNaN(data.display_order) ? data.display_order : undefined,
         is_active: data.is_active,
         start_date: data.start_date,
@@ -532,6 +564,105 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 </SelectContent>
               </Select>
               {bookError && <p className="text-sm text-red-500">{bookError}</p>}
+            </div>
+          )}
+
+          {/* Visible To */}
+          <div className="space-y-2">
+            <Label>Visible To</Label>
+            <Select
+              value={visibleTo}
+              onValueChange={(v) => {
+                setVisibleTo(v as VisibleTo)
+                setSelectedSubjectIds([])
+                setSelectedVisibilityPackageIds([])
+              }}
+              disabled={isSubmitting || isUploading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select visibility..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="subject">Subject Specific</SelectItem>
+                <SelectItem value="package">Package Specific</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {visibleTo === 'all' && 'Banner is visible to all users.'}
+              {visibleTo === 'subject' && 'Only users who have selected one of the chosen subjects will see this banner.'}
+              {visibleTo === 'package' && 'Only users who have purchased one of the chosen packages will see this banner.'}
+            </p>
+          </div>
+
+          {/* Subject multi-select */}
+          {visibleTo === 'subject' && (
+            <div className="space-y-2">
+              <Label>Select Subjects <span className="text-red-500">*</span></Label>
+              {subjectsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading subjects...</p>
+              ) : subjects.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No subjects found</p>
+              ) : (
+                <div className="rounded-lg border p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {subjects.map((subject) => (
+                    <label key={subject._id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedSubjectIds.includes(subject._id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedSubjectIds((prev) =>
+                            checked
+                              ? [...prev, subject._id]
+                              : prev.filter((id) => id !== subject._id)
+                          )
+                        }}
+                        disabled={isSubmitting || isUploading}
+                      />
+                      <span className="text-sm">{subject.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedSubjectIds.length === 0 && (
+                <p className="text-xs text-amber-600">Select at least one subject</p>
+              )}
+            </div>
+          )}
+
+          {/* Package multi-select for visibility */}
+          {visibleTo === 'package' && (
+            <div className="space-y-2">
+              <Label>Select Packages <span className="text-red-500">*</span></Label>
+              {packagesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading packages...</p>
+              ) : packages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No packages found</p>
+              ) : (
+                <div className="rounded-lg border p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {packages.map((pkg) => (
+                    <label key={pkg._id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedVisibilityPackageIds.includes(pkg._id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedVisibilityPackageIds((prev) =>
+                            checked
+                              ? [...prev, pkg._id]
+                              : prev.filter((id) => id !== pkg._id)
+                          )
+                        }}
+                        disabled={isSubmitting || isUploading}
+                      />
+                      <span className="text-sm">
+                        {pkg.name}
+                        {pkg.subject_id?.name ? ` (${pkg.subject_id.name})` : ''}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedVisibilityPackageIds.length === 0 && (
+                <p className="text-xs text-amber-600">Select at least one package</p>
+              )}
             </div>
           )}
 
