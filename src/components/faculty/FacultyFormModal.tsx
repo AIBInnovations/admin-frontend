@@ -285,7 +285,7 @@ export function FacultyFormModal({ open, onClose, onSubmit, faculty, mode }: Fac
                 <SelectTrigger>
                   <SelectValue placeholder="Select subject" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectItem value="__none__">None</SelectItem>
                   {subjects.map((s) => (
                     <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
