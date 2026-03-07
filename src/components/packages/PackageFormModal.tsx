@@ -633,6 +633,16 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                 description="16:9 aspect ratio. Max 5MB."
                 disabled={isSubmitting}
                 currentImageUrl={pkg?.thumbnail_url}
+                onDelete={async () => {
+                  if (!confirm('Delete the thumbnail image?')) return
+                  try {
+                    await packagesService.deleteThumbnail(pkg!._id)
+                    toast.success('Thumbnail deleted')
+                    pkg!.thumbnail_url = null
+                  } catch {
+                    toast.error('Failed to delete thumbnail')
+                  }
+                }}
               />
             </div>
           )}
