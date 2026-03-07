@@ -28,7 +28,7 @@ export interface Video {
   is_free: boolean
   display_order: number
   view_count: number
-  processing_status: 'uploading' | 'processing' | 'ready' | 'failed'
+  processing_status: 'uploading' | 'processing' | 'ready' | 'failed' | 'upcoming'
   processing_error: string | null
   video_urls: VideoUrls
   file_size_mb: number
@@ -47,7 +47,16 @@ export interface VideoFormData {
   subtitle_url?: string
   transcript_url?: string
   tag_ids?: string[]
-  scheduled_release_at?: string | null
+}
+
+export interface UpcomingVideoFormData {
+  title: string
+  description: string
+  module_id: string
+  faculty_id?: string
+  is_free?: boolean
+  display_order?: number
+  scheduled_release_at: string
 }
 
 export interface VideosListParams extends BaseListParams {
@@ -127,7 +136,6 @@ class VideosService {
         faculty_id: data.faculty_id || undefined,
         is_free: data.is_free,
         display_order: data.display_order,
-        scheduled_release_at: data.scheduled_release_at || null,
         fileSize: videoFile.size,
         mimeType,
       }, { timeout: this.UPLOAD_API_TIMEOUT })
@@ -278,6 +286,21 @@ class VideosService {
       }
       throw error
     }
+  }
+
+  /**
+   * Create an upcoming video placeholder (no file upload)
+   */
+  async createUpcoming(data: UpcomingVideoFormData): Promise<ApiResponse<{ video_id: string }>> {
+    return apiService.post<{ video_id: string }>(`${this.basePath}/create-upcoming`, {
+      title: data.title,
+      description: data.description,
+      module_id: data.module_id,
+      faculty_id: data.faculty_id || undefined,
+      is_free: data.is_free,
+      display_order: data.display_order,
+      scheduled_release_at: data.scheduled_release_at,
+    })
   }
 
   /**

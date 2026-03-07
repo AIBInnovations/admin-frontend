@@ -27,12 +27,13 @@ import { SeriesFormData } from '@/services/series.service'
 import { seriesService } from '@/services/series.service'
 import { ModuleFormData } from '@/services/modules.service'
 import { modulesService } from '@/services/modules.service'
-import { VideoFormData, videosService } from '@/services/videos.service'
+import { VideoFormData, UpcomingVideoFormData, videosService } from '@/services/videos.service'
 import { DocumentFormData, documentsService } from '@/services/documents.service'
 import { PackageFormModal } from '@/components/packages/PackageFormModal'
 import { SeriesFormModal } from '@/components/series/SeriesFormModal'
 import { ModuleFormModal } from '@/components/modules/ModuleFormModal'
 import { VideoFormModal } from '@/components/videos/VideoFormModal'
+import { UpcomingVideoModal } from '@/components/videos/UpcomingVideoModal'
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal'
 
 function formatDuration(seconds: number): string {
@@ -67,6 +68,7 @@ export function PackageDetailPage() {
   const [seriesModalOpen, setSeriesModalOpen] = useState(false)
   const [moduleModalOpen, setModuleModalOpen] = useState(false)
   const [videoModalOpen, setVideoModalOpen] = useState(false)
+  const [upcomingVideoModalOpen, setUpcomingVideoModalOpen] = useState(false)
   const [documentModalOpen, setDocumentModalOpen] = useState(false)
   const [targetSeriesId, setTargetSeriesId] = useState<string>('')
   const [targetModuleId, setTargetModuleId] = useState<string>('')
@@ -223,6 +225,22 @@ export function PackageDetailPage() {
     }
   }
 
+  const handleUpcomingVideoSubmit = async (data: UpcomingVideoFormData) => {
+    try {
+      const response = await videosService.createUpcoming(data)
+      if (response.success) {
+        toast.success('Upcoming video added successfully')
+        fetchPackage()
+      } else {
+        toast.error(response.message || 'Failed to add upcoming video')
+        throw new Error(response.message || 'Failed to add upcoming video')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add upcoming video')
+      throw error
+    }
+  }
+
   const handleDocumentSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
     if (!file) return
     try {
@@ -248,6 +266,11 @@ export function PackageDetailPage() {
   const openAddVideo = (moduleId: string) => {
     setTargetModuleId(moduleId)
     setVideoModalOpen(true)
+  }
+
+  const openAddUpcoming = (moduleId: string) => {
+    setTargetModuleId(moduleId)
+    setUpcomingVideoModalOpen(true)
   }
 
   const openAddDocument = (seriesId: string) => {
@@ -296,6 +319,7 @@ export function PackageDetailPage() {
               onToggleModule={toggleModule}
               onAddModule={() => openAddModule(series._id)}
               onAddVideo={openAddVideo}
+              onAddUpcoming={openAddUpcoming}
             />
           ))}
         </div>
@@ -613,6 +637,13 @@ export function PackageDetailPage() {
         defaultModuleId={targetModuleId}
       />
 
+      <UpcomingVideoModal
+        open={upcomingVideoModalOpen}
+        onClose={() => setUpcomingVideoModalOpen(false)}
+        onSubmit={handleUpcomingVideoSubmit}
+        defaultModuleId={targetModuleId}
+      />
+
       <DocumentFormModal
         open={documentModalOpen}
         onClose={() => setDocumentModalOpen(false)}
@@ -634,9 +665,10 @@ interface SeriesBlockProps {
   onToggleModule: (id: string) => void
   onAddModule: () => void
   onAddVideo: (moduleId: string) => void
+  onAddUpcoming: (moduleId: string) => void
 }
 
-function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo }: SeriesBlockProps) {
+function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming }: SeriesBlockProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <div className="rounded-lg border">
@@ -684,6 +716,7 @@ function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, on
                     isOpen={openModules.has(mod._id)}
                     onToggle={() => onToggleModule(mod._id)}
                     onAddVideo={() => onAddVideo(mod._id)}
+                    onAddUpcoming={() => onAddUpcoming(mod._id)}
                   />
                 ))}
               </div>
@@ -702,9 +735,10 @@ interface ModuleBlockProps {
   isOpen: boolean
   onToggle: () => void
   onAddVideo: () => void
+  onAddUpcoming: () => void
 }
 
-function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo }: ModuleBlockProps) {
+function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming }: ModuleBlockProps) {
   const totalDuration = mod.videos.reduce((sum, v) => sum + v.duration_seconds, 0)
 
   return (
@@ -740,10 +774,16 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo }: ModuleBlockP
           <div className="border-t">
             <div className="flex items-center justify-between px-3 pt-2">
               <p className="text-xs text-muted-foreground">Videos in this module</p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onAddVideo}>
-                <Plus className="mr-1 h-3 w-3" />
-                Add Video
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onAddVideo}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add Video
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={onAddUpcoming}>
+                  <Clock className="mr-1 h-3 w-3" />
+                  Add Upcoming
+                </Button>
+              </div>
             </div>
             {mod.videos.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">No videos yet</p>
@@ -791,22 +831,28 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo }: ModuleBlockP
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          <Badge className={`text-[10px] ${
-                            video.processing_status === 'ready'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                              : video.processing_status === 'failed'
-                              ? 'bg-red-500/10 text-red-600 border-red-200'
-                              : 'bg-amber-500/10 text-amber-600 border-amber-200'
-                          }`}>
-                            {video.processing_status}
-                          </Badge>
-                          {video.scheduled_release_at && (
+                          {video.processing_status === 'upcoming' ? (
                             <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
                               <Clock className="h-2.5 w-2.5 mr-1" />
-                              {new Date(video.scheduled_release_at).toLocaleDateString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                              })}
+                              Upcoming
                             </Badge>
+                          ) : (
+                            <Badge className={`text-[10px] ${
+                              video.processing_status === 'ready'
+                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                                : video.processing_status === 'failed'
+                                ? 'bg-red-500/10 text-red-600 border-red-200'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-200'
+                            }`}>
+                              {video.processing_status}
+                            </Badge>
+                          )}
+                          {video.scheduled_release_at && (
+                            <span className="text-[10px] text-orange-600">
+                              {new Date(video.scheduled_release_at).toLocaleDateString('en-IN', {
+                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                              })}
+                            </span>
                           )}
                         </div>
                       </TableCell>

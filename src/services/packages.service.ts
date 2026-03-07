@@ -44,7 +44,7 @@ export interface PackageDetailVideo {
   is_free: boolean
   display_order: number
   view_count: number
-  processing_status: 'uploading' | 'processing' | 'ready' | 'failed'
+  processing_status: 'uploading' | 'processing' | 'ready' | 'failed' | 'upcoming'
   thumbnail_url: string
   is_active: boolean
   module_id: string

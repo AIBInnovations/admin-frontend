@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown, Clock } from 'lucide-react'
+import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Video, VideoFormData } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
@@ -38,11 +38,6 @@ const videoSchema = z.object({
   is_free: z.boolean(),
   subtitle_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   transcript_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
-  scheduled_release_at: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Invalid date format')
-    .optional()
-    .or(z.literal('')),
 })
 
 type VideoFormValues = z.infer<typeof videoSchema>
@@ -56,12 +51,6 @@ interface VideoFormModalProps {
   video?: Video | null
   mode: 'create' | 'edit'
   defaultModuleId?: string
-}
-
-const toLocalInput = (iso: string): string => {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultModuleId }: VideoFormModalProps) {
@@ -85,12 +74,10 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
     defaultValues: {
       title: '', description: '', module_id: '', faculty_id: '',
       display_order: 0, is_free: false, subtitle_url: '', transcript_url: '',
-      scheduled_release_at: '',
     },
   })
 
   const isFree = watch('is_free')
-  const watchScheduledDate = watch('scheduled_release_at')
 
   // Fetch dropdown data
   useEffect(() => {
@@ -124,15 +111,11 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
           is_free: video.is_free,
           subtitle_url: video.subtitle_url || '',
           transcript_url: video.transcript_url || '',
-          scheduled_release_at: video.scheduled_release_at
-            ? toLocalInput(video.scheduled_release_at)
-            : '',
         })
       } else {
         reset({
           title: '', description: '', module_id: defaultModuleId || '', faculty_id: '',
           display_order: 0, is_free: false, subtitle_url: '', transcript_url: '',
-          scheduled_release_at: '',
         })
       }
     }
@@ -161,9 +144,6 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         subtitle_url: data.subtitle_url || undefined,
         transcript_url: data.transcript_url || undefined,
         tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-        scheduled_release_at: data.scheduled_release_at
-          ? new Date(data.scheduled_release_at).toISOString()
-          : null,
       }
       await onSubmit(
         formData,
@@ -411,44 +391,6 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               />
               {errors.transcript_url && <p className="text-sm text-red-500">{errors.transcript_url.message}</p>}
             </div>
-          </div>
-
-          {/* Schedule Release Date */}
-          <div className="space-y-2">
-            <Label htmlFor="scheduled_release_at" className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" /> Schedule Release Date
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="scheduled_release_at"
-                type="datetime-local"
-                disabled={isSubmitting}
-                {...register('scheduled_release_at')}
-              />
-              {watchScheduledDate && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => setValue('scheduled_release_at', '')}
-                  disabled={isSubmitting}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Leave empty to publish immediately. Time is in your local timezone.
-            </p>
-            {watchScheduledDate && new Date(watchScheduledDate) < new Date() && (
-              <p className="text-xs text-amber-600">
-                This date is in the past — the video will be immediately available to users.
-              </p>
-            )}
-            {errors.scheduled_release_at && (
-              <p className="text-sm text-red-500">{errors.scheduled_release_at.message}</p>
-            )}
           </div>
 
           {/* Tags */}
