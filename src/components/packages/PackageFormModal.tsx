@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react'
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, ImageIcon, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Package, PackageFormData, packagesService } from '@/services/packages.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
@@ -277,450 +277,470 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-          {/* Name */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
-            <Input id="name" placeholder="e.g., Anatomy Complete Course" disabled={isSubmitting} {...register('name')} />
-            {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
-          </div>
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
+          {/* ── Basic Info ── */}
+          <fieldset className="rounded-lg border p-4 space-y-4">
+            <legend className="px-2 text-sm font-semibold text-muted-foreground">Basic Info</legend>
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
-            <Textarea id="description" placeholder="Package description..." rows={3} disabled={isSubmitting} {...register('description')} />
-            {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
-          </div>
-
-          {/* Subject + Package Type */}
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Subject <span className="text-red-500">*</span></Label>
-              <Controller
-                name="subject_id" control={control}
-                render={({ field }) => (
-                  <Popover open={subjectPopoverOpen} onOpenChange={setSubjectPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline" role="combobox"
-                        disabled={isSubmitting || (mode === 'create' && !!defaultSubjectId)}
-                        className="w-full justify-between font-normal h-9"
-                      >
-                        <span className="truncate">
-                          {field.value ? subjects.find(s => s._id === field.value)?.name || 'Select subject' : 'Select subject'}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[260px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search subjects..." />
-                        <CommandList>
-                          <CommandEmpty>No subjects found.</CommandEmpty>
-                          <CommandGroup>
-                            {subjects.map((s) => (
-                              <CommandItem
-                                key={s._id}
-                                value={s.name}
-                                onSelect={() => {
-                                  field.onChange(s._id)
-                                  setSubjectPopoverOpen(false)
-                                }}
-                              >
-                                <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
-                                {s.name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              />
-              {errors.subject_id && <p className="text-sm text-red-500">{errors.subject_id.message}</p>}
+              <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
+              <Input id="name" placeholder="e.g., Anatomy Complete Course" disabled={isSubmitting} {...register('name')} />
+              {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
             </div>
+
             <div className="space-y-2">
-              <Label>Package Type <span className="text-red-500">*</span></Label>
-              <Controller
-                name="package_type_id" control={control}
-                render={({ field }) => (
-                  <Popover open={typePopoverOpen} onOpenChange={setTypePopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline" role="combobox"
-                        disabled={isSubmitting}
-                        className="w-full justify-between font-normal h-9"
-                      >
-                        <span className="truncate">
-                          {field.value ? packageTypes.find(t => t._id === field.value)?.name || 'Select type' : 'Select type'}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[260px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search types..." />
-                        <CommandList>
-                          <CommandEmpty>No types found.</CommandEmpty>
-                          <CommandGroup>
-                            {packageTypes.map((t) => (
-                              <CommandItem
-                                key={t._id}
-                                value={t.name}
-                                onSelect={() => {
-                                  field.onChange(t._id)
-                                  setTypePopoverOpen(false)
-                                }}
-                              >
-                                <Check className={cn('mr-2 h-4 w-4', field.value === t._id ? 'opacity-100' : 'opacity-0')} />
-                                {t.name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              />
-              {errors.package_type_id && <p className="text-sm text-red-500">{errors.package_type_id.message}</p>}
-            </div>
-          </div>
-
-          {/* Price + Duration (base/fallback fields) */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="price">Base Price (INR) <span className="text-red-500">*</span></Label>
-              <Input id="price" type="number" min={0} disabled={isSubmitting} {...register('price', { valueAsNumber: true })} />
-              {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="original_price">Original Price</Label>
-              <Input id="original_price" type="number" min={0} placeholder="MRP" disabled={isSubmitting} {...register('original_price', { valueAsNumber: true })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="duration_days">Duration (days) <span className="text-red-500">*</span></Label>
-              <Input id="duration_days" type="number" min={1} disabled={isSubmitting} {...register('duration_days', { valueAsNumber: true })} />
-              {errors.duration_days && <p className="text-sm text-red-500">{errors.duration_days.message}</p>}
-            </div>
-          </div>
-
-          {hasTiers && (
-            <p className="text-xs text-muted-foreground -mt-2">
-              Base price and duration are used as fallback when tiers are empty. Each tier defines its own price and duration.
-            </p>
-          )}
-
-          {/* Pricing Tiers */}
-          <div className="rounded-lg border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base">Pricing Tiers</Label>
-                <p className="text-sm text-muted-foreground">
-                  {hasTiers
-                    ? `${tiers.length} tier${tiers.length > 1 ? 's' : ''} configured`
-                    : 'No tiers — single price/duration package'}
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={addTier} disabled={isSubmitting || tiers.length >= 10}>
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add Tier
-              </Button>
+              <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
+              <Textarea id="description" placeholder="Package description..." rows={3} disabled={isSubmitting} {...register('description')} />
+              {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
             </div>
 
-            {tierFields.map((field, index) => (
-              <div key={field.id} className="rounded-md border bg-muted/30 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Tier {index + 1}</span>
-                  <Button
-                    type="button" variant="ghost" size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
-                    onClick={() => removeTier(index)}
-                    disabled={isSubmitting}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-5 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
-                    <Input
-                      placeholder="e.g., 3 Months"
-                      disabled={isSubmitting}
-                      {...register(`tiers.${index}.name`)}
-                    />
-                    {errors.tiers?.[index]?.name && (
-                      <p className="text-xs text-red-500">{errors.tiers[index].name?.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Duration (days) <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="number" min={1}
-                      disabled={isSubmitting}
-                      {...register(`tiers.${index}.duration_days`, { valueAsNumber: true })}
-                    />
-                    {errors.tiers?.[index]?.duration_days && (
-                      <p className="text-xs text-red-500">{errors.tiers[index].duration_days?.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Price (INR) <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="number" min={0}
-                      disabled={isSubmitting}
-                      {...register(`tiers.${index}.price`, { valueAsNumber: true })}
-                    />
-                    {errors.tiers?.[index]?.price && (
-                      <p className="text-xs text-red-500">{errors.tiers[index].price?.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Compare At</Label>
-                    <Input
-                      type="number" min={0}
-                      placeholder="MRP"
-                      disabled={isSubmitting}
-                      {...register(`tiers.${index}.original_price`, { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Order</Label>
-                    <Input
-                      type="number" min={0}
-                      disabled={isSubmitting}
-                      {...register(`tiers.${index}.display_order`, { valueAsNumber: true })}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Sale Toggle */}
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="is_on_sale" className="text-base">On Sale</Label>
-              <p className="text-sm text-muted-foreground">
-                {isOnSale ? 'Package is on sale' : 'No sale pricing applied'}
-              </p>
-            </div>
-            <Switch
-              id="is_on_sale" checked={isOnSale}
-              onCheckedChange={(checked) => {
-                setValue('is_on_sale', checked)
-                if (!checked) {
-                  setValue('sale_price', null)
-                  setValue('sale_discount_percent', null)
-                  setValue('sale_end_date', '')
-                }
-              }}
-              disabled={isSubmitting}
-            />
-          </div>
-
-          {/* Sale Pricing — conditional on single-tier vs multi-tier */}
-          {isOnSale && (
             <div className="grid grid-cols-2 gap-4">
-              {hasTiers ? (
-                <div className="space-y-2">
-                  <Label htmlFor="sale_discount_percent">Discount % <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="sale_discount_percent" type="number" min={0} max={100} step={0.1}
-                    placeholder="e.g., 20"
-                    disabled={isSubmitting}
-                    {...register('sale_discount_percent', { valueAsNumber: true })}
-                  />
-                  <p className="text-xs text-muted-foreground">Applied uniformly to all tier prices</p>
-                  {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="sale_price">Sale Price (INR) <span className="text-red-500">*</span></Label>
-                  <Input id="sale_price" type="number" min={0} disabled={isSubmitting} {...register('sale_price', { valueAsNumber: true })} />
-                  {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
-                </div>
-              )}
               <div className="space-y-2">
-                <Label htmlFor="sale_end_date">Sale End Date</Label>
-                <Input id="sale_end_date" type="date" disabled={isSubmitting} {...register('sale_end_date')} />
+                <Label>Subject <span className="text-red-500">*</span></Label>
+                <Controller
+                  name="subject_id" control={control}
+                  render={({ field }) => (
+                    <Popover open={subjectPopoverOpen} onOpenChange={setSubjectPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline" role="combobox"
+                          disabled={isSubmitting || (mode === 'create' && !!defaultSubjectId)}
+                          className="w-full justify-between font-normal h-9"
+                        >
+                          <span className="truncate">
+                            {field.value ? subjects.find(s => s._id === field.value)?.name || 'Select subject' : 'Select subject'}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[260px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search subjects..." />
+                          <CommandList>
+                            <CommandEmpty>No subjects found.</CommandEmpty>
+                            <CommandGroup>
+                              {subjects.map((s) => (
+                                <CommandItem
+                                  key={s._id}
+                                  value={s.name}
+                                  onSelect={() => {
+                                    field.onChange(s._id)
+                                    setSubjectPopoverOpen(false)
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
+                                  {s.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                />
+                {errors.subject_id && <p className="text-sm text-red-500">{errors.subject_id.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Package Type <span className="text-red-500">*</span></Label>
+                <Controller
+                  name="package_type_id" control={control}
+                  render={({ field }) => (
+                    <Popover open={typePopoverOpen} onOpenChange={setTypePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline" role="combobox"
+                          disabled={isSubmitting}
+                          className="w-full justify-between font-normal h-9"
+                        >
+                          <span className="truncate">
+                            {field.value ? packageTypes.find(t => t._id === field.value)?.name || 'Select type' : 'Select type'}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[260px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search types..." />
+                          <CommandList>
+                            <CommandEmpty>No types found.</CommandEmpty>
+                            <CommandGroup>
+                              {packageTypes.map((t) => (
+                                <CommandItem
+                                  key={t._id}
+                                  value={t.name}
+                                  onSelect={() => {
+                                    field.onChange(t._id)
+                                    setTypePopoverOpen(false)
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', field.value === t._id ? 'opacity-100' : 'opacity-0')} />
+                                  {t.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                />
+                {errors.package_type_id && <p className="text-sm text-red-500">{errors.package_type_id.message}</p>}
               </div>
             </div>
-          )}
 
-          {/* Features */}
-          <div className="space-y-2">
-            <Label htmlFor="features">Features</Label>
-            <Textarea id="features" placeholder="One feature per line..." rows={3} disabled={isSubmitting} {...register('features')} />
-            <p className="text-xs text-muted-foreground">Enter features separated by commas or new lines</p>
-          </div>
-
-          {/* Display Order + Active */}
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
-              <Input id="display_order" type="number" min={0} disabled={isSubmitting} {...register('display_order', { valueAsNumber: true })} />
+              <Label htmlFor="features">Features</Label>
+              <Textarea id="features" placeholder="One feature per line..." rows={3} disabled={isSubmitting} {...register('features')} />
+              <p className="text-xs text-muted-foreground">Enter features separated by commas or new lines</p>
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-4">
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="display_order">Display Order</Label>
+                <Input id="display_order" type="number" min={0} disabled={isSubmitting} {...register('display_order', { valueAsNumber: true })} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="is_active" className="text-sm">Active</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {isActive ? 'Visible to users' : 'Hidden from users'}
+                  </p>
+                </div>
+                <Switch
+                  id="is_active" checked={isActive}
+                  onCheckedChange={(checked) => setValue('is_active', checked)}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          {/* ── Pricing ── */}
+          <fieldset className="rounded-lg border p-4 space-y-4">
+            <legend className="px-2 text-sm font-semibold text-muted-foreground">Pricing</legend>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="price">Base Price (INR) <span className="text-red-500">*</span></Label>
+                <Input id="price" type="number" min={0} disabled={isSubmitting} {...register('price', { valueAsNumber: true })} />
+                {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="original_price">Original Price</Label>
+                <Input id="original_price" type="number" min={0} placeholder="MRP" disabled={isSubmitting} {...register('original_price', { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="duration_days">Duration (days) <span className="text-red-500">*</span></Label>
+                <Input id="duration_days" type="number" min={1} disabled={isSubmitting} {...register('duration_days', { valueAsNumber: true })} />
+                {errors.duration_days && <p className="text-sm text-red-500">{errors.duration_days.message}</p>}
+              </div>
+            </div>
+
+            {hasTiers && (
+              <p className="text-xs text-muted-foreground">
+                Base price and duration are used as fallback when tiers are empty. Each tier defines its own price and duration.
+              </p>
+            )}
+
+            {/* Pricing Tiers */}
+            <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Pricing Tiers</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {hasTiers
+                      ? `${tiers.length} tier${tiers.length > 1 ? 's' : ''} configured`
+                      : 'No tiers — single price/duration package'}
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addTier} disabled={isSubmitting || tiers.length >= 10}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add Tier
+                </Button>
+              </div>
+
+              {tierFields.map((field, index) => (
+                <div key={field.id} className="rounded-md border bg-background p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Tier {index + 1}</span>
+                    <Button
+                      type="button" variant="ghost" size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => removeTier(index)}
+                      disabled={isSubmitting}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
+                      <Input
+                        placeholder="e.g., 3 Months"
+                        disabled={isSubmitting}
+                        {...register(`tiers.${index}.name`)}
+                      />
+                      {errors.tiers?.[index]?.name && (
+                        <p className="text-xs text-red-500">{errors.tiers[index].name?.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Duration (days) <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="number" min={1}
+                        disabled={isSubmitting}
+                        {...register(`tiers.${index}.duration_days`, { valueAsNumber: true })}
+                      />
+                      {errors.tiers?.[index]?.duration_days && (
+                        <p className="text-xs text-red-500">{errors.tiers[index].duration_days?.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Price (INR) <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="number" min={0}
+                        disabled={isSubmitting}
+                        {...register(`tiers.${index}.price`, { valueAsNumber: true })}
+                      />
+                      {errors.tiers?.[index]?.price && (
+                        <p className="text-xs text-red-500">{errors.tiers[index].price?.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Compare At</Label>
+                      <Input
+                        type="number" min={0}
+                        placeholder="MRP"
+                        disabled={isSubmitting}
+                        {...register(`tiers.${index}.original_price`, { valueAsNumber: true })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Order</Label>
+                      <Input
+                        type="number" min={0}
+                        disabled={isSubmitting}
+                        {...register(`tiers.${index}.display_order`, { valueAsNumber: true })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sale Toggle */}
+            <div className="flex items-center justify-between rounded-md border p-3">
               <div className="space-y-0.5">
-                <Label htmlFor="is_active" className="text-sm">Active</Label>
+                <Label htmlFor="is_on_sale" className="text-sm font-medium">On Sale</Label>
                 <p className="text-xs text-muted-foreground">
-                  {isActive ? 'Visible to users' : 'Hidden from users'}
+                  {isOnSale ? 'Package is on sale' : 'No sale pricing applied'}
                 </p>
               </div>
               <Switch
-                id="is_active" checked={isActive}
-                onCheckedChange={(checked) => setValue('is_active', checked)}
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
-
-          {/* Trailer Video Upload (edit mode only) */}
-          {mode === 'edit' && (
-            <div className="space-y-2">
-              <Label>Trailer Video (Optional)</Label>
-              {pkg?.trailer_video_url && !isReplacingTrailer ? (
-                <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-green-600">✓</span>
-                    <a
-                      href={pkg.trailer_video_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline truncate"
-                    >
-                      Trailer uploaded — click to preview
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      type="button" variant="outline" size="sm"
-                      onClick={() => setIsReplacingTrailer(true)}
-                      disabled={isSubmitting}
-                      className="text-xs"
-                    >
-                      Replace
-                    </Button>
-                    <Button
-                      type="button" variant="ghost" size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      disabled={isSubmitting}
-                      onClick={async () => {
-                        if (!confirm('Delete the trailer video?')) return
-                        try {
-                          await packagesService.deleteTrailer(pkg._id)
-                          toast.success('Trailer deleted')
-                          pkg.trailer_video_url = null
-                        } catch {
-                          toast.error('Failed to delete trailer')
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <FileUpload
-                    accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
-                    maxSize={500 * 1024 * 1024}
-                    maxFiles={1}
-                    value={trailerFile ? [trailerFile] : []}
-                    onChange={(files) => setTrailerFile(files[0] || null)}
-                    label="Upload trailer video"
-                    description="Max 500MB. Drag & drop or click to browse."
-                    disabled={isSubmitting}
-                  />
-                  {uploadProgress !== null && (
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Thumbnail Upload with Crop (edit mode only) */}
-          {mode === 'edit' && (
-            <div className="space-y-2">
-              <Label>Thumbnail (Optional)</Label>
-              <ImageUploadWithCrop
-                value={thumbnailFile}
-                onChange={setThumbnailFile}
-                aspectRatio={16 / 9}
-                maxSize={5 * 1024 * 1024}
-                label="Upload thumbnail image"
-                description="16:9 aspect ratio. Max 5MB."
-                disabled={isSubmitting}
-                currentImageUrl={pkg?.thumbnail_url}
-                onDelete={async () => {
-                  if (!confirm('Delete the thumbnail image?')) return
-                  try {
-                    await packagesService.deleteThumbnail(pkg!._id)
-                    toast.success('Thumbnail deleted')
-                    pkg!.thumbnail_url = null
-                  } catch {
-                    toast.error('Failed to delete thumbnail')
+                id="is_on_sale" checked={isOnSale}
+                onCheckedChange={(checked) => {
+                  setValue('is_on_sale', checked)
+                  if (!checked) {
+                    setValue('sale_price', null)
+                    setValue('sale_discount_percent', null)
+                    setValue('sale_end_date', '')
                   }
                 }}
+                disabled={isSubmitting}
               />
             </div>
-          )}
 
-          {/* Section Thumbnails (edit mode only) */}
+            {isOnSale && (
+              <div className="grid grid-cols-2 gap-4">
+                {hasTiers ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="sale_discount_percent">Discount % <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="sale_discount_percent" type="number" min={0} max={100} step={0.1}
+                      placeholder="e.g., 20"
+                      disabled={isSubmitting}
+                      {...register('sale_discount_percent', { valueAsNumber: true })}
+                    />
+                    <p className="text-xs text-muted-foreground">Applied uniformly to all tier prices</p>
+                    {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="sale_price">Sale Price (INR) <span className="text-red-500">*</span></Label>
+                    <Input id="sale_price" type="number" min={0} disabled={isSubmitting} {...register('sale_price', { valueAsNumber: true })} />
+                    {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price.message}</p>}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="sale_end_date">Sale End Date</Label>
+                  <Input id="sale_end_date" type="date" disabled={isSubmitting} {...register('sale_end_date')} />
+                </div>
+              </div>
+            )}
+          </fieldset>
+
+          {/* ── Media (edit mode only) ── */}
           {mode === 'edit' && (
-            <div className="grid grid-cols-2 gap-4">
+            <fieldset className="rounded-lg border p-4 space-y-4">
+              <legend className="px-2 text-sm font-semibold text-muted-foreground">Media</legend>
+
+              {/* Trailer Video */}
               <div className="space-y-2">
-                <Label>Video Lectures Thumbnail</Label>
+                <div className="flex items-center gap-2">
+                  <Film className="h-4 w-4 text-muted-foreground" />
+                  <Label>Trailer Video</Label>
+                </div>
+                {pkg?.trailer_video_url && !isReplacingTrailer ? (
+                  <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium text-green-600">✓</span>
+                      <a
+                        href={pkg.trailer_video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline truncate"
+                      >
+                        Trailer uploaded — click to preview
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        type="button" variant="outline" size="sm"
+                        onClick={() => setIsReplacingTrailer(true)}
+                        disabled={isSubmitting}
+                        className="text-xs"
+                      >
+                        Replace
+                      </Button>
+                      <Button
+                        type="button" variant="ghost" size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          if (!confirm('Delete the trailer video?')) return
+                          try {
+                            await packagesService.deleteTrailer(pkg._id)
+                            toast.success('Trailer deleted')
+                            pkg.trailer_video_url = null
+                          } catch {
+                            toast.error('Failed to delete trailer')
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <FileUpload
+                      accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
+                      maxSize={500 * 1024 * 1024}
+                      maxFiles={1}
+                      value={trailerFile ? [trailerFile] : []}
+                      onChange={(files) => setTrailerFile(files[0] || null)}
+                      label="Upload trailer video"
+                      description="Max 500MB. Drag & drop or click to browse."
+                      disabled={isSubmitting}
+                    />
+                    {uploadProgress !== null && (
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <hr className="border-dashed" />
+
+              {/* Package Thumbnail */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <Label>Package Thumbnail</Label>
+                </div>
                 <ImageUploadWithCrop
-                  value={videoLecturesThumbnailFile}
-                  onChange={setVideoLecturesThumbnailFile}
-                  aspectRatio={1}
+                  value={thumbnailFile}
+                  onChange={setThumbnailFile}
+                  aspectRatio={16 / 9}
                   maxSize={5 * 1024 * 1024}
-                  label="Upload image"
-                  description="1:1 ratio. Shown on 'Watch Video Lectures' card."
+                  label="Upload thumbnail image"
+                  description="16:9 aspect ratio. Max 5MB."
                   disabled={isSubmitting}
-                  currentImageUrl={pkg?.video_lectures_thumbnail_url}
+                  currentImageUrl={pkg?.thumbnail_url}
                   onDelete={async () => {
-                    if (!confirm('Delete video lectures thumbnail?')) return
+                    if (!confirm('Delete the thumbnail image?')) return
                     try {
-                      await packagesService.deleteSectionThumbnail(pkg!._id, 'video_lectures')
+                      await packagesService.deleteThumbnail(pkg!._id)
                       toast.success('Thumbnail deleted')
-                      pkg!.video_lectures_thumbnail_url = null
+                      pkg!.thumbnail_url = null
                     } catch {
                       toast.error('Failed to delete thumbnail')
                     }
                   }}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Notes Thumbnail</Label>
-                <ImageUploadWithCrop
-                  value={notesThumbnailFile}
-                  onChange={setNotesThumbnailFile}
-                  aspectRatio={1}
-                  maxSize={5 * 1024 * 1024}
-                  label="Upload image"
-                  description="1:1 ratio. Shown on 'Read Notes' card."
-                  disabled={isSubmitting}
-                  currentImageUrl={pkg?.notes_thumbnail_url}
-                  onDelete={async () => {
-                    if (!confirm('Delete notes thumbnail?')) return
-                    try {
-                      await packagesService.deleteSectionThumbnail(pkg!._id, 'notes')
-                      toast.success('Thumbnail deleted')
-                      pkg!.notes_thumbnail_url = null
-                    } catch {
-                      toast.error('Failed to delete thumbnail')
-                    }
-                  }}
-                />
+
+              <hr className="border-dashed" />
+
+              {/* Section Thumbnails */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <Label>Section Thumbnails</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Video Lectures</Label>
+                    <ImageUploadWithCrop
+                      value={videoLecturesThumbnailFile}
+                      onChange={setVideoLecturesThumbnailFile}
+                      aspectRatio={16 / 9}
+                      maxSize={5 * 1024 * 1024}
+                      label="Upload image"
+                      description="16:9 ratio. Shown on 'Watch Video Lectures' card."
+                      disabled={isSubmitting}
+                      currentImageUrl={pkg?.video_lectures_thumbnail_url}
+                      onDelete={async () => {
+                        if (!confirm('Delete video lectures thumbnail?')) return
+                        try {
+                          await packagesService.deleteSectionThumbnail(pkg!._id, 'video_lectures')
+                          toast.success('Thumbnail deleted')
+                          pkg!.video_lectures_thumbnail_url = null
+                        } catch {
+                          toast.error('Failed to delete thumbnail')
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Notes</Label>
+                    <ImageUploadWithCrop
+                      value={notesThumbnailFile}
+                      onChange={setNotesThumbnailFile}
+                      aspectRatio={16 / 9}
+                      maxSize={5 * 1024 * 1024}
+                      label="Upload image"
+                      description="16:9 ratio. Shown on 'Read Notes' card."
+                      disabled={isSubmitting}
+                      currentImageUrl={pkg?.notes_thumbnail_url}
+                      onDelete={async () => {
+                        if (!confirm('Delete notes thumbnail?')) return
+                        try {
+                          await packagesService.deleteSectionThumbnail(pkg!._id, 'notes')
+                          toast.success('Thumbnail deleted')
+                          pkg!.notes_thumbnail_url = null
+                        } catch {
+                          toast.error('Failed to delete thumbnail')
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            </fieldset>
           )}
 
           <DialogFooter>

@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { FileUpload } from '@/components/common/FileUpload'
+import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, Check, ChevronsUpDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { subjectsService, Subject } from '@/services/subjects.service'
@@ -73,6 +74,8 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
   const [existingThumbnailS3Key, setExistingThumbnailS3Key] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null)
+  const [cropperFile, setCropperFile] = useState<File | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
 
   // Visibility state
   const [visibleTo, setVisibleTo] = useState<VisibleTo>('all')
@@ -294,7 +297,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                 maxSize={5 * 1024 * 1024}
                 maxFiles={1}
                 value={[]}
-                onChange={(files) => files.length > 0 && setThumbnailFile(files)}
+                onChange={(files) => { if (files.length > 0) { setCropperFile(files[0]); setShowCropper(true) } }}
                 disabled={isSubmitting || isUploading}
                 label="Upload thumbnail"
                 description="JPEG, PNG, or WebP. Max 5MB."
@@ -579,5 +582,15 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
         </form>
       </DialogContent>
     </Dialog>
+
+    <ImageCropper
+      file={cropperFile}
+      open={showCropper}
+      aspectRatio={16 / 9}
+      title="Crop Thumbnail"
+      description="Adjust the crop area for the session thumbnail (16:9)."
+      onClose={() => { setShowCropper(false); setCropperFile(null) }}
+      onCropComplete={(croppedFile) => { setThumbnailFile([croppedFile]); setShowCropper(false); setCropperFile(null) }}
+    />
   )
 }
