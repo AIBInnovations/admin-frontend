@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Video } from '@/services/videos.service'
-import { MoreVertical, Pencil, Archive, Eye } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, Eye, Clock } from 'lucide-react'
 
 function formatFileSize(mb: number): string {
   if (!mb) return '—'
@@ -79,6 +79,21 @@ export function useVideosColumns({
         <Badge className={`text-[10px] ${statusColors[video.processing_status] || ''}`}>
           {video.processing_status}
         </Badge>
+      ),
+    },
+    {
+      id: 'scheduled',
+      header: 'Scheduled',
+      width: 'w-28',
+      cell: (video) => video.scheduled_release_at ? (
+        <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
+          <Clock className="h-2.5 w-2.5 mr-1" />
+          {new Date(video.scheduled_release_at).toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', year: 'numeric',
+          })}
+        </Badge>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
       ),
     },
     {

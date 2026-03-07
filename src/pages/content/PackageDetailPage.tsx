@@ -790,15 +790,25 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo }: ModuleBlockP
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-[10px] ${
-                          video.processing_status === 'ready'
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                            : video.processing_status === 'failed'
-                            ? 'bg-red-500/10 text-red-600 border-red-200'
-                            : 'bg-amber-500/10 text-amber-600 border-amber-200'
-                        }`}>
-                          {video.processing_status}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge className={`text-[10px] ${
+                            video.processing_status === 'ready'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                              : video.processing_status === 'failed'
+                              ? 'bg-red-500/10 text-red-600 border-red-200'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-200'
+                          }`}>
+                            {video.processing_status}
+                          </Badge>
+                          {video.scheduled_release_at && (
+                            <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
+                              <Clock className="h-2.5 w-2.5 mr-1" />
+                              {new Date(video.scheduled_release_at).toLocaleDateString('en-IN', {
+                                day: 'numeric', month: 'short', year: 'numeric',
+                              })}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground text-right">
                         <span className="flex items-center justify-end gap-1">

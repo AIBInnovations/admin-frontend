@@ -32,6 +32,7 @@ export interface Video {
   processing_error: string | null
   video_urls: VideoUrls
   file_size_mb: number
+  scheduled_release_at?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -46,6 +47,7 @@ export interface VideoFormData {
   subtitle_url?: string
   transcript_url?: string
   tag_ids?: string[]
+  scheduled_release_at?: string | null
 }
 
 export interface VideosListParams extends BaseListParams {
@@ -125,6 +127,7 @@ class VideosService {
         faculty_id: data.faculty_id || undefined,
         is_free: data.is_free,
         display_order: data.display_order,
+        scheduled_release_at: data.scheduled_release_at || null,
         fileSize: videoFile.size,
         mimeType,
       }, { timeout: this.UPLOAD_API_TIMEOUT })

@@ -49,6 +49,7 @@ export interface PackageDetailVideo {
   is_active: boolean
   module_id: string
   faculty_id: { _id: string; name: string } | null
+  scheduled_release_at?: string | null
   createdAt: string
 }
 
