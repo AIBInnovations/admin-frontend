@@ -68,76 +68,55 @@ export function ImageUploadWithCrop({
 
   return (
     <>
-      <div className="space-y-2">
-        <FileUpload
-          accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp'] }}
-          maxSize={maxSize}
-          maxFiles={1}
-          value={value ? [value] : []}
-          onChange={handleFileSelect}
-          label={label}
-          description={finalDescription}
-          disabled={disabled}
-        />
-
+      <div className="space-y-2 min-w-0">
         {/* Show current image if exists and no new file selected */}
-        {currentImageUrl && !value && (
-          <div className="relative inline-block">
+        {currentImageUrl && !value ? (
+          <div className="relative inline-block max-w-full">
             <img
               src={currentImageUrl}
               alt="Current"
-              className="rounded-lg max-w-xs border"
+              className="rounded-lg w-full border"
             />
             {onDelete && (
               <button
                 type="button"
                 onClick={handleRemove}
-                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600"
+                className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                    clipRule="evenodd"
-                  />
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </button>
             )}
           </div>
-        )}
-
-        {/* Show preview of cropped image */}
-        {value && (
-          <div className="relative inline-block">
+        ) : value ? (
+          <div className="relative inline-block max-w-full">
             <img
               src={URL.createObjectURL(value)}
               alt="Preview"
-              className="rounded-lg max-w-xs border"
+              className="rounded-lg w-full border"
             />
             <button
               type="button"
               onClick={handleRemove}
-              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600"
+              className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
             </button>
           </div>
+        ) : (
+          <FileUpload
+            accept={{ 'image/*': ['.jpg', '.jpeg', '.png', '.webp'] }}
+            maxSize={maxSize}
+            maxFiles={1}
+            value={[]}
+            onChange={handleFileSelect}
+            label={label}
+            description={finalDescription}
+            disabled={disabled}
+          />
         )}
       </div>
 
