@@ -242,6 +242,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
   const isUploading = uploadProgress !== null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -592,5 +593,6 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
       onClose={() => { setShowCropper(false); setCropperFile(null) }}
       onCropComplete={(croppedFile) => { setThumbnailFile([croppedFile]); setShowCropper(false); setCropperFile(null) }}
     />
+    </>
   )
 }
