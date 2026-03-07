@@ -82,7 +82,7 @@ export function ImageUploadWithCrop({
 
         {/* Show current image if exists and no new file selected */}
         {currentImageUrl && !value && (
-          <div className="relative">
+          <div className="relative inline-block">
             <img
               src={currentImageUrl}
               alt="Current"
@@ -113,7 +113,7 @@ export function ImageUploadWithCrop({
 
         {/* Show preview of cropped image */}
         {value && (
-          <div className="relative">
+          <div className="relative inline-block">
             <img
               src={URL.createObjectURL(value)}
               alt="Preview"
