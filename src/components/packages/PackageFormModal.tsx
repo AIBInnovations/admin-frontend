@@ -585,159 +585,160 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
             <fieldset className="rounded-lg border p-4 space-y-4">
               <legend className="px-2 text-sm font-semibold text-muted-foreground">Media</legend>
 
-              {/* Trailer Video */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Film className="h-4 w-4 text-muted-foreground" />
-                  <Label>Trailer Video</Label>
-                </div>
-                {pkg?.trailer_video_url && !isReplacingTrailer ? (
-                  <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-green-600">✓</span>
-                      <a
-                        href={pkg.trailer_video_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline truncate"
-                      >
-                        Trailer uploaded — click to preview
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        type="button" variant="outline" size="sm"
-                        onClick={() => setIsReplacingTrailer(true)}
-                        disabled={isSubmitting}
-                        className="text-xs"
-                      >
-                        Replace
-                      </Button>
-                      <Button
-                        type="button" variant="ghost" size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        disabled={isSubmitting}
-                        onClick={async () => {
-                          if (!confirm('Delete the trailer video?')) return
-                          try {
-                            await packagesService.deleteTrailer(pkg._id)
-                            toast.success('Trailer deleted')
-                            pkg.trailer_video_url = null
-                          } catch {
-                            toast.error('Failed to delete trailer')
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {/* Trailer + Package Thumbnail side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Trailer Video */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Film className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-xs">Trailer Video</Label>
                   </div>
-                ) : (
-                  <>
-                    <FileUpload
-                      accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
-                      maxSize={500 * 1024 * 1024}
-                      maxFiles={1}
-                      value={trailerFile ? [trailerFile] : []}
-                      onChange={(files) => setTrailerFile(files[0] || null)}
-                      label="Upload trailer video"
-                      description="Max 500MB. Drag & drop or click to browse."
-                      disabled={isSubmitting}
-                    />
-                    {uploadProgress !== null && (
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                  {pkg?.trailer_video_url && !isReplacingTrailer ? (
+                    <div className="rounded-md border p-3 bg-muted/30 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-green-600">✓</span>
+                        <a
+                          href={pkg.trailer_video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline truncate"
+                        >
+                          Trailer uploaded
+                        </a>
                       </div>
-                    )}
-                  </>
-                )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button" variant="outline" size="sm"
+                          onClick={() => setIsReplacingTrailer(true)}
+                          disabled={isSubmitting}
+                          className="text-xs h-7"
+                        >
+                          Replace
+                        </Button>
+                        <Button
+                          type="button" variant="ghost" size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          disabled={isSubmitting}
+                          onClick={async () => {
+                            if (!confirm('Delete the trailer video?')) return
+                            try {
+                              await packagesService.deleteTrailer(pkg._id)
+                              toast.success('Trailer deleted')
+                              pkg.trailer_video_url = null
+                            } catch {
+                              toast.error('Failed to delete trailer')
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <FileUpload
+                        accept={{ 'video/*': ['.mp4', '.mov', '.avi', '.webm'] }}
+                        maxSize={500 * 1024 * 1024}
+                        maxFiles={1}
+                        value={trailerFile ? [trailerFile] : []}
+                        onChange={(files) => setTrailerFile(files[0] || null)}
+                        label="Upload trailer"
+                        description="Max 500MB."
+                        disabled={isSubmitting}
+                      />
+                      {uploadProgress !== null && (
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Package Thumbnail */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-xs">Package Thumbnail</Label>
+                  </div>
+                  <ImageUploadWithCrop
+                    value={thumbnailFile}
+                    onChange={setThumbnailFile}
+                    aspectRatio={16 / 9}
+                    maxSize={5 * 1024 * 1024}
+                    label="Upload image"
+                    description="16:9 ratio. Max 5MB."
+                    disabled={isSubmitting}
+                    currentImageUrl={pkg?.thumbnail_url}
+                    onDelete={async () => {
+                      if (!confirm('Delete the thumbnail image?')) return
+                      try {
+                        await packagesService.deleteThumbnail(pkg!._id)
+                        toast.success('Thumbnail deleted')
+                        pkg!.thumbnail_url = null
+                      } catch {
+                        toast.error('Failed to delete thumbnail')
+                      }
+                    }}
+                  />
+                </div>
               </div>
 
               <hr className="border-dashed" />
 
-              {/* Package Thumbnail */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  <Label>Package Thumbnail</Label>
-                </div>
-                <ImageUploadWithCrop
-                  value={thumbnailFile}
-                  onChange={setThumbnailFile}
-                  aspectRatio={16 / 9}
-                  maxSize={5 * 1024 * 1024}
-                  label="Upload thumbnail image"
-                  description="16:9 aspect ratio. Max 5MB."
-                  disabled={isSubmitting}
-                  currentImageUrl={pkg?.thumbnail_url}
-                  onDelete={async () => {
-                    if (!confirm('Delete the thumbnail image?')) return
-                    try {
-                      await packagesService.deleteThumbnail(pkg!._id)
-                      toast.success('Thumbnail deleted')
-                      pkg!.thumbnail_url = null
-                    } catch {
-                      toast.error('Failed to delete thumbnail')
-                    }
-                  }}
-                />
-              </div>
-
-              <hr className="border-dashed" />
-
-              {/* Section Thumbnails */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  <Label>Section Thumbnails</Label>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Video Lectures</Label>
-                    <ImageUploadWithCrop
-                      value={videoLecturesThumbnailFile}
-                      onChange={setVideoLecturesThumbnailFile}
-                      aspectRatio={16 / 9}
-                      maxSize={5 * 1024 * 1024}
-                      label="Upload image"
-                      description="16:9 ratio. Shown on 'Watch Video Lectures' card."
-                      disabled={isSubmitting}
-                      currentImageUrl={pkg?.video_lectures_thumbnail_url}
-                      onDelete={async () => {
-                        if (!confirm('Delete video lectures thumbnail?')) return
-                        try {
-                          await packagesService.deleteSectionThumbnail(pkg!._id, 'video_lectures')
-                          toast.success('Thumbnail deleted')
-                          pkg!.video_lectures_thumbnail_url = null
-                        } catch {
-                          toast.error('Failed to delete thumbnail')
-                        }
-                      }}
-                    />
+              {/* Section Thumbnails side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-xs">Video Lectures Thumbnail</Label>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Notes</Label>
-                    <ImageUploadWithCrop
-                      value={notesThumbnailFile}
-                      onChange={setNotesThumbnailFile}
-                      aspectRatio={16 / 9}
-                      maxSize={5 * 1024 * 1024}
-                      label="Upload image"
-                      description="16:9 ratio. Shown on 'Read Notes' card."
-                      disabled={isSubmitting}
-                      currentImageUrl={pkg?.notes_thumbnail_url}
-                      onDelete={async () => {
-                        if (!confirm('Delete notes thumbnail?')) return
-                        try {
-                          await packagesService.deleteSectionThumbnail(pkg!._id, 'notes')
-                          toast.success('Thumbnail deleted')
-                          pkg!.notes_thumbnail_url = null
-                        } catch {
-                          toast.error('Failed to delete thumbnail')
-                        }
-                      }}
-                    />
+                  <ImageUploadWithCrop
+                    value={videoLecturesThumbnailFile}
+                    onChange={setVideoLecturesThumbnailFile}
+                    aspectRatio={16 / 9}
+                    maxSize={5 * 1024 * 1024}
+                    label="Upload image"
+                    description="16:9 ratio."
+                    disabled={isSubmitting}
+                    currentImageUrl={pkg?.video_lectures_thumbnail_url}
+                    onDelete={async () => {
+                      if (!confirm('Delete video lectures thumbnail?')) return
+                      try {
+                        await packagesService.deleteSectionThumbnail(pkg!._id, 'video_lectures')
+                        toast.success('Thumbnail deleted')
+                        pkg!.video_lectures_thumbnail_url = null
+                      } catch {
+                        toast.error('Failed to delete thumbnail')
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-xs">Notes Thumbnail</Label>
                   </div>
+                  <ImageUploadWithCrop
+                    value={notesThumbnailFile}
+                    onChange={setNotesThumbnailFile}
+                    aspectRatio={16 / 9}
+                    maxSize={5 * 1024 * 1024}
+                    label="Upload image"
+                    description="16:9 ratio."
+                    disabled={isSubmitting}
+                    currentImageUrl={pkg?.notes_thumbnail_url}
+                    onDelete={async () => {
+                      if (!confirm('Delete notes thumbnail?')) return
+                      try {
+                        await packagesService.deleteSectionThumbnail(pkg!._id, 'notes')
+                        toast.success('Thumbnail deleted')
+                        pkg!.notes_thumbnail_url = null
+                      } catch {
+                        toast.error('Failed to delete thumbnail')
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </fieldset>
