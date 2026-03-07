@@ -1,5 +1,8 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
+
+export type VisibleTo = 'all' | 'subject' | 'package'
 
 // Types
 export interface LiveSession {
@@ -21,6 +24,10 @@ export interface LiveSession {
   max_attendees: number | null
   current_attendees: number
   thumbnail_url: string | null
+  thumbnail_s3_key: string | null
+  visible_to: VisibleTo
+  visible_to_subjects: string[]
+  visible_to_packages: string[]
   price: number
   compare_at_price: number | null
   is_free: boolean
@@ -48,6 +55,10 @@ export interface LiveSessionFormData {
   allow_join_before_host?: boolean
   meeting_link?: string
   thumbnail_url?: string
+  thumbnail_s3_key?: string
+  visible_to?: VisibleTo
+  visible_to_subjects?: string[]
+  visible_to_packages?: string[]
   price?: number
   is_free?: boolean
   enrollment_mode?: 'open' | 'enrollment_required' | 'disabled'
@@ -132,6 +143,31 @@ class LiveSessionsService {
 
   async delete(sessionId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${sessionId}`)
+  }
+
+  async uploadThumbnail(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ thumbnailUrl: string; s3Key: string }> {
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType: file.type || 'image/jpeg' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { thumbnailUrl, s3Key }
   }
 
   async convertToPackage(
