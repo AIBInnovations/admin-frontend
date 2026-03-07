@@ -4,12 +4,17 @@ import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types
 
 // ─── Entity Types ────────────────────────────────────────────────────────────
 
+export type VisibleTo = 'all' | 'subject' | 'package'
+
 export interface HomeSection {
   _id: string
   title: string | null
   subtitle: string | null
   background_color: string | null
   text_color: string | null
+  visible_to: VisibleTo
+  visible_to_subjects: string[]
+  visible_to_packages: string[]
   display_order: number
   is_active: boolean
   start_date: string | null
@@ -93,6 +98,9 @@ export interface HomeSectionFormData {
   subtitle?: string
   background_color?: string
   text_color?: string
+  visible_to?: VisibleTo
+  visible_to_subjects?: string[]
+  visible_to_packages?: string[]
   display_order?: number
   is_active?: boolean
   start_date?: string

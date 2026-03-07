@@ -71,6 +71,27 @@ export function useHomeSectionsColumns({
       ),
     },
     {
+      id: 'visibleTo',
+      header: 'Visible To',
+      width: 'w-28',
+      cell: (section) => {
+        const v = section.visible_to || 'all'
+        if (v === 'all') return <Badge variant="outline" className="text-[10px]">All</Badge>
+        if (v === 'subject') {
+          return (
+            <Badge className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200">
+              Subject ({section.visible_to_subjects?.length || 0})
+            </Badge>
+          )
+        }
+        return (
+          <Badge className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-200">
+            Package ({section.visible_to_packages?.length || 0})
+          </Badge>
+        )
+      },
+    },
+    {
       id: 'order',
       header: 'Order',
       width: 'w-16',

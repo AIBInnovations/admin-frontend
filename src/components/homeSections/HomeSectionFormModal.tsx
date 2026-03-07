@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,8 +9,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2 } from 'lucide-react'
-import { HomeSection, HomeSectionFormData } from '@/services/homeSections.service'
+import { HomeSection, HomeSectionFormData, VisibleTo } from '@/services/homeSections.service'
+import { Package, packagesService } from '@/services/packages.service'
+import { Subject, subjectsService } from '@/services/subjects.service'
 
 const hexColorRegex = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/
 
@@ -64,6 +70,49 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
   const bgColor = watch('background_color') || ''
   const txtColor = watch('text_color') || ''
 
+  // Visibility state
+  const [visibleTo, setVisibleTo] = useState<VisibleTo>('all')
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([])
+  const [selectedVisibilityPackageIds, setSelectedVisibilityPackageIds] = useState<string[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjectsLoading, setSubjectsLoading] = useState(false)
+  const [packages, setPackages] = useState<Package[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+
+  // Fetch subjects and packages when modal opens
+  useEffect(() => {
+    if (open) {
+      fetchSubjects()
+      fetchPackages()
+    }
+  }, [open])
+
+  const fetchSubjects = async () => {
+    setSubjectsLoading(true)
+    try {
+      const response = await subjectsService.getSubjects({ is_active: true, limit: 100 })
+      if (response.success && response.data) {
+        setSubjects(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch subjects')
+    }
+    setSubjectsLoading(false)
+  }
+
+  const fetchPackages = async () => {
+    setPackagesLoading(true)
+    try {
+      const response = await packagesService.getAll({ is_active: true, limit: 100 })
+      if (response.success && response.data) {
+        setPackages(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch packages')
+    }
+    setPackagesLoading(false)
+  }
+
   useEffect(() => {
     if (open) {
       if (mode === 'edit' && section) {
@@ -77,6 +126,9 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
           start_date: section.start_date ? new Date(section.start_date).toISOString().split('T')[0] : '',
           end_date: section.end_date ? new Date(section.end_date).toISOString().split('T')[0] : '',
         })
+        setVisibleTo(section.visible_to || 'all')
+        setSelectedSubjectIds(section.visible_to_subjects || [])
+        setSelectedVisibilityPackageIds(section.visible_to_packages || [])
       } else {
         reset({
           title: '', subtitle: '',
@@ -84,6 +136,9 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
           display_order: NaN, is_active: true,
           start_date: '', end_date: '',
         })
+        setVisibleTo('all')
+        setSelectedSubjectIds([])
+        setSelectedVisibilityPackageIds([])
       }
     }
   }, [open, mode, section, reset])
@@ -94,6 +149,9 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
       subtitle: data.subtitle || undefined,
       background_color: data.background_color || undefined,
       text_color: data.text_color || undefined,
+      visible_to: visibleTo,
+      visible_to_subjects: visibleTo === 'subject' ? selectedSubjectIds : [],
+      visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
       display_order: typeof data.display_order === 'number' && !isNaN(data.display_order) ? data.display_order : undefined,
       is_active: data.is_active,
       start_date: data.start_date || undefined,
@@ -147,6 +205,105 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
               {errors.text_color && <p className="text-sm text-red-500">{errors.text_color.message}</p>}
             </div>
           </div>
+
+          {/* Visible To */}
+          <div className="space-y-2">
+            <Label>Visible To</Label>
+            <Select
+              value={visibleTo}
+              onValueChange={(v) => {
+                setVisibleTo(v as VisibleTo)
+                setSelectedSubjectIds([])
+                setSelectedVisibilityPackageIds([])
+              }}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select visibility..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="subject">Subject Specific</SelectItem>
+                <SelectItem value="package">Package Specific</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {visibleTo === 'all' && 'Section is visible to all users.'}
+              {visibleTo === 'subject' && 'Only users who have selected one of the chosen subjects will see this section.'}
+              {visibleTo === 'package' && 'Only users who have purchased one of the chosen packages will see this section.'}
+            </p>
+          </div>
+
+          {/* Subject multi-select */}
+          {visibleTo === 'subject' && (
+            <div className="space-y-2">
+              <Label>Select Subjects <span className="text-red-500">*</span></Label>
+              {subjectsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading subjects...</p>
+              ) : subjects.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No subjects found</p>
+              ) : (
+                <div className="rounded-lg border p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {subjects.map((subject) => (
+                    <label key={subject._id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedSubjectIds.includes(subject._id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedSubjectIds((prev) =>
+                            checked
+                              ? [...prev, subject._id]
+                              : prev.filter((id) => id !== subject._id)
+                          )
+                        }}
+                        disabled={isSubmitting}
+                      />
+                      <span className="text-sm">{subject.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedSubjectIds.length === 0 && (
+                <p className="text-xs text-amber-600">Select at least one subject</p>
+              )}
+            </div>
+          )}
+
+          {/* Package multi-select for visibility */}
+          {visibleTo === 'package' && (
+            <div className="space-y-2">
+              <Label>Select Packages <span className="text-red-500">*</span></Label>
+              {packagesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading packages...</p>
+              ) : packages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No packages found</p>
+              ) : (
+                <div className="rounded-lg border p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {packages.map((pkg) => (
+                    <label key={pkg._id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedVisibilityPackageIds.includes(pkg._id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedVisibilityPackageIds((prev) =>
+                            checked
+                              ? [...prev, pkg._id]
+                              : prev.filter((id) => id !== pkg._id)
+                          )
+                        }}
+                        disabled={isSubmitting}
+                      />
+                      <span className="text-sm">
+                        {pkg.name}
+                        {pkg.subject_id?.name ? ` (${pkg.subject_id.name})` : ''}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedVisibilityPackageIds.length === 0 && (
+                <p className="text-xs text-amber-600">Select at least one package</p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
