@@ -82,6 +82,8 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
   const [trailerFile, setTrailerFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [videoLecturesThumbnailFile, setVideoLecturesThumbnailFile] = useState<File | null>(null)
+  const [notesThumbnailFile, setNotesThumbnailFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [isReplacingTrailer, setIsReplacingTrailer] = useState(false)
   const [subjectPopoverOpen, setSubjectPopoverOpen] = useState(false)
@@ -129,6 +131,8 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
     if (open) {
       setTrailerFile(null)
       setThumbnailFile(null)
+      setVideoLecturesThumbnailFile(null)
+      setNotesThumbnailFile(null)
       setUploadProgress(null)
       setIsReplacingTrailer(false)
       if (mode === 'edit' && pkg) {
@@ -227,6 +231,26 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           } catch (err) {
             console.error('Thumbnail upload error:', err)
             toast.error('Failed to upload thumbnail')
+          }
+        }
+
+        if (videoLecturesThumbnailFile) {
+          try {
+            await packagesService.uploadSectionThumbnail(pkg._id, videoLecturesThumbnailFile, 'video_lectures')
+            toast.success('Video lectures thumbnail uploaded')
+          } catch (err) {
+            console.error('Video lectures thumbnail upload error:', err)
+            toast.error('Failed to upload video lectures thumbnail')
+          }
+        }
+
+        if (notesThumbnailFile) {
+          try {
+            await packagesService.uploadSectionThumbnail(pkg._id, notesThumbnailFile, 'notes')
+            toast.success('Notes thumbnail uploaded')
+          } catch (err) {
+            console.error('Notes thumbnail upload error:', err)
+            toast.error('Failed to upload notes thumbnail')
           }
         }
       }
@@ -644,6 +668,58 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                   }
                 }}
               />
+            </div>
+          )}
+
+          {/* Section Thumbnails (edit mode only) */}
+          {mode === 'edit' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Video Lectures Thumbnail</Label>
+                <ImageUploadWithCrop
+                  value={videoLecturesThumbnailFile}
+                  onChange={setVideoLecturesThumbnailFile}
+                  aspectRatio={1}
+                  maxSize={5 * 1024 * 1024}
+                  label="Upload image"
+                  description="1:1 ratio. Shown on 'Watch Video Lectures' card."
+                  disabled={isSubmitting}
+                  currentImageUrl={pkg?.video_lectures_thumbnail_url}
+                  onDelete={async () => {
+                    if (!confirm('Delete video lectures thumbnail?')) return
+                    try {
+                      await packagesService.deleteSectionThumbnail(pkg!._id, 'video_lectures')
+                      toast.success('Thumbnail deleted')
+                      pkg!.video_lectures_thumbnail_url = null
+                    } catch {
+                      toast.error('Failed to delete thumbnail')
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes Thumbnail</Label>
+                <ImageUploadWithCrop
+                  value={notesThumbnailFile}
+                  onChange={setNotesThumbnailFile}
+                  aspectRatio={1}
+                  maxSize={5 * 1024 * 1024}
+                  label="Upload image"
+                  description="1:1 ratio. Shown on 'Read Notes' card."
+                  disabled={isSubmitting}
+                  currentImageUrl={pkg?.notes_thumbnail_url}
+                  onDelete={async () => {
+                    if (!confirm('Delete notes thumbnail?')) return
+                    try {
+                      await packagesService.deleteSectionThumbnail(pkg!._id, 'notes')
+                      toast.success('Thumbnail deleted')
+                      pkg!.notes_thumbnail_url = null
+                    } catch {
+                      toast.error('Failed to delete thumbnail')
+                    }
+                  }}
+                />
+              </div>
             </div>
           )}
 

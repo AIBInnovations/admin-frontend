@@ -27,6 +27,8 @@ export interface Package {
   trailer_video_id: string | null
   trailer_video_url: string | null
   thumbnail_url: string | null
+  video_lectures_thumbnail_url: string | null
+  notes_thumbnail_url: string | null
   features: string
   is_active: boolean
   display_order: number
@@ -271,6 +273,53 @@ class PackagesService extends BaseCrudService<Package, PackageFormData, Packages
   async deleteThumbnail(packageId: string): Promise<ApiResponse<Package>> {
     const response = await apiService.delete<Record<string, Package>>(
       `${this.basePath}/${packageId}/thumbnail`
+    )
+    if (response.success && response.data) {
+      return { ...response, data: response.data[this.entityKey] }
+    }
+    return response as unknown as ApiResponse<Package>
+  }
+
+  /**
+   * Upload section thumbnail (video_lectures or notes) via presigned S3 URL
+   */
+  async uploadSectionThumbnail(packageId: string, file: File, section: 'video_lectures' | 'notes'): Promise<ApiResponse<Package>> {
+    const mimeType = file.type || 'image/jpeg'
+
+    // Step 1: Get presigned URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/section-thumbnail-upload-url`,
+      { mimeType, section },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    // Step 2: Upload to S3
+    const axios = (await import('axios')).default
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+    })
+
+    // Step 3: Confirm with backend
+    const response = await apiService.post<Record<string, Package>>(
+      `${this.basePath}/${packageId}/section-thumbnail-confirm`,
+      { s3Key, thumbnailUrl, section },
+    )
+
+    if (response.success && response.data) {
+      return { ...response, data: response.data[this.entityKey] }
+    }
+    return response as unknown as ApiResponse<Package>
+  }
+
+  /**
+   * Delete section thumbnail from package
+   */
+  async deleteSectionThumbnail(packageId: string, section: 'video_lectures' | 'notes'): Promise<ApiResponse<Package>> {
+    const response = await apiService.delete<Record<string, Package>>(
+      `${this.basePath}/${packageId}/section-thumbnail/${section}`
     )
     if (response.success && response.data) {
       return { ...response, data: response.data[this.entityKey] }
