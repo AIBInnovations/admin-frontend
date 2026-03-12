@@ -41,6 +41,18 @@ export interface RefreshTokenResponse {
   access_token: string;
 }
 
+export interface ForgotPasswordResponse {
+  admin_id: string;
+  identifier: string;
+  phone: string;
+}
+
+export interface ResetPasswordCredentials {
+  admin_id: string;
+  access_token: string;
+  new_password: string;
+}
+
 class AuthService {
   /**
    * Login admin user
@@ -75,6 +87,20 @@ class AuthService {
     }
 
     return response;
+  }
+
+  /**
+   * Initiate forgot password — look up admin by email, get OTP state
+   */
+  async forgotPassword(email: string): Promise<ApiResponse<ForgotPasswordResponse>> {
+    return apiService.post<ForgotPasswordResponse>('admin/auth/forgot-password', { email });
+  }
+
+  /**
+   * Reset admin password after OTP verification
+   */
+  async resetPassword(credentials: ResetPasswordCredentials): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post<{ message: string }>('admin/auth/reset-password', credentials);
   }
 
   /**

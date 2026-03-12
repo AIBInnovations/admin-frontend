@@ -6,6 +6,7 @@ import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { AdminUserFormModal } from '@/components/adminUsers/AdminUserFormModal'
+import { ResetAdminPasswordModal } from '@/components/adminUsers/ResetAdminPasswordModal'
 import { Plus, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminUsersService, AdminUser, AdminUserFormData } from '@/services/adminUsers.service'
@@ -31,6 +32,7 @@ export function AdminUsersPage() {
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [resetPasswordModalOpen, setResetPasswordModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedAdmin, setSelectedAdmin] = useState<AdminUser | null>(null)
 
@@ -106,6 +108,21 @@ export function AdminUsersPage() {
   const handleDeleteClick = (admin: AdminUser) => {
     setSelectedAdmin(admin)
     setDeleteModalOpen(true)
+  }
+
+  const handleResetPasswordClick = (admin: AdminUser) => {
+    setSelectedAdmin(admin)
+    setResetPasswordModalOpen(true)
+  }
+
+  const handleResetPasswordConfirm = async (newPassword: string) => {
+    if (!selectedAdmin) return
+    const response = await adminUsersService.resetPassword(selectedAdmin._id, newPassword)
+    if (response.success) {
+      toast.success(`Password reset for ${selectedAdmin.name}`)
+    } else {
+      throw new Error(response.message || 'Failed to reset password')
+    }
   }
 
   const handleFormSubmit = async (data: AdminUserFormData) => {
@@ -207,6 +224,7 @@ export function AdminUsersPage() {
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
+    onResetPassword: handleResetPasswordClick,
   })
 
   const hasFilters = statusFilter !== 'all' || roleFilter !== 'all' || search !== ''
@@ -273,6 +291,13 @@ export function AdminUsersPage() {
         onConfirm={handleDeleteConfirm}
         title="Delete Admin User"
         itemName={selectedAdmin?.name}
+      />
+
+      <ResetAdminPasswordModal
+        open={resetPasswordModalOpen}
+        onClose={() => setResetPasswordModalOpen(false)}
+        onConfirm={handleResetPasswordConfirm}
+        adminUser={selectedAdmin}
       />
     </div>
   )

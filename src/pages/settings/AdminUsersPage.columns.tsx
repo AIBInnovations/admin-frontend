@@ -6,18 +6,20 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { AdminUser } from '@/services/adminUsers.service'
-import { MoreVertical, Pencil, Trash2, UserCircle, ShieldCheck, ShieldBan } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, UserCircle, ShieldCheck, ShieldBan, KeyRound } from 'lucide-react'
 
 interface AdminUsersColumnsProps {
   onEdit: (adminUser: AdminUser) => void
   onDelete: (adminUser: AdminUser) => void
   onToggleActive: (adminUser: AdminUser) => void
+  onResetPassword: (adminUser: AdminUser) => void
 }
 
 export function useAdminUsersColumns({
   onEdit,
   onDelete,
   onToggleActive,
+  onResetPassword,
 }: AdminUsersColumnsProps): ColumnDef<AdminUser>[] {
   return [
     {
@@ -92,6 +94,9 @@ export function useAdminUsersColumns({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit(admin)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onResetPassword(admin)}>
+              <KeyRound className="mr-2 h-4 w-4" />Reset Password
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onToggleActive(admin)}>
               {admin.is_active ? (

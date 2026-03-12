@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 
 // Pages
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { UsersPage } from '@/pages/users/UsersPage'
@@ -51,6 +52,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />

@@ -101,6 +101,13 @@ class AdminUsersService {
   async deactivate(adminUserId: string): Promise<ApiResponse<{ admin_user_id: string; is_active: boolean; message: string }>> {
     return apiService.put(`${this.basePath}/${adminUserId}/deactivate`)
   }
+
+  /**
+   * Reset admin user password (by super admin)
+   */
+  async resetPassword(adminUserId: string, newPassword: string): Promise<ApiResponse<{ admin_user_id: string; message: string }>> {
+    return apiService.put(`${this.basePath}/${adminUserId}/reset-password`, { new_password: newPassword })
+  }
 }
 
 export const adminUsersService = new AdminUsersService()
