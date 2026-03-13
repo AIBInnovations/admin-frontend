@@ -56,8 +56,9 @@ export function UsersPage() {
   const filteredUsers = search
     ? users.filter(
         (u) =>
-          u.name.toLowerCase().includes(search.toLowerCase()) ||
-          u.email.toLowerCase().includes(search.toLowerCase())
+          (u.name || '').toLowerCase().includes(search.toLowerCase()) ||
+          (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
+          (u.phone_number || '').includes(search)
       )
     : users
 
