@@ -41,6 +41,8 @@ import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
 import { VideoReviewsPage } from '@/pages/content/VideoReviewsPage'
 import { ArchivesPage } from '@/pages/content/ArchivesPage'
+import { FormsPage } from '@/pages/content/FormsPage'
+import { FormSubmissionsPage } from '@/pages/content/FormSubmissionsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
@@ -85,6 +87,8 @@ function App() {
               <Route path="/content/home-sections/:sectionId" element={<HomeSectionDetailPage />} />
               <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
               <Route path="/content/archives" element={<ArchivesPage />} />
+              <Route path="/content/forms" element={<FormsPage />} />
+              <Route path="/content/forms/:formId/submissions" element={<FormSubmissionsPage />} />
 
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />

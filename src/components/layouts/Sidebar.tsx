@@ -73,6 +73,7 @@ const navigation: NavItem[] = [
       { name: 'Books', href: '/content/books' },
       { name: 'Banners', href: '/content/banners' },
       { name: 'Home Sections', href: '/content/home-sections' },
+      { name: 'Forms', href: '/content/forms' },
       { name: 'Archives', href: '/content/archives' },
     ],
   },
