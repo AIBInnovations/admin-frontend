@@ -106,6 +106,27 @@ export function FormSubmissionsPage() {
         </span>
       ),
     },
+    // Payment status (only show if form has payment_amount)
+    ...(form?.payment_amount ? [{
+      id: 'payment_status',
+      header: 'Payment',
+      width: 'w-28' as const,
+      cell: (sub: FormSubmission) => {
+        const status = sub.payment_status || 'none'
+        const styles: Record<string, string> = {
+          none: 'bg-gray-500/10 text-gray-500 border-gray-200',
+          pending: 'bg-amber-500/10 text-amber-600 border-amber-200',
+          paid: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
+          expired: 'bg-red-500/10 text-red-600 border-red-200',
+          canceled: 'bg-red-500/10 text-red-600 border-red-200',
+        }
+        return (
+          <Badge className={`text-[10px] ${styles[status] || styles.none}`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </Badge>
+        )
+      },
+    }] as ColumnDef<FormSubmission>[] : []),
     // View action
     {
       id: 'actions',
@@ -192,6 +213,34 @@ export function FormSubmissionsPage() {
                   </div>
                 )
               })}
+
+              {/* Payment info */}
+              {selectedSubmission.payment_status && selectedSubmission.payment_status !== 'none' && (
+                <div className="border-t border-border/50 pt-3 mt-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Payment</p>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`text-[10px] ${
+                      selectedSubmission.payment_status === 'paid'
+                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                        : selectedSubmission.payment_status === 'pending'
+                        ? 'bg-amber-500/10 text-amber-600 border-amber-200'
+                        : 'bg-red-500/10 text-red-600 border-red-200'
+                    }`}>
+                      {selectedSubmission.payment_status.charAt(0).toUpperCase() + selectedSubmission.payment_status.slice(1)}
+                    </Badge>
+                    {selectedSubmission.payment_link_url && (
+                      <a
+                        href={selectedSubmission.payment_link_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        View Payment Link
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

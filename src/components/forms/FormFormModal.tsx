@@ -23,7 +23,7 @@ const formSchema = z.object({
   subject_id: z.string().min(1, 'Subject is required'),
   title: z.string().min(2, 'Title is required').max(300),
   description: z.string().max(2000).optional().or(z.literal('')),
-  payment_link: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+  payment_amount: z.number().min(0).optional().or(z.nan()).nullable(),
   is_active: z.boolean(),
   display_order: z.number().int().min(0).optional().or(z.nan()),
 })
@@ -60,7 +60,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
       subject_id: '',
       title: '',
       description: '',
-      payment_link: '',
+      payment_amount: 0,
       is_active: true,
       display_order: 0,
     },
@@ -101,7 +101,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         subject_id: subjectId,
         title: form.title,
         description: form.description || '',
-        payment_link: form.payment_link || '',
+        payment_amount: form.payment_amount || 0,
         is_active: form.is_active,
         display_order: form.display_order,
       })
@@ -112,7 +112,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         subject_id: '',
         title: '',
         description: '',
-        payment_link: '',
+        payment_amount: 0,
         is_active: true,
         display_order: 0,
       })
@@ -154,7 +154,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         subject_id: values.subject_id,
         title: values.title,
         description: values.description || undefined,
-        payment_link: values.payment_link || null,
+        payment_amount: isNaN(values.payment_amount as number) ? null : (values.payment_amount || null),
         is_active: values.is_active,
         display_order: isNaN(values.display_order as number) ? undefined : values.display_order,
         exam_slots: isExaminerTemplate ? examSlots : undefined,
@@ -256,16 +256,22 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
               )}
             </div>
 
-            {/* Payment Link */}
+            {/* Payment Amount */}
             <div className="space-y-2">
-              <Label htmlFor="payment_link">Payment Link (optional)</Label>
+              <Label htmlFor="payment_amount">Payment Amount (INR, optional)</Label>
               <Input
-                id="payment_link"
-                {...register('payment_link')}
-                placeholder="https://..."
+                id="payment_amount"
+                type="number"
+                min={0}
+                step="0.01"
+                {...register('payment_amount', { valueAsNumber: true })}
+                placeholder="0"
               />
-              {errors.payment_link && (
-                <p className="text-xs text-red-500">{errors.payment_link.message}</p>
+              <p className="text-xs text-muted-foreground">
+                If set, a Zoho payment link will be generated automatically on submission.
+              </p>
+              {errors.payment_amount && (
+                <p className="text-xs text-red-500">{errors.payment_amount.message}</p>
               )}
             </div>
 

@@ -57,6 +57,18 @@ export function useFormsColumns({
       },
     },
     {
+      id: 'payment',
+      header: 'Payment',
+      width: 'w-28',
+      cell: (form) => (
+        form.payment_amount ? (
+          <span className="text-sm font-mono text-amber-600">{'\u20B9'}{form.payment_amount}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Free</span>
+        )
+      ),
+    },
+    {
       id: 'submissions',
       header: 'Submissions',
       width: 'w-28',

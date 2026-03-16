@@ -26,7 +26,7 @@ export interface Form {
   subject_id: { _id: string; name: string } | string
   title: string
   description: string | null
-  payment_link: string | null
+  payment_amount: number | null
   is_active: boolean
   display_order: number
   exam_slots: string[]
@@ -40,7 +40,7 @@ export interface FormFormData {
   subject_id: string
   title: string
   description?: string
-  payment_link?: string | null
+  payment_amount?: number | null
   is_active?: boolean
   display_order?: number
   exam_slots?: string[]
@@ -60,6 +60,9 @@ export interface FormSubmission {
   responses: Record<string, string>
   submitted_at: string
   createdAt: string
+  payment_link_id?: string | null
+  payment_link_url?: string | null
+  payment_status?: 'none' | 'pending' | 'paid' | 'expired' | 'canceled'
 }
 
 export interface FormSubmissionsListParams {
