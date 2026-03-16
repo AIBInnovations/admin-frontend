@@ -29,6 +29,7 @@ export interface Form {
   payment_link: string | null
   is_active: boolean
   display_order: number
+  exam_slots: string[]
   submission_count?: number
   createdAt: string
   updatedAt: string
@@ -42,6 +43,7 @@ export interface FormFormData {
   payment_link?: string | null
   is_active?: boolean
   display_order?: number
+  exam_slots?: string[]
 }
 
 export interface FormsListParams extends BaseListParams {

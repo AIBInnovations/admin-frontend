@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, X } from 'lucide-react'
 import { Form, FormFormData, FormTemplate, formsService } from '@/services/forms.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
@@ -43,6 +43,8 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   const [templates, setTemplates] = useState<FormTemplate[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loadingOptions, setLoadingOptions] = useState(false)
+  const [examSlots, setExamSlots] = useState<string[]>([])
+  const [newSlot, setNewSlot] = useState('')
 
   const {
     register,
@@ -65,6 +67,8 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   })
 
   const selectedTemplateId = watch('template_id')
+  const selectedTemplate = templates.find((t) => t._id === selectedTemplateId)
+  const isExaminerTemplate = selectedTemplate?.slug === 'examiner'
 
   // Load templates and subjects
   useEffect(() => {
@@ -101,6 +105,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         is_active: form.is_active,
         display_order: form.display_order,
       })
+      setExamSlots(form.exam_slots || [])
     } else {
       reset({
         template_id: '',
@@ -111,7 +116,9 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         is_active: true,
         display_order: 0,
       })
+      setExamSlots([])
     }
+    setNewSlot('')
   }, [open, mode, form, reset])
 
   // Auto-fill title & description when template changes (create only)
@@ -124,6 +131,21 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
     }
   }, [selectedTemplateId, templates, mode, setValue])
 
+  const addSlot = () => {
+    const trimmed = newSlot.trim()
+    if (!trimmed) return
+    if (examSlots.includes(trimmed)) {
+      toast.error('This slot already exists')
+      return
+    }
+    setExamSlots((prev) => [...prev, trimmed])
+    setNewSlot('')
+  }
+
+  const removeSlot = (index: number) => {
+    setExamSlots((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const onFormSubmit = async (values: FormValues) => {
     setSubmitting(true)
     try {
@@ -135,6 +157,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         payment_link: values.payment_link || null,
         is_active: values.is_active,
         display_order: isNaN(values.display_order as number) ? undefined : values.display_order,
+        exam_slots: isExaminerTemplate ? examSlots : undefined,
       }
       await onSubmit(data)
       onClose()
@@ -147,7 +170,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Form' : 'Edit Form'}</DialogTitle>
           <DialogDescription>
@@ -245,6 +268,55 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                 <p className="text-xs text-red-500">{errors.payment_link.message}</p>
               )}
             </div>
+
+            {/* Exam Slots — only for examiner template */}
+            {isExaminerTemplate && (
+              <div className="space-y-2">
+                <Label>Exam Slots</Label>
+                <p className="text-xs text-muted-foreground">
+                  Add the exam slot options that examiners can choose from.
+                </p>
+
+                {/* Existing slots */}
+                {examSlots.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {examSlots.map((slot, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-secondary text-sm"
+                      >
+                        {slot}
+                        <button
+                          type="button"
+                          onClick={() => removeSlot(index)}
+                          className="ml-0.5 hover:text-destructive transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new slot */}
+                <div className="flex gap-2">
+                  <Input
+                    value={newSlot}
+                    onChange={(e) => setNewSlot(e.target.value)}
+                    placeholder="e.g. Long case"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addSlot()
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={addSlot}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Display order */}
             <div className="space-y-2">
