@@ -72,14 +72,14 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
     setLoadingOptions(true)
     Promise.all([
       formsService.getTemplates(),
-      subjectsService.getAll({ page: 1, limit: 100 }),
+      subjectsService.getSubjects({ page: 1, limit: 100 }),
     ])
       .then(([templatesRes, subjectsRes]) => {
         if (templatesRes.success && templatesRes.data) {
           setTemplates(templatesRes.data.templates || [])
         }
         if (subjectsRes.success && subjectsRes.data) {
-          setSubjects((subjectsRes.data as any).entities || [])
+          setSubjects(subjectsRes.data.entities || [])
         }
       })
       .catch(() => toast.error('Failed to load options'))

@@ -42,11 +42,11 @@ export function FormsPage() {
 
   // Load subjects for filter dropdown
   useEffect(() => {
-    subjectsService.getAll({ page: 1, limit: 100 }).then((res) => {
+    subjectsService.getSubjects({ page: 1, limit: 100 }).then((res) => {
       if (res.success && res.data) {
-        setSubjects((res.data as any).entities || [])
+        setSubjects(res.data.entities || [])
       }
-    })
+    }).catch(() => { /* subjects filter will just be empty */ })
   }, [])
 
   // Fetch forms
