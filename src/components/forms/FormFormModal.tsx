@@ -10,19 +10,24 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Plus, X } from 'lucide-react'
+import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
+import { Loader2, Plus, X, Eye } from 'lucide-react'
 import { Form, FormFormData, FormTemplate, formsService } from '@/services/forms.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
+
+const BANNER_ASPECT_RATIO = 18 / 7
 
 const formSchema = z.object({
   template_id: z.string().min(1, 'Template is required'),
   subject_id: z.string().min(1, 'Subject is required'),
   title: z.string().min(2, 'Title is required').max(300),
   description: z.string().max(2000).optional().or(z.literal('')),
+  exam_process: z.string().max(10000).optional().or(z.literal('')),
   payment_amount: z.number().min(0).optional().or(z.nan()).nullable(),
   is_active: z.boolean(),
   display_order: z.number().int().min(0).optional().or(z.nan()),
@@ -46,6 +51,15 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   const [examSlots, setExamSlots] = useState<string[]>([])
   const [newSlot, setNewSlot] = useState('')
 
+  // Banner state
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
+  const [existingBannerUrl, setExistingBannerUrl] = useState<string | null>(null)
+  const [existingBannerS3Key, setExistingBannerS3Key] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+
+  // Preview state
+  const [showPreview, setShowPreview] = useState(false)
+
   const {
     register,
     handleSubmit,
@@ -60,6 +74,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
       subject_id: '',
       title: '',
       description: '',
+      exam_process: '',
       payment_amount: 0,
       is_active: true,
       display_order: 0,
@@ -101,24 +116,33 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         subject_id: subjectId,
         title: form.title,
         description: form.description || '',
+        exam_process: form.exam_process || '',
         payment_amount: form.payment_amount || 0,
         is_active: form.is_active,
         display_order: form.display_order,
       })
       setExamSlots(form.exam_slots || [])
+      setExistingBannerUrl(form.banner_url || null)
+      setExistingBannerS3Key(form.banner_s3_key || null)
     } else {
       reset({
         template_id: '',
         subject_id: '',
         title: '',
         description: '',
+        exam_process: '',
         payment_amount: 0,
         is_active: true,
         display_order: 0,
       })
       setExamSlots([])
+      setExistingBannerUrl(null)
+      setExistingBannerS3Key(null)
     }
+    setBannerFile(null)
     setNewSlot('')
+    setUploadProgress(null)
+    setShowPreview(false)
   }, [open, mode, form, reset])
 
   // Auto-fill title & description when template changes (create only)
@@ -149,12 +173,34 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   const onFormSubmit = async (values: FormValues) => {
     setSubmitting(true)
     try {
+      let bannerUrl = existingBannerUrl || undefined
+      let bannerS3Key = existingBannerS3Key || undefined
+
+      // Upload banner if new file selected
+      if (bannerFile) {
+        setUploadProgress(0)
+        try {
+          const result = await formsService.uploadImage(bannerFile, setUploadProgress)
+          bannerUrl = result.imageUrl
+          bannerS3Key = result.s3Key
+        } catch (err: any) {
+          toast.error(err.message || 'Failed to upload banner')
+          setUploadProgress(null)
+          setSubmitting(false)
+          return
+        }
+        setUploadProgress(null)
+      }
+
       const data: FormFormData = {
         template_id: values.template_id,
         subject_id: values.subject_id,
         title: values.title,
         description: values.description || undefined,
-        payment_amount: isNaN(values.payment_amount as number) ? null : (values.payment_amount || null),
+        exam_process: values.exam_process || null,
+        banner_url: bannerUrl || null,
+        banner_s3_key: bannerS3Key || null,
+        payment_amount: isExaminerTemplate ? null : (isNaN(values.payment_amount as number) ? null : (values.payment_amount || null)),
         is_active: values.is_active,
         display_order: isNaN(values.display_order as number) ? undefined : values.display_order,
         exam_slots: isExaminerTemplate ? examSlots : undefined,
@@ -168,196 +214,369 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
     }
   }
 
+  const isUploading = uploadProgress !== null
+
+  // Preview data
+  const previewBannerUrl = bannerFile ? URL.createObjectURL(bannerFile) : existingBannerUrl
+  const previewTitle = watch('title')
+  const previewDescription = watch('description')
+  const previewExamProcess = watch('exam_process')
+
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'Create Form' : 'Edit Form'}</DialogTitle>
-          <DialogDescription>
-            {mode === 'create'
-              ? 'Create a new form from a template and assign it to a subject.'
-              : 'Update form details.'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isUploading && onClose()}>
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{mode === 'create' ? 'Create Form' : 'Edit Form'}</DialogTitle>
+            <DialogDescription>
+              {mode === 'create'
+                ? 'Create a new form from a template and assign it to a subject.'
+                : 'Update form details.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        {loadingOptions ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
-            {/* Template (create only) */}
-            <div className="space-y-2">
-              <Label>Template *</Label>
-              <Select
-                value={selectedTemplateId}
-                onValueChange={(v) => setValue('template_id', v)}
-                disabled={mode === 'edit'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.template_id && (
-                <p className="text-xs text-red-500">{errors.template_id.message}</p>
-              )}
+          {loadingOptions ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-
-            {/* Subject */}
-            <div className="space-y-2">
-              <Label>Subject *</Label>
-              <Select
-                value={watch('subject_id')}
-                onValueChange={(v) => setValue('subject_id', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.subject_id && (
-                <p className="text-xs text-red-500">{errors.subject_id.message}</p>
-              )}
-            </div>
-
-            {/* Title */}
-            <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
-              <Input id="title" {...register('title')} placeholder="Form title" />
-              {errors.title && (
-                <p className="text-xs text-red-500">{errors.title.message}</p>
-              )}
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                {...register('description')}
-                placeholder="Form description"
-                rows={3}
-              />
-              {errors.description && (
-                <p className="text-xs text-red-500">{errors.description.message}</p>
-              )}
-            </div>
-
-            {/* Payment Amount */}
-            <div className="space-y-2">
-              <Label htmlFor="payment_amount">Payment Amount (INR, optional)</Label>
-              <Input
-                id="payment_amount"
-                type="number"
-                min={0}
-                step="0.01"
-                {...register('payment_amount', { valueAsNumber: true })}
-                placeholder="0"
-              />
-              <p className="text-xs text-muted-foreground">
-                If set, a Zoho payment link will be generated automatically on submission.
-              </p>
-              {errors.payment_amount && (
-                <p className="text-xs text-red-500">{errors.payment_amount.message}</p>
-              )}
-            </div>
-
-            {/* Exam Slots — only for examiner template */}
-            {isExaminerTemplate && (
+          ) : (
+            <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+              {/* Template (create only) */}
               <div className="space-y-2">
-                <Label>Exam Slots</Label>
-                <p className="text-xs text-muted-foreground">
-                  Add the exam slot options that examiners can choose from.
-                </p>
-
-                {/* Existing slots */}
-                {examSlots.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {examSlots.map((slot, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-secondary text-sm"
-                      >
-                        {slot}
-                        <button
-                          type="button"
-                          onClick={() => removeSlot(index)}
-                          className="ml-0.5 hover:text-destructive transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
+                <Label>Template *</Label>
+                <Select
+                  value={selectedTemplateId}
+                  onValueChange={(v) => setValue('template_id', v)}
+                  disabled={mode === 'edit'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t._id} value={t._id}>
+                        {t.name}
+                      </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+                {errors.template_id && (
+                  <p className="text-xs text-red-500">{errors.template_id.message}</p>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div className="space-y-2">
+                <Label>Subject *</Label>
+                <Select
+                  value={watch('subject_id')}
+                  onValueChange={(v) => setValue('subject_id', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subjects.map((s) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.subject_id && (
+                  <p className="text-xs text-red-500">{errors.subject_id.message}</p>
+                )}
+              </div>
+
+              {/* Title */}
+              <div className="space-y-2">
+                <Label htmlFor="title">Title *</Label>
+                <Input id="title" {...register('title')} placeholder="Form title" />
+                {errors.title && (
+                  <p className="text-xs text-red-500">{errors.title.message}</p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  {...register('description')}
+                  placeholder="Form description"
+                  rows={3}
+                />
+                {errors.description && (
+                  <p className="text-xs text-red-500">{errors.description.message}</p>
+                )}
+              </div>
+
+              {/* Exam Process */}
+              <div className="space-y-2">
+                <Label htmlFor="exam_process">Exam Process</Label>
+                <Textarea
+                  id="exam_process"
+                  {...register('exam_process')}
+                  placeholder="Describe the exam process in detail..."
+                  rows={6}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Detailed description of the examination process. This will be shown to users before they fill the form.
+                </p>
+                {errors.exam_process && (
+                  <p className="text-xs text-red-500">{errors.exam_process.message}</p>
+                )}
+              </div>
+
+              {/* Banner Image */}
+              <div className="space-y-2">
+                <Label>Banner Image</Label>
+                <ImageUploadWithCrop
+                  value={bannerFile}
+                  onChange={(file) => {
+                    setBannerFile(file)
+                    if (file) {
+                      setExistingBannerUrl(null)
+                      setExistingBannerS3Key(null)
+                    }
+                  }}
+                  aspectRatio={BANNER_ASPECT_RATIO}
+                  maxSize={5 * 1024 * 1024}
+                  label="Upload banner image"
+                  description="Banner image (18:7 ratio). JPEG, PNG, or WebP. Max 5MB."
+                  disabled={submitting || isUploading}
+                  currentImageUrl={existingBannerUrl}
+                  onDelete={() => {
+                    setExistingBannerUrl(null)
+                    setExistingBannerS3Key(null)
+                    setBannerFile(null)
+                  }}
+                />
+                {uploadProgress !== null && (
+                  <div className="space-y-1">
+                    <Progress value={uploadProgress} className="h-2" />
+                    <p className="text-xs text-muted-foreground">Uploading... {uploadProgress}%</p>
                   </div>
                 )}
+              </div>
 
-                {/* Add new slot */}
-                <div className="flex gap-2">
+              {/* Payment Amount — only for non-examiner */}
+              {!isExaminerTemplate && (
+                <div className="space-y-2">
+                  <Label htmlFor="payment_amount">Payment Amount (INR, optional)</Label>
                   <Input
-                    value={newSlot}
-                    onChange={(e) => setNewSlot(e.target.value)}
-                    placeholder="e.g. Long case"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addSlot()
-                      }
-                    }}
+                    id="payment_amount"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    {...register('payment_amount', { valueAsNumber: true })}
+                    placeholder="0"
                   />
-                  <Button type="button" variant="outline" size="icon" onClick={addSlot}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    If set, a Zoho payment link will be generated automatically on submission.
+                  </p>
+                  {errors.payment_amount && (
+                    <p className="text-xs text-red-500">{errors.payment_amount.message}</p>
+                  )}
                 </div>
+              )}
+
+              {/* Exam Slots — only for examiner template */}
+              {isExaminerTemplate && (
+                <div className="space-y-2">
+                  <Label>Exam Slots</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Add the exam slot options that examiners can choose from. Users can select multiple slots.
+                  </p>
+
+                  {/* Existing slots */}
+                  {examSlots.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {examSlots.map((slot, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-secondary text-sm"
+                        >
+                          {slot}
+                          <button
+                            type="button"
+                            onClick={() => removeSlot(index)}
+                            className="ml-0.5 hover:text-destructive transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new slot */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={newSlot}
+                      onChange={(e) => setNewSlot(e.target.value)}
+                      placeholder="e.g. Long case"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addSlot()
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={addSlot}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Display order */}
+              <div className="space-y-2">
+                <Label htmlFor="display_order">Display Order</Label>
+                <Input
+                  id="display_order"
+                  type="number"
+                  min={0}
+                  {...register('display_order', { valueAsNumber: true })}
+                  placeholder="0"
+                />
+              </div>
+
+              {/* Active toggle */}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="is_active">Active</Label>
+                <Switch
+                  id="is_active"
+                  checked={watch('is_active')}
+                  onCheckedChange={(v) => setValue('is_active', v)}
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowPreview(true)}
+                  disabled={submitting || isUploading}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </Button>
+                <div className="flex-1" />
+                <Button type="button" variant="outline" onClick={onClose} disabled={submitting || isUploading}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting || isUploading}>
+                  {(submitting || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {mode === 'create' ? 'Create' : 'Save'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto p-0">
+          <div className="relative">
+            {/* Banner */}
+            {previewBannerUrl && (
+              <div className="w-full" style={{ aspectRatio: '18/7' }}>
+                <img
+                  src={previewBannerUrl}
+                  alt="Banner preview"
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
 
-            {/* Display order */}
-            <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
-              <Input
-                id="display_order"
-                type="number"
-                min={0}
-                {...register('display_order', { valueAsNumber: true })}
-                placeholder="0"
-              />
+            {/* Header */}
+            <div className={`px-5 pt-5 pb-4 ${isExaminerTemplate ? 'bg-purple-500/5' : 'bg-blue-500/5'}`}>
+              <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mb-2 ${
+                isExaminerTemplate ? 'text-purple-600 bg-purple-500/10' : 'text-blue-600 bg-blue-500/10'
+              }`}>
+                {selectedTemplate?.name || 'Form'}
+              </span>
+              <h2 className="text-lg font-bold">{previewTitle || 'Untitled Form'}</h2>
+              {previewDescription && (
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{previewDescription}</p>
+              )}
             </div>
 
-            {/* Active toggle */}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="is_active">Active</Label>
-              <Switch
-                id="is_active"
-                checked={watch('is_active')}
-                onCheckedChange={(v) => setValue('is_active', v)}
-              />
-            </div>
+            {/* Exam Process */}
+            {previewExamProcess && (
+              <div className="px-5 py-4 border-b">
+                <h3 className="text-sm font-semibold mb-2">Exam Process</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{previewExamProcess}</p>
+              </div>
+            )}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {mode === 'create' ? 'Create' : 'Save'}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+            {/* Fields Preview */}
+            <div className="px-5 py-5 space-y-4">
+              {selectedTemplate?.fields
+                ?.sort((a, b) => a.display_order - b.display_order)
+                .map((field) => (
+                  <div key={field.field_key}>
+                    <label className="block text-sm font-medium mb-1.5">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                    </label>
+
+                    {field.type === 'radio' && (field.options?.length > 0 || (isExaminerTemplate && examSlots.length > 0)) ? (
+                      <div className="space-y-2">
+                        {(field.options?.length > 0 ? field.options : examSlots).map((option) => (
+                          <label
+                            key={option}
+                            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-border/60 text-muted-foreground"
+                          >
+                            <input
+                              type={isExaminerTemplate && (!field.options || field.options.length === 0) ? 'checkbox' : 'radio'}
+                              disabled
+                              className="accent-blue-500"
+                            />
+                            <span className="text-sm">{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <input
+                        type={field.type === 'email' ? 'email' : 'text'}
+                        disabled
+                        placeholder={field.label}
+                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-border/60 bg-muted/30"
+                      />
+                    )}
+                  </div>
+                ))}
+
+              {/* Payment info preview (non-examiner only) */}
+              {!isExaminerTemplate && watch('payment_amount') && watch('payment_amount')! > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    This form requires a payment of <span className="font-semibold">{'\u20B9'}{watch('payment_amount')}</span>.
+                  </p>
+                </div>
+              )}
+
+              {/* Submit button preview */}
+              <button
+                type="button"
+                disabled
+                className="w-full py-3 bg-blue-500 text-white text-sm font-semibold rounded-xl opacity-80"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+
+          <DialogFooter className="px-5 pb-4">
+            <Button variant="outline" onClick={() => setShowPreview(false)}>
+              Close Preview
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

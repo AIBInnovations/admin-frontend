@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
 
@@ -26,6 +27,9 @@ export interface Form {
   subject_id: { _id: string; name: string } | string
   title: string
   description: string | null
+  exam_process: string | null
+  banner_url: string | null
+  banner_s3_key: string | null
   payment_amount: number | null
   is_active: boolean
   display_order: number
@@ -40,6 +44,9 @@ export interface FormFormData {
   subject_id: string
   title: string
   description?: string
+  exam_process?: string | null
+  banner_url?: string | null
+  banner_s3_key?: string | null
   payment_amount?: number | null
   is_active?: boolean
   display_order?: number
@@ -132,6 +139,34 @@ class FormsService {
 
   async delete(formId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${formId}`)
+  }
+
+  // --- Image Upload ---
+
+  async getImageUploadUrl(mimeType: string): Promise<ApiResponse<{ uploadUrl: string; s3Key: string; imageUrl: string }>> {
+    return apiService.post<{ uploadUrl: string; s3Key: string; imageUrl: string }>(`${this.basePath}/image-upload-url`, { mimeType })
+  }
+
+  async uploadImage(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ imageUrl: string; s3Key: string }> {
+    const urlRes = await this.getImageUploadUrl(file.type || 'image/jpeg')
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, imageUrl } = urlRes.data
+
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { imageUrl, s3Key }
   }
 
   // --- Submissions ---
