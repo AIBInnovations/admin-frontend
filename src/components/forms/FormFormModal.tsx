@@ -221,6 +221,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   const previewTitle = watch('title')
   const previewDescription = watch('description')
   const previewExamProcess = watch('exam_process')
+  const paymentAmount = isExaminerTemplate ? 0 : (watch('payment_amount') || 0)
 
   return (
     <>
@@ -478,99 +479,188 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
       {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto p-0">
-          <div className="relative">
-            {/* Banner */}
-            {previewBannerUrl && (
-              <div className="w-full" style={{ aspectRatio: '18/7' }}>
-                <img
-                  src={previewBannerUrl}
-                  alt="Banner preview"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Preview</DialogTitle>
+            <DialogDescription>
+              How this form will appear to users on the website.
+            </DialogDescription>
+          </DialogHeader>
 
-            {/* Header */}
-            <div className={`px-5 pt-5 pb-4 ${isExaminerTemplate ? 'bg-purple-500/5' : 'bg-blue-500/5'}`}>
-              <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mb-2 ${
-                isExaminerTemplate ? 'text-purple-600 bg-purple-500/10' : 'text-blue-600 bg-blue-500/10'
-              }`}>
-                {selectedTemplate?.name || 'Form'}
-              </span>
-              <h2 className="text-lg font-bold">{previewTitle || 'Untitled Form'}</h2>
-              {previewDescription && (
-                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{previewDescription}</p>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ── LEFT: Card Preview ── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Card Preview</p>
+              <div className="max-w-[320px]">
+                <div className="flex flex-col w-full text-left bg-white rounded-2xl border overflow-hidden shadow-sm">
+                  {/* Banner / Placeholder */}
+                  {previewBannerUrl ? (
+                    <div className="w-full" style={{ aspectRatio: '18/7' }}>
+                      <img src={previewBannerUrl} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div
+                      className={`w-full flex items-center justify-center ${isExaminerTemplate ? 'bg-purple-500/5' : 'bg-blue-500/5'}`}
+                      style={{ aspectRatio: '18/7' }}
+                    >
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className={isExaminerTemplate ? 'text-purple-400/40' : 'text-blue-400/30'}>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Card Content */}
+                  <div className="flex flex-col flex-1 p-4">
+                    <span className={`self-start text-[10px] font-medium px-2 py-0.5 rounded-full mb-2 ${
+                      isExaminerTemplate ? 'text-purple-600 bg-purple-500/10' : 'text-blue-600 bg-blue-500/10'
+                    }`}>
+                      {selectedTemplate?.name || 'Form'}
+                    </span>
+                    <h3 className="text-sm font-semibold line-clamp-2 leading-snug mb-1.5">
+                      {previewTitle || 'Untitled Form'}
+                    </h3>
+                    {previewDescription && (
+                      <p className="text-xs text-muted-foreground line-clamp-3 mb-3 leading-relaxed">{previewDescription}</p>
+                    )}
+
+                    {/* Footer */}
+                    <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                      <span>{selectedTemplate?.fields?.length || 0} fields</span>
+                      {!isExaminerTemplate && paymentAmount > 0 && (
+                        <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
+                          {'\u20B9'}{paymentAmount}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t">
+                      <span className="flex items-center justify-between text-sm font-semibold text-blue-600">
+                        Fill Form
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Exam Process */}
-            {previewExamProcess && (
-              <div className="px-5 py-4 border-b">
-                <h3 className="text-sm font-semibold mb-2">Exam Process</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{previewExamProcess}</p>
-              </div>
-            )}
-
-            {/* Fields Preview */}
-            <div className="px-5 py-5 space-y-4">
-              {selectedTemplate?.fields
-                ?.sort((a, b) => a.display_order - b.display_order)
-                .map((field) => (
-                  <div key={field.field_key}>
-                    <label className="block text-sm font-medium mb-1.5">
-                      {field.label}
-                      {field.required && <span className="text-red-500 ml-0.5">*</span>}
-                    </label>
-
-                    {field.type === 'radio' && (field.options?.length > 0 || (isExaminerTemplate && examSlots.length > 0)) ? (
-                      <div className="space-y-2">
-                        {(field.options?.length > 0 ? field.options : examSlots).map((option) => (
-                          <label
-                            key={option}
-                            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-border/60 text-muted-foreground"
-                          >
-                            <input
-                              type={isExaminerTemplate && (!field.options || field.options.length === 0) ? 'checkbox' : 'radio'}
-                              disabled
-                              className="accent-blue-500"
-                            />
-                            <span className="text-sm">{option}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <input
-                        type={field.type === 'email' ? 'email' : 'text'}
-                        disabled
-                        placeholder={field.label}
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-border/60 bg-muted/30"
-                      />
-                    )}
+            {/* ── RIGHT: Form Modal Preview ── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Form Modal Preview</p>
+              <div className="bg-white rounded-2xl border overflow-hidden shadow-sm max-h-[60vh] overflow-y-auto">
+                {/* Banner */}
+                {previewBannerUrl ? (
+                  <div className="w-full" style={{ aspectRatio: '18/7' }}>
+                    <img src={previewBannerUrl} alt="" className="w-full h-full object-cover" />
                   </div>
-                ))}
+                ) : null}
 
-              {/* Payment info preview (non-examiner only) */}
-              {!isExaminerTemplate && watch('payment_amount') && watch('payment_amount')! > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs text-muted-foreground">
-                    This form requires a payment of <span className="font-semibold">{'\u20B9'}{watch('payment_amount')}</span>.
-                  </p>
+                {/* Header */}
+                <div className={`px-5 pt-5 pb-4 ${isExaminerTemplate ? 'bg-purple-500/5' : 'bg-blue-500/5'}`}>
+                  <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mb-2 ${
+                    isExaminerTemplate ? 'text-purple-600 bg-purple-500/10' : 'text-blue-600 bg-blue-500/10'
+                  }`}>
+                    {selectedTemplate?.name || 'Form'}
+                  </span>
+                  <h2 className="text-lg font-bold">{previewTitle || 'Untitled Form'}</h2>
+                  {previewDescription && (
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{previewDescription}</p>
+                  )}
                 </div>
-              )}
 
-              {/* Submit button preview */}
-              <button
-                type="button"
-                disabled
-                className="w-full py-3 bg-blue-500 text-white text-sm font-semibold rounded-xl opacity-80"
-              >
-                Submit
-              </button>
+                {/* Exam Process */}
+                {previewExamProcess && (
+                  <div className="px-5 py-3 border-b">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold">Exam Process</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mt-2">{previewExamProcess}</p>
+                  </div>
+                )}
+
+                {/* Fields */}
+                <div className="px-5 py-5 space-y-4">
+                  {selectedTemplate?.fields
+                    ?.sort((a, b) => a.display_order - b.display_order)
+                    .map((field) => (
+                      <div key={field.field_key}>
+                        <label className="block text-sm font-medium mb-1.5">
+                          {field.label}
+                          {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                        </label>
+
+                        {field.type === 'radio' && (field.options?.length > 0 || (isExaminerTemplate && examSlots.length > 0)) ? (
+                          <div className="space-y-2">
+                            {(field.options?.length > 0 ? field.options : examSlots).map((option) => {
+                              const isSlotField = isExaminerTemplate && (!field.options || field.options.length === 0)
+                              return (
+                                <label
+                                  key={option}
+                                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-muted-foreground ${
+                                    isSlotField ? 'border-purple-200/60' : 'border-border/60'
+                                  }`}
+                                >
+                                  <input
+                                    type={isSlotField ? 'checkbox' : 'radio'}
+                                    disabled
+                                    className={isSlotField ? 'accent-purple-500' : 'accent-blue-500'}
+                                  />
+                                  <span className="text-sm">{option}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <input
+                            type={field.type === 'email' ? 'email' : 'text'}
+                            disabled
+                            placeholder={field.label}
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-border/60 bg-muted/30"
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                  {/* Payment info (non-examiner only) */}
+                  {!isExaminerTemplate && paymentAmount > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground">
+                        This form requires a non-refundable payment of <span className="font-semibold">{'\u20B9'}{paymentAmount}</span>. A payment link will be provided after submission.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Submit button */}
+                  <button
+                    type="button"
+                    disabled
+                    className={`w-full py-3 text-white text-sm font-semibold rounded-xl opacity-80 ${
+                      isExaminerTemplate ? 'bg-purple-500' : 'bg-blue-500'
+                    }`}
+                  >
+                    Submit
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="px-5 pb-4">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setShowPreview(false)}>
               Close Preview
             </Button>
