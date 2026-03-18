@@ -275,7 +275,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+            <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4 min-w-0">
               {/* Template (create only) */}
               <div className="space-y-2">
                 <Label>Template *</Label>
@@ -325,9 +325,9 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
               {/* Shareable URL */}
               {shareableUrl && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/40">
-                  <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <p className="text-xs text-muted-foreground truncate flex-1 font-mono">{shareableUrl}</p>
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/40 min-w-0">
+                  <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground flex-1 font-mono break-all">{shareableUrl}</p>
                   <Button
                     type="button"
                     variant="ghost"
@@ -540,9 +540,9 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
           {/* Shareable URL bar */}
           {shareableUrl && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border border-border/40 -mt-1 mb-1">
-              <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
-              <p className="text-sm text-muted-foreground truncate flex-1 font-mono">{shareableUrl}</p>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border border-border/40 -mt-1 mb-1 min-w-0">
+              <Link2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <p className="text-sm text-muted-foreground flex-1 font-mono break-all">{shareableUrl}</p>
               <Button
                 type="button"
                 variant="ghost"
