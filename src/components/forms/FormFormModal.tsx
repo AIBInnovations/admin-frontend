@@ -15,12 +15,23 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
-import { Loader2, Plus, X, Eye } from 'lucide-react'
+import { Loader2, Plus, X, Eye, Link2, Copy, Check } from 'lucide-react'
 import { Form, FormFormData, FormTemplate, formsService } from '@/services/forms.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 const BANNER_ASPECT_RATIO = 18 / 7
+const STORE_BASE_URL = 'https://pgmeessentials.com'
+
+function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
 
 const formSchema = z.object({
   template_id: z.string().min(1, 'Template is required'),
@@ -59,6 +70,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
   // Preview state
   const [showPreview, setShowPreview] = useState(false)
+  const [urlCopied, setUrlCopied] = useState(false)
 
   const {
     register,
@@ -143,6 +155,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
     setNewSlot('')
     setUploadProgress(null)
     setShowPreview(false)
+    setUrlCopied(false)
   }, [open, mode, form, reset])
 
   // Auto-fill title & description when template changes (create only)
@@ -223,6 +236,27 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   const previewExamProcess = watch('exam_process')
   const paymentAmount = isExaminerTemplate ? 0 : (watch('payment_amount') || 0)
 
+  // Build shareable URL
+  const selectedSubjectId = watch('subject_id')
+  const selectedSubject = subjects.find((s) => s._id === selectedSubjectId)
+  const subjectSlug = selectedSubject ? slugify(selectedSubject.name) : ''
+  const formSlug = mode === 'edit' && form?.slug
+    ? form.slug
+    : previewTitle ? slugify(previewTitle) : ''
+  const shareableUrl = subjectSlug && formSlug
+    ? `${STORE_BASE_URL}/packages?subject=${subjectSlug}&form=${formSlug}`
+    : subjectSlug
+      ? `${STORE_BASE_URL}/packages?subject=${subjectSlug}`
+      : null
+
+  const copyUrl = () => {
+    if (!shareableUrl) return
+    navigator.clipboard.writeText(shareableUrl).then(() => {
+      setUrlCopied(true)
+      setTimeout(() => setUrlCopied(false), 2000)
+    })
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isUploading && onClose()}>
@@ -288,6 +322,23 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                   <p className="text-xs text-red-500">{errors.subject_id.message}</p>
                 )}
               </div>
+
+              {/* Shareable URL */}
+              {shareableUrl && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/40">
+                  <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <p className="text-xs text-muted-foreground truncate flex-1 font-mono">{shareableUrl}</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={copyUrl}
+                  >
+                    {urlCopied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+              )}
 
               {/* Title */}
               <div className="space-y-2">
@@ -486,6 +537,23 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
               How this form will appear to users on the website.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Shareable URL bar */}
+          {shareableUrl && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border border-border/40 -mt-1 mb-1">
+              <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground truncate flex-1 font-mono">{shareableUrl}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 gap-1.5"
+                onClick={copyUrl}
+              >
+                {urlCopied ? <><Check className="h-3 w-3 text-green-600" />Copied</> : <><Copy className="h-3 w-3" />Copy</>}
+              </Button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* ── LEFT: Card Preview ── */}

@@ -23,6 +23,7 @@ export interface FormTemplate {
 
 export interface Form {
   _id: string
+  slug: string | null
   template_id: { _id: string; slug: string; name: string } | string
   subject_id: { _id: string; name: string } | string
   title: string
