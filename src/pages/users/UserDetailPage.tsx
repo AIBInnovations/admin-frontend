@@ -26,13 +26,18 @@ import {
   UserDetail,
   UserPurchase,
   SessionPurchase,
+  EbookPurchase,
   BookOrder,
   DeviceSession,
   UpdateUserData,
   GrantPackageData,
+  GrantEbookData,
+  GrantSessionData,
 } from '@/services/users.service'
 import { UserFormModal } from '@/components/users/UserFormModal'
 import { GrantPackageModal } from '@/components/users/GrantPackageModal'
+import { GrantEbookModal } from '@/components/users/GrantEbookModal'
+import { GrantSessionModal } from '@/components/users/GrantSessionModal'
 
 export function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
@@ -43,9 +48,17 @@ export function UserDetailPage() {
   const [blocking, setBlocking] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGrantModal, setShowGrantModal] = useState(false)
+  const [showGrantEbookModal, setShowGrantEbookModal] = useState(false)
+  const [showGrantSessionModal, setShowGrantSessionModal] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<UserPurchase | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [revoking, setRevoking] = useState(false)
+  const [revokeEbookTarget, setRevokeEbookTarget] = useState<EbookPurchase | null>(null)
+  const [revokeEbookReason, setRevokeEbookReason] = useState('')
+  const [revokingEbook, setRevokingEbook] = useState(false)
+  const [revokeSessionTarget, setRevokeSessionTarget] = useState<SessionPurchase | null>(null)
+  const [revokeSessionReason, setRevokeSessionReason] = useState('')
+  const [revokingSession, setRevokingSession] = useState(false)
 
   const fetchUser = useCallback(async () => {
     if (!userId) return
@@ -107,18 +120,14 @@ export function UserDetailPage() {
 
   const handleGrantPackage = async (data: GrantPackageData) => {
     if (!user) return
-    try {
-      const response = await usersService.grantPackageAccess(user._id, data)
-      if (response.success) {
-        toast.success('Package access granted successfully')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to grant package access')
-        throw new Error(response.message || 'Failed to grant package access')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant package access')
-      throw error
+    const response = await usersService.grantPackageAccess(user._id, data)
+    if (response.success) {
+      toast.success('Package access granted successfully')
+      fetchUser()
+    } else {
+      const msg = response.message || 'Failed to grant package access'
+      toast.error(msg)
+      throw new Error(msg)
     }
   }
 
@@ -139,6 +148,72 @@ export function UserDetailPage() {
       setRevoking(false)
       setRevokeTarget(null)
       setRevokeReason('')
+    }
+  }
+
+  const handleGrantEbook = async (data: GrantEbookData) => {
+    if (!user) return
+    const response = await usersService.grantEbookAccess(user._id, data)
+    if (response.success) {
+      toast.success('Ebook access granted successfully')
+      fetchUser()
+    } else {
+      const msg = response.message || 'Failed to grant ebook access'
+      toast.error(msg)
+      throw new Error(msg)
+    }
+  }
+
+  const handleRevokeEbook = async () => {
+    if (!user || !revokeEbookTarget) return
+    try {
+      setRevokingEbook(true)
+      const response = await usersService.revokeEbookAccess(user._id, revokeEbookTarget._id, revokeEbookReason)
+      if (response.success) {
+        toast.success('Ebook access revoked successfully')
+        fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to revoke ebook access')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to revoke ebook access')
+    } finally {
+      setRevokingEbook(false)
+      setRevokeEbookTarget(null)
+      setRevokeEbookReason('')
+    }
+  }
+
+  const handleGrantSession = async (data: GrantSessionData) => {
+    if (!user) return
+    const response = await usersService.grantSessionAccess(user._id, data)
+    if (response.success) {
+      toast.success('Session access granted successfully')
+      fetchUser()
+    } else {
+      const msg = response.message || 'Failed to grant session access'
+      toast.error(msg)
+      throw new Error(msg)
+    }
+  }
+
+  const handleRevokeSession = async () => {
+    if (!user || !revokeSessionTarget) return
+    try {
+      setRevokingSession(true)
+      const response = await usersService.revokeSessionAccess(user._id, revokeSessionTarget._id, revokeSessionReason)
+      if (response.success) {
+        toast.success('Session access revoked successfully')
+        fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to revoke session access')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to revoke session access')
+    } finally {
+      setRevokingSession(false)
+      setRevokeSessionTarget(null)
+      setRevokeSessionReason('')
     }
   }
 
@@ -240,6 +315,14 @@ export function UserDetailPage() {
             <Button variant="outline" size="sm" onClick={() => setShowGrantModal(true)}>
               <Gift className="mr-2 h-4 w-4" />
               Grant Package
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowGrantEbookModal(true)}>
+              <Gift className="mr-2 h-4 w-4" />
+              Grant Ebook
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowGrantSessionModal(true)}>
+              <Gift className="mr-2 h-4 w-4" />
+              Grant Session
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
               <Edit className="mr-2 h-4 w-4" />
@@ -460,6 +543,87 @@ export function UserDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Ebook Purchases */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Ebook Purchases
+            <Badge variant="secondary" className="text-[10px] ml-1">{user.ebook_purchases?.length || 0}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(!user.ebook_purchases || user.ebook_purchases.length === 0) ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              No ebook purchases
+            </div>
+          ) : (
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Book</TableHead>
+                    <TableHead className="w-28">Amount</TableHead>
+                    <TableHead className="w-24">Status</TableHead>
+                    <TableHead className="w-28">Purchased</TableHead>
+                    <TableHead className="w-20">Active</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {user.ebook_purchases.map((ep) => (
+                    <TableRow key={ep._id}>
+                      <TableCell className="font-medium text-sm">
+                        {typeof ep.book_id === 'object' ? ep.book_id.title : ep.book_id}
+                        {ep.is_admin_granted && (
+                          <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {ep.currency} {ep.amount_paid}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`text-[10px] ${getPaymentStatusColor(ep.payment_status)}`}>
+                          {ep.payment_status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(ep.purchased_at)}
+                      </TableCell>
+                      <TableCell>
+                        {ep.is_revoked ? (
+                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
+                            Revoked
+                          </Badge>
+                        ) : (
+                          <Badge variant={ep.is_active ? 'default' : 'outline'} className="text-[10px]">
+                            {ep.is_active ? 'Yes' : 'No'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {ep.is_active && ep.payment_status === 'completed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => setRevokeEbookTarget(ep)}
+                          >
+                            <Ban className="mr-1 h-3 w-3" />
+                            Revoke
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Session Purchases */}
       <Card>
         <CardHeader>
@@ -484,6 +648,8 @@ export function UserDetailPage() {
                     <TableHead className="w-28">Amount</TableHead>
                     <TableHead className="w-24">Status</TableHead>
                     <TableHead className="w-28">Purchased</TableHead>
+                    <TableHead className="w-20">Active</TableHead>
+                    <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -491,6 +657,9 @@ export function UserDetailPage() {
                     <TableRow key={sp._id}>
                       <TableCell className="font-medium text-sm">
                         {typeof sp.session_id === 'object' ? sp.session_id.title : sp.session_id}
+                        {sp.is_admin_granted && (
+                          <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
                         {sp.currency} {sp.amount_paid}
@@ -502,6 +671,30 @@ export function UserDetailPage() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDate(sp.purchased_at)}
+                      </TableCell>
+                      <TableCell>
+                        {sp.is_revoked ? (
+                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
+                            Revoked
+                          </Badge>
+                        ) : (
+                          <Badge variant={sp.is_active ? 'default' : 'outline'} className="text-[10px]">
+                            {sp.is_active ? 'Yes' : 'No'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {sp.is_active && sp.payment_status === 'completed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => setRevokeSessionTarget(sp)}
+                          >
+                            <Ban className="mr-1 h-3 w-3" />
+                            Revoke
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -704,6 +897,26 @@ export function UserDetailPage() {
         />
       )}
 
+      {/* Grant Ebook Modal */}
+      {user && (
+        <GrantEbookModal
+          open={showGrantEbookModal}
+          onClose={() => setShowGrantEbookModal(false)}
+          onSubmit={handleGrantEbook}
+          userName={user.name || user.phone_number}
+        />
+      )}
+
+      {/* Grant Session Modal */}
+      {user && (
+        <GrantSessionModal
+          open={showGrantSessionModal}
+          onClose={() => setShowGrantSessionModal(false)}
+          onSubmit={handleGrantSession}
+          userName={user.name || user.phone_number}
+        />
+      )}
+
       {/* Revoke Package Confirmation */}
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => { if (!open && !revoking) { setRevokeTarget(null); setRevokeReason('') } }}>
         <AlertDialogContent>
@@ -736,6 +949,88 @@ export function UserDetailPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {revoking ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
+              ) : (
+                'Revoke Access'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoke Ebook Confirmation */}
+      <AlertDialog open={!!revokeEbookTarget} onOpenChange={(open) => { if (!open && !revokingEbook) { setRevokeEbookTarget(null); setRevokeEbookReason('') } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Ebook Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke access to{' '}
+              <span className="font-medium text-foreground">
+                {typeof revokeEbookTarget?.book_id === 'object' ? revokeEbookTarget.book_id.title : 'this ebook'}
+              </span>{' '}
+              for {user?.name || user?.phone_number}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revoke-ebook-reason">Reason (optional)</Label>
+            <Input
+              id="revoke-ebook-reason"
+              placeholder="e.g., Refund issued, Policy violation, etc."
+              value={revokeEbookReason}
+              onChange={(e) => setRevokeEbookReason(e.target.value)}
+              disabled={revokingEbook}
+              maxLength={500}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revokingEbook}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeEbook}
+              disabled={revokingEbook}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {revokingEbook ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
+              ) : (
+                'Revoke Access'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoke Session Confirmation */}
+      <AlertDialog open={!!revokeSessionTarget} onOpenChange={(open) => { if (!open && !revokingSession) { setRevokeSessionTarget(null); setRevokeSessionReason('') } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Session Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke access to{' '}
+              <span className="font-medium text-foreground">
+                {typeof revokeSessionTarget?.session_id === 'object' ? revokeSessionTarget.session_id.title : 'this session'}
+              </span>{' '}
+              for {user?.name || user?.phone_number}. The enrollment will also be cancelled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revoke-session-reason">Reason (optional)</Label>
+            <Input
+              id="revoke-session-reason"
+              placeholder="e.g., Refund issued, Policy violation, etc."
+              value={revokeSessionReason}
+              onChange={(e) => setRevokeSessionReason(e.target.value)}
+              disabled={revokingSession}
+              maxLength={500}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revokingSession}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeSession}
+              disabled={revokingSession}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {revokingSession ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
               ) : (
                 'Revoke Access'

@@ -115,12 +115,8 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
   }, [open, reset])
 
   const handleFormSubmit = async (data: GrantPackageFormValues) => {
-    try {
-      await onSubmit(data as GrantPackageData)
-      onClose()
-    } catch (error) {
-      console.error('Form submission error:', error)
-    }
+    await onSubmit(data as GrantPackageData)
+    onClose()
   }
 
   const hasTiers = selectedPackage?.tiers && selectedPackage.tiers.length > 0

@@ -107,6 +107,22 @@ export interface GrantPackageData {
   notes?: string
 }
 
+export interface GrantEbookData {
+  book_id: string
+  create_invoice?: boolean
+  invoice_amount?: number
+  reason?: string
+  notes?: string
+}
+
+export interface GrantSessionData {
+  session_id: string
+  create_invoice?: boolean
+  invoice_amount?: number
+  reason?: string
+  notes?: string
+}
+
 export interface UsersListParams extends BaseListParams {
   search?: string
   is_active?: boolean | null
@@ -123,6 +139,27 @@ export interface SessionPurchase {
   payment_status: 'pending' | 'completed' | 'failed' | 'refunded'
   purchased_at: string
   is_active: boolean
+  is_admin_granted?: boolean
+  is_revoked?: boolean
+  revoked_reason?: string | null
+  revoked_at?: string | null
+  createdAt: string
+}
+
+export interface EbookPurchase {
+  _id: string
+  book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string } | string
+  payment_gateway: 'zoho_payments'
+  zoho_payment_id: string | null
+  amount_paid: number
+  currency: string
+  payment_status: 'pending' | 'completed' | 'failed' | 'refunded'
+  purchased_at: string
+  is_active: boolean
+  is_admin_granted?: boolean
+  is_revoked?: boolean
+  revoked_reason?: string | null
+  revoked_at?: string | null
   createdAt: string
 }
 
@@ -148,6 +185,7 @@ export interface BookOrder {
 export interface UserDetail extends User {
   purchases: UserPurchase[]
   session_purchases: SessionPurchase[]
+  ebook_purchases: EbookPurchase[]
   book_orders: BookOrder[]
   device_sessions: DeviceSession[]
   preferences: UserPreferences | null
@@ -286,6 +324,48 @@ class UsersService {
     }>
   > {
     return apiService.put(`${this.basePath}/${userId}/purchases/${purchaseId}/revoke`, { reason })
+  }
+
+  /**
+   * Grant ebook access to user (complimentary)
+   */
+  async grantEbookAccess(
+    userId: string,
+    data: GrantEbookData
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post(`${this.basePath}/${userId}/grant-ebook`, data)
+  }
+
+  /**
+   * Revoke ebook access for a user
+   */
+  async revokeEbookAccess(
+    userId: string,
+    ebookPurchaseId: string,
+    reason?: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiService.put(`${this.basePath}/${userId}/ebook-purchases/${ebookPurchaseId}/revoke`, { reason })
+  }
+
+  /**
+   * Grant session access to user (complimentary)
+   */
+  async grantSessionAccess(
+    userId: string,
+    data: GrantSessionData
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post(`${this.basePath}/${userId}/grant-session`, data)
+  }
+
+  /**
+   * Revoke session access for a user
+   */
+  async revokeSessionAccess(
+    userId: string,
+    sessionPurchaseId: string,
+    reason?: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiService.put(`${this.basePath}/${userId}/session-purchases/${sessionPurchaseId}/revoke`, { reason })
   }
 }
 
