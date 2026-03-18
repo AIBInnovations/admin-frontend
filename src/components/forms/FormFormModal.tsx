@@ -644,7 +644,12 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                   </span>
                   <h2 className="text-lg font-bold">{previewTitle || 'Untitled Form'}</h2>
                   {previewDescription && (
-                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{previewDescription}</p>
+                    <div className="mt-2">
+                      <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">{previewDescription}</p>
+                      {previewDescription.length > 150 && (
+                        <span className="text-xs font-medium text-blue-600 mt-1 inline-block">Read more</span>
+                      )}
+                    </div>
                   )}
                 </div>
 
