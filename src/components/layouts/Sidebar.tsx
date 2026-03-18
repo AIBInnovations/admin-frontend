@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
@@ -56,7 +56,14 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Users', href: '/users', icon: Users },
+  {
+    name: 'Users',
+    icon: Users,
+    children: [
+      { name: 'All Users', href: '/users' },
+      { name: 'Grant Access', href: '/users/grant-access' },
+    ],
+  },
   {
     name: 'Content',
     icon: BookOpen,
@@ -184,17 +191,29 @@ function NavItemComponent({
   isOpen: boolean
 }) {
   const location = useLocation()
+  const isChildRoute = useCallback((href: string) => {
+    return location.pathname === href || location.pathname.startsWith(href + '/')
+  }, [location.pathname])
+
   const [isExpanded, setIsExpanded] = useState(() => {
     if (item.children) {
-      return item.children.some((child) => location.pathname === child.href)
+      return item.children.some((child) => isChildRoute(child.href))
     }
     return false
   })
 
+  // Auto-expand when navigating to a child route
+  useEffect(() => {
+    if (item.children) {
+      const shouldExpand = item.children.some((child) => isChildRoute(child.href))
+      if (shouldExpand) setIsExpanded(true)
+    }
+  }, [item.children, isChildRoute])
+
   const Icon = item.icon
   const isActive = item.href ? location.pathname === item.href : false
   const hasActiveChild = item.children?.some(
-    (child) => location.pathname === child.href
+    (child) => isChildRoute(child.href)
   )
 
   // Collapsed sidebar with tooltip

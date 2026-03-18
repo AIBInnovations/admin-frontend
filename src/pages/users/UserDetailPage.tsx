@@ -120,15 +120,18 @@ export function UserDetailPage() {
 
   const handleGrantPackage = async (data: GrantPackageData) => {
     if (!user) return
-    const response = await usersService.grantPackageAccess(user._id, data)
-    if (response.success) {
-      toast.success('Package access granted successfully')
-      fetchUser()
-    } else {
-      const msg = response.message || 'Failed to grant package access'
-      toast.error(msg)
-      throw new Error(msg)
+    try {
+      const response = await usersService.grantPackageAccess(user._id, data)
+      if (response.success) {
+        toast.success('Package access granted successfully')
+        fetchUser()
+        return
+      }
+      toast.error(response.message || 'Failed to grant package access')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to grant package access')
     }
+    throw new Error('Grant failed')
   }
 
   const handleRevokePurchase = async () => {
@@ -153,15 +156,18 @@ export function UserDetailPage() {
 
   const handleGrantEbook = async (data: GrantEbookData) => {
     if (!user) return
-    const response = await usersService.grantEbookAccess(user._id, data)
-    if (response.success) {
-      toast.success('Ebook access granted successfully')
-      fetchUser()
-    } else {
-      const msg = response.message || 'Failed to grant ebook access'
-      toast.error(msg)
-      throw new Error(msg)
+    try {
+      const response = await usersService.grantEbookAccess(user._id, data)
+      if (response.success) {
+        toast.success('Ebook access granted successfully')
+        fetchUser()
+        return
+      }
+      toast.error(response.message || 'Failed to grant ebook access')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to grant ebook access')
     }
+    throw new Error('Grant failed')
   }
 
   const handleRevokeEbook = async () => {
@@ -186,15 +192,18 @@ export function UserDetailPage() {
 
   const handleGrantSession = async (data: GrantSessionData) => {
     if (!user) return
-    const response = await usersService.grantSessionAccess(user._id, data)
-    if (response.success) {
-      toast.success('Session access granted successfully')
-      fetchUser()
-    } else {
-      const msg = response.message || 'Failed to grant session access'
-      toast.error(msg)
-      throw new Error(msg)
+    try {
+      const response = await usersService.grantSessionAccess(user._id, data)
+      if (response.success) {
+        toast.success('Session access granted successfully')
+        fetchUser()
+        return
+      }
+      toast.error(response.message || 'Failed to grant session access')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to grant session access')
     }
+    throw new Error('Grant failed')
   }
 
   const handleRevokeSession = async () => {

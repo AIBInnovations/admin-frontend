@@ -11,6 +11,7 @@ import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { UsersPage } from '@/pages/users/UsersPage'
 import { UserDetailPage } from '@/pages/users/UserDetailPage'
+import { GrantAccessPage } from '@/pages/users/GrantAccessPage'
 import { SubjectsPage } from '@/pages/content/SubjectsPage'
 import { SubjectDetailPage } from '@/pages/content/SubjectDetailPage'
 import { PackagesPage } from '@/pages/content/PackagesPage'
@@ -67,6 +68,7 @@ function App() {
 
               {/* Users */}
               <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/grant-access" element={<GrantAccessPage />} />
               <Route path="/users/:userId" element={<UserDetailPage />} />
 
               {/* Content */}

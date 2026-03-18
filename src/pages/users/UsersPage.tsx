@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
@@ -23,14 +23,25 @@ export function UsersPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
-  // Fetch users
+  // Debounce search input — wait 400ms after typing stops before querying API
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 400)
+    return () => clearTimeout(debounceRef.current)
+  }, [search])
+
+  // Fetch users with server-side search
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true)
       const response = await usersService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
 
@@ -48,19 +59,9 @@ export function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, statusFilter])
+  }, [currentPage, statusFilter, debouncedSearch])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
-
-  // Client-side search filter
-  const filteredUsers = search
-    ? users.filter(
-        (u) =>
-          (u.name || '').toLowerCase().includes(search.toLowerCase()) ||
-          (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
-          (u.phone_number || '').includes(search)
-      )
-    : users
 
   // URL params sync
   useEffect(() => {
@@ -71,10 +72,10 @@ export function UsersPage() {
     setSearchParams(params)
   }, [search, statusFilter, currentPage, setSearchParams])
 
-  // Reset page when status filter changes (not search, since that's client-side)
+  // Reset page when search or status filter changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter])
+  }, [debouncedSearch, statusFilter])
 
   // Handlers
   const handleBlockToggle = async (user: User) => {
@@ -164,7 +165,7 @@ export function UsersPage() {
       />
 
       <DataTable
-        data={filteredUsers}
+        data={users}
         columns={columns}
         isLoading={loading}
         onRowClick={(user) => navigate(`/users/${user._id}`)}
