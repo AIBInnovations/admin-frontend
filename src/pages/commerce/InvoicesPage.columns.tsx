@@ -20,6 +20,7 @@ const typeColors: Record<string, string> = {
   session: 'bg-violet-500/10 text-violet-600 border-violet-200',
   book: 'bg-orange-500/10 text-orange-600 border-orange-200',
   ebook: 'bg-green-500/10 text-green-600 border-green-200',
+  form: 'bg-amber-500/10 text-amber-600 border-amber-200',
 }
 
 interface InvoicesColumnsProps {

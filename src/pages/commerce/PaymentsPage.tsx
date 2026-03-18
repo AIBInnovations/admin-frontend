@@ -112,6 +112,7 @@ export function PaymentsPage() {
         { label: 'Session', value: 'session' },
         { label: 'Book', value: 'book' },
         { label: 'eBook', value: 'ebook' },
+        { label: 'Form', value: 'form' },
       ],
       placeholder: 'Filter by type',
       defaultValue: 'all',
