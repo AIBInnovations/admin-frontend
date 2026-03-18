@@ -136,7 +136,7 @@ export function GrantAccessPage() {
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value)
-                if (!e.target.value) setSelectedUser(null)
+                if (selectedUser) setSelectedUser(null)
               }}
               className="pl-10"
             />
@@ -151,13 +151,13 @@ export function GrantAccessPage() {
             </div>
           )}
 
-          {!searching && debouncedQuery.length >= 2 && searchResults.length === 0 && (
+          {!searching && !selectedUser && debouncedQuery.length >= 2 && searchResults.length === 0 && (
             <p className="text-sm text-muted-foreground py-4 text-center">
               No users found for "{debouncedQuery}"
             </p>
           )}
 
-          {!searching && searchResults.length > 0 && (
+          {!searching && !selectedUser && searchResults.length > 0 && (
             <div className="space-y-1 max-h-80 overflow-y-auto">
               {searchResults.map((user) => (
                 <button
@@ -210,7 +210,7 @@ export function GrantAccessPage() {
           )}
 
           {/* Selected User Card */}
-          {selectedUser && searchResults.length === 0 && (
+          {selectedUser && (
             <div className="flex items-center gap-4 rounded-lg border border-primary bg-primary/5 p-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <UserIcon className="h-6 w-6" />
@@ -240,7 +240,7 @@ export function GrantAccessPage() {
       </Card>
 
       {/* Step 2: Choose Grant Type */}
-      {selectedUser && searchResults.length === 0 && (
+      {selectedUser && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Step 2: Grant Access</CardTitle>
