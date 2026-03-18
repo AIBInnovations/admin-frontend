@@ -32,6 +32,7 @@ export interface Form {
   banner_url: string | null
   banner_s3_key: string | null
   payment_amount: number | null
+  zoho_item_id: string | null
   is_active: boolean
   display_order: number
   exam_slots: string[]
@@ -124,6 +125,14 @@ class FormsService {
 
   async update(formId: string, data: Partial<FormFormData>): Promise<ApiResponse<Form>> {
     const response = await apiService.put<{ form: Form }>(`${this.basePath}/${formId}`, data)
+    if (response.success && response.data) {
+      return { ...response, data: response.data.form }
+    }
+    return response as unknown as ApiResponse<Form>
+  }
+
+  async createZohoItem(formId: string): Promise<ApiResponse<Form>> {
+    const response = await apiService.post<{ form: Form }>(`${this.basePath}/${formId}/create-zoho-item`, {})
     if (response.success && response.data) {
       return { ...response, data: response.data.form }
     }

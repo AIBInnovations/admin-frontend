@@ -15,7 +15,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
-import { Loader2, Plus, X, Eye, Link2, Copy, Check } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Loader2, Plus, X, Eye, Link2, Copy, Check, Package } from 'lucide-react'
 import { Form, FormFormData, FormTemplate, formsService } from '@/services/forms.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
@@ -71,6 +72,10 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   // Preview state
   const [showPreview, setShowPreview] = useState(false)
   const [urlCopied, setUrlCopied] = useState(false)
+
+  // Zoho item state (edit mode only)
+  const [zohoItemId, setZohoItemId] = useState<string | null>(null)
+  const [creatingZohoItem, setCreatingZohoItem] = useState(false)
 
   const {
     register,
@@ -136,6 +141,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
       setExamSlots(form.exam_slots || [])
       setExistingBannerUrl(form.banner_url || null)
       setExistingBannerS3Key(form.banner_s3_key || null)
+      setZohoItemId(form.zoho_item_id || null)
     } else {
       reset({
         template_id: '',
@@ -150,12 +156,14 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
       setExamSlots([])
       setExistingBannerUrl(null)
       setExistingBannerS3Key(null)
+      setZohoItemId(null)
     }
     setBannerFile(null)
     setNewSlot('')
     setUploadProgress(null)
     setShowPreview(false)
     setUrlCopied(false)
+    setCreatingZohoItem(false)
   }, [open, mode, form, reset])
 
   // Auto-fill title & description when template changes (create only)
@@ -503,6 +511,63 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                   onCheckedChange={(v) => setValue('is_active', v)}
                 />
               </div>
+
+              {/* Zoho Books Item Status (edit mode, paid forms only) */}
+              {mode === 'edit' && !isExaminerTemplate && (watch('payment_amount') || 0) > 0 && (
+                <div className="rounded-lg border p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Zoho Books Item</span>
+                    </div>
+                    {zohoItemId ? (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 text-[10px]">
+                        Synced
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-[10px]">
+                        Not Created
+                      </Badge>
+                    )}
+                  </div>
+                  {zohoItemId ? (
+                    <p className="text-xs text-muted-foreground font-mono break-all">{zohoItemId}</p>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs text-muted-foreground">
+                        No Zoho Books item exists for this form. Invoices require an item.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 text-xs h-7"
+                        disabled={creatingZohoItem || submitting}
+                        onClick={async () => {
+                          if (!form?._id) return
+                          setCreatingZohoItem(true)
+                          try {
+                            const res = await formsService.createZohoItem(form._id)
+                            if (res.success && res.data?.zoho_item_id) {
+                              setZohoItemId(res.data.zoho_item_id)
+                              toast.success('Zoho Books item created')
+                            } else {
+                              toast.error(res.message || 'Failed to create item')
+                            }
+                          } catch (err: any) {
+                            toast.error(err.response?.data?.message || err.message || 'Failed to create item')
+                          } finally {
+                            setCreatingZohoItem(false)
+                          }
+                        }}
+                      >
+                        {creatingZohoItem && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+                        Create Item
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button
