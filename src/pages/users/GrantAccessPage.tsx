@@ -3,16 +3,112 @@ import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { Search, Package, BookOpen, Calendar, User as UserIcon, Phone, Mail, Hash } from 'lucide-react'
-import { usersService, User, GrantPackageData, GrantEbookData, GrantSessionData } from '@/services/users.service'
+import { Search, Package, BookOpen, Calendar, User as UserIcon, Phone, Mail, Hash, History } from 'lucide-react'
+import {
+  usersService, User, UserDetail, GrantPackageData, GrantEbookData, GrantSessionData,
+  UserPurchase, EbookPurchase, SessionPurchase,
+} from '@/services/users.service'
 import { GrantPackageModal } from '@/components/users/GrantPackageModal'
 import { GrantEbookModal } from '@/components/users/GrantEbookModal'
 import { GrantSessionModal } from '@/components/users/GrantSessionModal'
+
+// Unified history item for display
+interface GrantHistoryItem {
+  id: string
+  type: 'package' | 'ebook' | 'session'
+  name: string
+  amount: number
+  currency: string
+  reason: string | null
+  grantedAt: string
+  expiresAt: string | null
+  isActive: boolean
+  isRevoked: boolean
+  revokedAt: string | null
+  revokedReason: string | null
+}
+
+function formatDate(dateStr: string | null | undefined) {
+  if (!dateStr) return '—'
+  try {
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    })
+  } catch { return dateStr }
+}
+
+function buildHistory(detail: UserDetail): GrantHistoryItem[] {
+  const items: GrantHistoryItem[] = []
+
+  // Admin-granted packages
+  ;(detail.purchases || []).forEach((p: UserPurchase) => {
+    if (!p.is_admin_granted) return
+    const pkg = typeof p.package_id === 'object' ? p.package_id : null
+    items.push({
+      id: p._id,
+      type: 'package',
+      name: pkg?.name || (p.package_id as string),
+      amount: p.amount_paid,
+      currency: p.currency || 'INR',
+      reason: p.admin_grant_reason || null,
+      grantedAt: p.purchased_at,
+      expiresAt: p.expires_at || null,
+      isActive: p.is_active,
+      isRevoked: !!p.is_revoked,
+      revokedAt: p.revoked_at || null,
+      revokedReason: p.revoked_reason || null,
+    })
+  })
+
+  // Admin-granted ebooks
+  ;(detail.ebook_purchases || []).forEach((ep: EbookPurchase) => {
+    if (!ep.is_admin_granted) return
+    const book = typeof ep.book_id === 'object' ? ep.book_id : null
+    items.push({
+      id: ep._id,
+      type: 'ebook',
+      name: book?.title || (ep.book_id as string),
+      amount: ep.amount_paid,
+      currency: ep.currency || 'INR',
+      reason: ep.admin_grant_reason || null,
+      grantedAt: ep.purchased_at,
+      expiresAt: null,
+      isActive: ep.is_active,
+      isRevoked: !!ep.is_revoked,
+      revokedAt: ep.revoked_at || null,
+      revokedReason: ep.revoked_reason || null,
+    })
+  })
+
+  // Admin-granted sessions
+  ;(detail.session_purchases || []).forEach((sp: SessionPurchase) => {
+    if (!sp.is_admin_granted) return
+    const session = typeof sp.session_id === 'object' ? sp.session_id : null
+    items.push({
+      id: sp._id,
+      type: 'session',
+      name: session?.title || (sp.session_id as string),
+      amount: sp.amount_paid,
+      currency: sp.currency || 'INR',
+      reason: sp.admin_grant_reason || null,
+      grantedAt: sp.purchased_at,
+      expiresAt: null,
+      isActive: sp.is_active,
+      isRevoked: !!sp.is_revoked,
+      revokedAt: sp.revoked_at || null,
+      revokedReason: sp.revoked_reason || null,
+    })
+  })
+
+  // Sort by granted date descending
+  items.sort((a, b) => new Date(b.grantedAt).getTime() - new Date(a.grantedAt).getTime())
+  return items
+}
 
 export function GrantAccessPage() {
   const navigate = useNavigate()
@@ -24,6 +120,11 @@ export function GrantAccessPage() {
   const [searching, setSearching] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // Grant history
+  const [userDetail, setUserDetail] = useState<UserDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [grantHistory, setGrantHistory] = useState<GrantHistoryItem[]>([])
 
   // Grant modal state
   const [grantPackageOpen, setGrantPackageOpen] = useState(false)
@@ -46,10 +147,7 @@ export function GrantAccessPage() {
     }
     try {
       setSearching(true)
-      const response = await usersService.getAll({
-        search: debouncedQuery,
-        limit: 10,
-      })
+      const response = await usersService.getAll({ search: debouncedQuery, limit: 10 })
       if (response.success && response.data) {
         setSearchResults(response.data.entities || [])
       }
@@ -62,13 +160,37 @@ export function GrantAccessPage() {
 
   useEffect(() => { searchUsers() }, [searchUsers])
 
-  // Grant handlers
+  // Fetch user detail when selected
+  const fetchUserDetail = useCallback(async () => {
+    if (!selectedUser) {
+      setUserDetail(null)
+      setGrantHistory([])
+      return
+    }
+    try {
+      setLoadingDetail(true)
+      const response = await usersService.getById(selectedUser._id)
+      if (response.success && response.data) {
+        setUserDetail(response.data)
+        setGrantHistory(buildHistory(response.data))
+      }
+    } catch {
+      // Non-blocking — history just won't show
+    } finally {
+      setLoadingDetail(false)
+    }
+  }, [selectedUser])
+
+  useEffect(() => { fetchUserDetail() }, [fetchUserDetail])
+
+  // Grant handlers — refresh history after success
   const handleGrantPackage = async (data: GrantPackageData) => {
     if (!selectedUser) return
     try {
       const response = await usersService.grantPackageAccess(selectedUser._id, data)
       if (response.success) {
         toast.success(`Package access granted to ${selectedUser.name || selectedUser.phone_number}`)
+        fetchUserDetail()
         return
       }
       toast.error(response.message || 'Failed to grant package access')
@@ -84,6 +206,7 @@ export function GrantAccessPage() {
       const response = await usersService.grantEbookAccess(selectedUser._id, data)
       if (response.success) {
         toast.success(`Ebook access granted to ${selectedUser.name || selectedUser.phone_number}`)
+        fetchUserDetail()
         return
       }
       toast.error(response.message || 'Failed to grant ebook access')
@@ -99,6 +222,7 @@ export function GrantAccessPage() {
       const response = await usersService.grantSessionAccess(selectedUser._id, data)
       if (response.success) {
         toast.success(`Session access granted to ${selectedUser.name || selectedUser.phone_number}`)
+        fetchUserDetail()
         return
       }
       toast.error(response.message || 'Failed to grant session access')
@@ -109,6 +233,27 @@ export function GrantAccessPage() {
   }
 
   const userName = selectedUser?.name || selectedUser?.phone_number || 'User'
+
+  const typeBadge = (type: GrantHistoryItem['type']) => {
+    const colors = {
+      package: 'bg-blue-500/10 text-blue-700 border-blue-200',
+      ebook: 'bg-emerald-500/10 text-emerald-700 border-emerald-200',
+      session: 'bg-purple-500/10 text-purple-700 border-purple-200',
+    }
+    const labels = { package: 'Package', ebook: 'Ebook', session: 'Session' }
+    return <Badge variant="outline" className={`text-[10px] ${colors[type]}`}>{labels[type]}</Badge>
+  }
+
+  const statusBadge = (item: GrantHistoryItem) => {
+    if (item.isRevoked) return <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-600 border-red-200">Revoked</Badge>
+    if (!item.isActive) {
+      if (item.expiresAt && new Date(item.expiresAt) < new Date()) {
+        return <Badge variant="outline" className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">Expired</Badge>
+      }
+      return <Badge variant="outline" className="text-[10px] bg-gray-500/10 text-gray-600 border-gray-200">Inactive</Badge>
+    }
+    return <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-600 border-green-200">Active</Badge>
+  }
 
   return (
     <div className="space-y-6">
@@ -167,43 +312,28 @@ export function GrantAccessPage() {
                     setSearchResults([])
                     setSearchQuery(user.name || user.phone_number)
                   }}
-                  className={`w-full flex items-center gap-4 rounded-lg border p-3 text-left transition-colors hover:bg-accent ${
-                    selectedUser?._id === user._id ? 'border-primary bg-primary/5' : 'border-border'
-                  }`}
+                  className="w-full flex items-center gap-4 rounded-lg border p-3 text-left transition-colors hover:bg-accent border-border"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <UserIcon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">
-                      {user.name || 'Unnamed User'}
-                    </p>
+                    <p className="text-sm font-medium truncate">{user.name || 'Unnamed User'}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {user.phone_number && (
-                        <span className="flex items-center gap-1">
-                          <Phone className="h-3 w-3" />
-                          {user.phone_number}
-                        </span>
+                        <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{user.phone_number}</span>
                       )}
                       {user.email && (
-                        <span className="flex items-center gap-1 truncate">
-                          <Mail className="h-3 w-3" />
-                          {user.email}
-                        </span>
+                        <span className="flex items-center gap-1 truncate"><Mail className="h-3 w-3" />{user.email}</span>
                       )}
                       {user.student_id && (
-                        <span className="flex items-center gap-1">
-                          <Hash className="h-3 w-3" />
-                          {user.student_id}
-                        </span>
+                        <span className="flex items-center gap-1"><Hash className="h-3 w-3" />{user.student_id}</span>
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    <Badge variant={user.is_active ? 'default' : 'destructive'} className="text-[10px]">
-                      {user.is_active ? 'Active' : 'Blocked'}
-                    </Badge>
-                  </div>
+                  <Badge variant={user.is_active ? 'default' : 'destructive'} className="text-[10px] shrink-0">
+                    {user.is_active ? 'Active' : 'Blocked'}
+                  </Badge>
                 </button>
               ))}
             </div>
@@ -319,6 +449,78 @@ export function GrantAccessPage() {
                 </div>
               </TabsContent>
             </Tabs>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Grant History */}
+      {selectedUser && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Admin Grant History
+            </CardTitle>
+            <CardDescription>
+              All admin-granted access for <strong>{userName}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingDetail ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
+            ) : grantHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No admin grants found for this user.
+              </p>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Type</TableHead>
+                      <TableHead className="text-xs">Item</TableHead>
+                      <TableHead className="text-xs">Amount</TableHead>
+                      <TableHead className="text-xs">Reason</TableHead>
+                      <TableHead className="text-xs">Granted</TableHead>
+                      <TableHead className="text-xs">Expires</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {grantHistory.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{typeBadge(item.type)}</TableCell>
+                        <TableCell className="text-sm font-medium max-w-48 truncate">{item.name}</TableCell>
+                        <TableCell className="text-sm">
+                          {item.amount > 0 ? `${item.currency} ${item.amount}` : 'Free'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-40 truncate" title={item.reason || undefined}>
+                          {item.reason || '—'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {formatDate(item.grantedAt)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {item.expiresAt ? formatDate(item.expiresAt) : 'Never'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {statusBadge(item)}
+                            {item.isRevoked && item.revokedReason && (
+                              <span className="text-[10px] text-muted-foreground truncate max-w-24" title={item.revokedReason}>
+                                {item.revokedReason}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

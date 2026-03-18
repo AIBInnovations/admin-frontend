@@ -19,6 +19,8 @@ export interface UserPurchase {
   purchased_at: string
   expires_at: string
   is_active: boolean
+  is_admin_granted?: boolean
+  admin_grant_reason?: string | null
   is_revoked?: boolean
   revoked_reason?: string | null
   revoked_at?: string | null
@@ -111,6 +113,7 @@ export interface GrantEbookData {
   book_id: string
   create_invoice?: boolean
   invoice_amount?: number
+  is_inclusive_tax?: boolean
   reason?: string
   notes?: string
 }
@@ -119,6 +122,7 @@ export interface GrantSessionData {
   session_id: string
   create_invoice?: boolean
   invoice_amount?: number
+  is_inclusive_tax?: boolean
   reason?: string
   notes?: string
 }
@@ -140,6 +144,7 @@ export interface SessionPurchase {
   purchased_at: string
   is_active: boolean
   is_admin_granted?: boolean
+  admin_grant_reason?: string | null
   is_revoked?: boolean
   revoked_reason?: string | null
   revoked_at?: string | null
@@ -157,6 +162,7 @@ export interface EbookPurchase {
   purchased_at: string
   is_active: boolean
   is_admin_granted?: boolean
+  admin_grant_reason?: string | null
   is_revoked?: boolean
   revoked_reason?: string | null
   revoked_at?: string | null

@@ -31,9 +31,12 @@ const grantEbookSchema = z.object({
   book_id: z.string().min(1, 'Book is required'),
   create_invoice: z.boolean().optional(),
   invoice_amount: z.number().min(0).optional(),
+  is_inclusive_tax: z.boolean().optional(),
   reason: z.string().max(500).optional(),
   notes: z.string().max(1000).optional(),
 })
+
+const GST_RATE = 0.18
 
 type GrantEbookFormValues = z.infer<typeof grantEbookSchema>
 
@@ -71,6 +74,7 @@ export function GrantEbookModal({ open, onClose, onSubmit, userName }: GrantEboo
   const watchBookId = watch('book_id')
   const watchCreateInvoice = watch('create_invoice')
   const watchInvoiceAmount = watch('invoice_amount')
+  const watchInclusiveTax = watch('is_inclusive_tax')
 
   // Fetch ebook-type books
   useEffect(() => {
@@ -126,6 +130,7 @@ export function GrantEbookModal({ open, onClose, onSubmit, userName }: GrantEboo
     if (data.create_invoice && data.invoice_amount && data.invoice_amount > 0) {
       submitData.create_invoice = true
       submitData.invoice_amount = data.invoice_amount
+      submitData.is_inclusive_tax = data.is_inclusive_tax ?? false
     }
     await onSubmit(submitData)
     onClose()
@@ -199,36 +204,94 @@ export function GrantEbookModal({ open, onClose, onSubmit, userName }: GrantEboo
             </Label>
           </div>
 
-          {/* Invoice Amount (shown only when invoice toggle is ON) */}
+          {/* Invoice Amount + Tax Mode (shown only when invoice toggle is ON) */}
           {watchCreateInvoice && (
-            <div className="space-y-2">
-              <Label htmlFor="invoice_amount">
-                Invoice Amount (INR) <span className="text-red-500">*</span>
-              </Label>
-              <Controller
-                name="invoice_amount"
-                control={control}
-                render={({ field }) => (
-                  <Input
-                    id="invoice_amount"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    disabled={isSubmitting}
-                    {...field}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value)
-                      field.onChange(Number.isNaN(v) ? 0 : v)
-                    }}
-                  />
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="invoice_amount">
+                  Amount (INR) <span className="text-red-500">*</span>
+                </Label>
+                <Controller
+                  name="invoice_amount"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="invoice_amount"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      disabled={isSubmitting}
+                      {...field}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value)
+                        field.onChange(Number.isNaN(v) ? 0 : v)
+                      }}
+                    />
+                  )}
+                />
+                {errors.invoice_amount && (
+                  <p className="text-sm text-red-500">{errors.invoice_amount.message}</p>
                 )}
-              />
-              {errors.invoice_amount && (
-                <p className="text-sm text-red-500">{errors.invoice_amount.message}</p>
+              </div>
+
+              {/* Tax Mode */}
+              <div className="flex items-center space-x-2">
+                <Controller
+                  name="is_inclusive_tax"
+                  control={control}
+                  render={({ field }) => (
+                    <Checkbox
+                      id="is_inclusive_tax"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  )}
+                />
+                <Label htmlFor="is_inclusive_tax" className="text-sm font-normal cursor-pointer">
+                  Amount is inclusive of GST (18%)
+                </Label>
+              </div>
+
+              {/* Price Breakdown Preview */}
+              {watchInvoiceAmount && watchInvoiceAmount > 0 && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+                  {watchInclusiveTax ? (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Base amount</span>
+                        <span>₹{(watchInvoiceAmount / (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>GST (18%)</span>
+                        <span>₹{(watchInvoiceAmount - watchInvoiceAmount / (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium border-t pt-1">
+                        <span>Invoice Total</span>
+                        <span>₹{watchInvoiceAmount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Base amount</span>
+                        <span>₹{watchInvoiceAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>GST (18%)</span>
+                        <span>₹{(watchInvoiceAmount * GST_RATE).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium border-t pt-1">
+                        <span>Invoice Total</span>
+                        <span>₹{(watchInvoiceAmount * (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Final amount calculated by Zoho based on customer's state (CGST+SGST or IGST).
+                  </p>
+                </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                Enter the amount collected. Default: book price ₹{selectedBook?.is_on_sale && selectedBook?.sale_price ? selectedBook.sale_price : selectedBook?.price ?? 0}
-              </p>
             </div>
           )}
 
@@ -267,7 +330,8 @@ export function GrantEbookModal({ open, onClose, onSubmit, userName }: GrantEboo
               <p className="text-muted-foreground">
                 User will get perpetual access to <strong>{selectedBook.title}</strong>
                 {watchCreateInvoice && watchInvoiceAmount && watchInvoiceAmount > 0
-                  ? <> for <strong>₹{watchInvoiceAmount}</strong> (invoice will be created).</>
+                  ? <> — invoice of <strong>₹{watchInclusiveTax ? watchInvoiceAmount.toFixed(2) : (watchInvoiceAmount * (1 + GST_RATE)).toFixed(2)}</strong>{' '}
+                      ({watchInclusiveTax ? 'tax inclusive' : 'tax exclusive'}) will be created.</>
                   : <> at no cost.</>
                 }
               </p>
