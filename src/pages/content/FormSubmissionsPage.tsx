@@ -4,13 +4,14 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, ColumnDef } from '@/components/common/DataTable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
-import { ArrowLeft, FileText, Eye } from 'lucide-react'
+import { ArrowLeft, FileText, Eye, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  formsService, Form, FormSubmission, FormTemplate, FormTemplateField,
+  formsService, Form, FormSubmission, FormTemplateField, PaymentCounts,
 } from '@/services/forms.service'
 
 export function FormSubmissionsPage() {
@@ -25,6 +26,10 @@ export function FormSubmissionsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [selectedSubmission, setSelectedSubmission] = useState<FormSubmission | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [paymentCounts, setPaymentCounts] = useState<PaymentCounts | null>(null)
+  const [activeTab, setActiveTab] = useState<'paid' | 'unpaid'>('paid')
+
+  const isPaidForm = !!(form?.payment_amount && form.payment_amount > 0)
 
   // Get template fields from form
   const templateFields: FormTemplateField[] =
@@ -33,6 +38,8 @@ export function FormSubmissionsPage() {
       : []
 
   // Fetch submissions
+  // On initial load (form unknown), always send payment_status='paid'.
+  // Backend ignores this param for free forms, and for paid forms it filters correctly.
   const fetchSubmissions = useCallback(async () => {
     if (!formId) return
     try {
@@ -41,6 +48,7 @@ export function FormSubmissionsPage() {
         form_id: formId,
         page: currentPage,
         limit: 20,
+        payment_status: activeTab,
       })
 
       if (response.success && response.data) {
@@ -48,6 +56,9 @@ export function FormSubmissionsPage() {
         setSubmissions(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+        if (response.data.payment_counts) {
+          setPaymentCounts(response.data.payment_counts)
+        }
       } else {
         toast.error(response.message || 'Failed to load submissions')
       }
@@ -56,9 +67,15 @@ export function FormSubmissionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [formId, currentPage])
+  }, [formId, currentPage, activeTab])
 
   useEffect(() => { fetchSubmissions() }, [fetchSubmissions])
+
+  // When switching tabs, reset to page 1
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as 'paid' | 'unpaid')
+    setCurrentPage(1)
+  }
 
   // Build dynamic columns
   const columns: ColumnDef<FormSubmission>[] = [
@@ -106,23 +123,28 @@ export function FormSubmissionsPage() {
         </span>
       ),
     },
-    // Payment status (only show if form has payment_amount)
-    ...(form?.payment_amount ? [{
+    // Payment status badge — show on unpaid tab to distinguish none/pending/expired/canceled
+    ...(isPaidForm && activeTab === 'unpaid' ? [{
       id: 'payment_status',
-      header: 'Payment',
+      header: 'Status',
       width: 'w-28' as const,
       cell: (sub: FormSubmission) => {
         const status = sub.payment_status || 'none'
         const styles: Record<string, string> = {
           none: 'bg-gray-500/10 text-gray-500 border-gray-200',
           pending: 'bg-amber-500/10 text-amber-600 border-amber-200',
-          paid: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
           expired: 'bg-red-500/10 text-red-600 border-red-200',
           canceled: 'bg-red-500/10 text-red-600 border-red-200',
         }
+        const labels: Record<string, string> = {
+          none: 'Not Paid',
+          pending: 'Pending',
+          expired: 'Expired',
+          canceled: 'Canceled',
+        }
         return (
           <Badge className={`text-[10px] ${styles[status] || styles.none}`}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+            {labels[status] || status}
           </Badge>
         )
       },
@@ -145,11 +167,18 @@ export function FormSubmissionsPage() {
     },
   ]
 
+  // Description text
+  const descriptionText = isPaidForm
+    ? activeTab === 'paid'
+      ? `${paymentCounts?.paid ?? totalCount} paid submission${(paymentCounts?.paid ?? totalCount) !== 1 ? 's' : ''}`
+      : `${paymentCounts?.unpaid ?? totalCount} unpaid/failed submission${(paymentCounts?.unpaid ?? totalCount) !== 1 ? 's' : ''}`
+    : `${totalCount} submission${totalCount !== 1 ? 's' : ''}`
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={form?.title ? `Submissions: ${form.title}` : 'Form Submissions'}
-        description={`${totalCount} submission${totalCount !== 1 ? 's' : ''}`}
+        description={descriptionText}
         breadcrumbs={[
           { label: 'Dashboard', href: '/' },
           { label: 'Content' },
@@ -163,6 +192,22 @@ export function FormSubmissionsPage() {
         }
       />
 
+      {/* Tabs for paid forms */}
+      {isPaidForm && (
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList>
+            <TabsTrigger value="paid" className="gap-1.5">
+              <CheckCircle className="h-3.5 w-3.5" />
+              Paid{paymentCounts ? ` (${paymentCounts.paid})` : ''}
+            </TabsTrigger>
+            <TabsTrigger value="unpaid" className="gap-1.5">
+              <XCircle className="h-3.5 w-3.5" />
+              Unpaid / Failed{paymentCounts ? ` (${paymentCounts.unpaid})` : ''}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
       <DataTable
         data={submissions}
         columns={columns}
@@ -175,8 +220,12 @@ export function FormSubmissionsPage() {
         }}
         emptyState={{
           icon: FileText,
-          title: 'No submissions yet',
-          description: 'Submissions will appear here when users fill out this form.',
+          title: isPaidForm && activeTab === 'unpaid'
+            ? 'No unpaid submissions'
+            : 'No submissions yet',
+          description: isPaidForm && activeTab === 'unpaid'
+            ? 'No submissions with pending, failed, or canceled payments.'
+            : 'Submissions will appear here when users fill out this form.',
         }}
         getRowKey={(sub) => sub._id}
       />
