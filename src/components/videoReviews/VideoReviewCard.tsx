@@ -9,7 +9,8 @@ interface VideoReviewCardProps {
   onClick: () => void
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string | null) {
+  if (!name) return '?'
   return name
     .split(' ')
     .slice(0, 2)
