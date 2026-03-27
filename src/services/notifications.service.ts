@@ -86,10 +86,16 @@ export interface EmailAttachment {
   filename: string
 }
 
+export interface FailedEmail {
+  email: string
+  error: string
+}
+
 export interface SendEmailResult {
   sent: number
   failed: number
   total: number
+  failedEmails?: FailedEmail[]
 }
 
 class NotificationsService {

@@ -275,13 +275,17 @@ export function SendEmailTab() {
     if (!canSend()) return
     setSending(true)
 
+    console.log('[SendEmail] Starting send. Target:', target, 'Subject:', emailSubject)
+
     try {
       // Upload all pending attachments
       const uploadedAttachments: EmailAttachment[] = []
       for (let i = 0; i < attachments.length; i++) {
         const item = attachments[i]
+        console.log(`[SendEmail] Uploading attachment ${i + 1}/${attachments.length}: ${item.filename}`)
         const url = item.url ?? (await uploadAttachment(i))
         if (!url) {
+          console.error(`[SendEmail] Attachment upload failed for: ${item.filename}`)
           setSending(false)
           return // upload failure already toasted
         }
@@ -298,31 +302,66 @@ export function SendEmailTab() {
 
       let response
       if (target === 'all') {
+        console.log('[SendEmail] Sending to ALL users')
         response = await notificationsService.sendEmailToAll(payload)
       } else if (target === 'subject') {
         if (subjectScope === 'package') {
+          console.log('[SendEmail] Sending to package users, package_id:', packageId)
           response = await notificationsService.sendEmailToPackage({ ...payload, package_id: packageId })
         } else if (subjectScope === 'series') {
+          console.log('[SendEmail] Sending to series users, series_id:', seriesId)
           response = await notificationsService.sendEmailToSeries({ ...payload, series_id: seriesId })
         } else {
+          console.log('[SendEmail] Sending to subject users, subject_id:', subjectId)
           response = await notificationsService.sendEmailToSubject({ ...payload, subject_id: subjectId })
         }
       } else {
+        console.log('[SendEmail] Sending to', selectedUsers.length, 'specific users')
         response = await notificationsService.sendEmailToUsers({
           ...payload,
           user_ids: selectedUsers.map((u) => u._id),
         })
       }
 
+      console.log('[SendEmail] Response:', response)
+
       if (response.success && response.data) {
-        const { sent, failed, total } = response.data
-        toast.success(`Email sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`)
-        resetForm()
+        const { sent, failed, total, failedEmails } = response.data
+
+        if (failed === 0) {
+          toast.success(`All ${sent} emails delivered successfully!`)
+        } else if (sent === 0) {
+          const reason = failedEmails?.[0]?.error || 'Unknown error'
+          toast.error(`All ${total} emails failed. Reason: ${reason}`, { duration: 10000 })
+          console.error('[SendEmail] All failed. Errors:', failedEmails)
+        } else {
+          toast.warning(
+            `${sent}/${total} delivered, ${failed} failed.${failedEmails?.[0]?.error ? ` Common error: ${failedEmails[0].error}` : ''}`,
+            { duration: 10000 }
+          )
+          console.warn('[SendEmail] Partial failure. Failed emails:', failedEmails)
+        }
+
+        if (sent > 0) resetForm()
       } else {
         toast.error(response.message || 'Failed to send email')
+        console.error('[SendEmail] Unsuccessful response:', response)
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send email')
+      const msg = error.message || 'Failed to send email'
+      console.error('[SendEmail] Error:', msg, error)
+
+      if (msg.includes('timeout') || msg.includes('ECONNABORTED')) {
+        toast.error('Request timed out — emails may still be sending on the server. Check logs.', { duration: 10000 })
+      } else if (msg.includes('Network Error') || msg.includes('No response from server')) {
+        toast.error('Network error — could not reach the server. Check your connection.', { duration: 8000 })
+      } else if (msg.includes('403') || msg.includes('Insufficient permissions')) {
+        toast.error('Permission denied — you do not have access to send emails.', { duration: 8000 })
+      } else if (msg.includes('401')) {
+        toast.error('Session expired — please log in again.', { duration: 8000 })
+      } else {
+        toast.error(msg, { duration: 8000 })
+      }
     } finally {
       setSending(false)
     }
