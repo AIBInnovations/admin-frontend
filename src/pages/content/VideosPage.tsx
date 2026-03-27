@@ -10,6 +10,7 @@ import { Plus, Video as VideoIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { videosService, Video, VideoFormData } from '@/services/videos.service'
 import { modulesService, Module } from '@/services/modules.service'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { useVideosColumns } from './VideosPage.columns'
 
 export function VideosPage() {
@@ -22,6 +23,7 @@ export function VideosPage() {
   const [moduleFilter, setModuleFilter] = useState(searchParams.get('module') || 'all')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [accessFilter, setAccessFilter] = useState(searchParams.get('access') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -34,6 +36,10 @@ export function VideosPage() {
   const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
+  const [publishModal, setPublishModal] = useState<{
+    entityId: string;
+    action: 'publish' | 'unpublish';
+  } | null>(null)
   const [archiveBlocked, setArchiveBlocked] = useState(false)
   const [archiveBlockReason, setArchiveBlockReason] = useState('')
   const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
@@ -55,6 +61,7 @@ export function VideosPage() {
         module_id: moduleFilter !== 'all' ? moduleFilter : undefined,
         processing_status: statusFilter !== 'all' ? statusFilter : undefined,
         is_free: accessFilter === 'all' ? null : accessFilter === 'free',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -71,7 +78,7 @@ export function VideosPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, moduleFilter, statusFilter, accessFilter])
+  }, [currentPage, moduleFilter, statusFilter, accessFilter, publishFilter])
 
   useEffect(() => { fetchVideos() }, [fetchVideos])
 
@@ -81,14 +88,15 @@ export function VideosPage() {
     if (moduleFilter !== 'all') params.module = moduleFilter
     if (statusFilter !== 'all') params.status = statusFilter
     if (accessFilter !== 'all') params.access = accessFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [moduleFilter, statusFilter, accessFilter, currentPage, setSearchParams])
+  }, [moduleFilter, statusFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [moduleFilter, statusFilter, accessFilter])
+  }, [moduleFilter, statusFilter, accessFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -102,6 +110,10 @@ export function VideosPage() {
     setSelectedVideo(video)
     setFormModalOpen(true)
   }
+
+  const handlePublishAction = useCallback((video: Video, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: video._id, action });
+  }, []);
 
   const handleArchiveClick = async (video: Video) => {
     setSelectedVideo(video)
@@ -216,6 +228,18 @@ export function VideosPage() {
       placeholder: 'Filter by access',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   // Client-side search filter
@@ -228,9 +252,10 @@ export function VideosPage() {
   const columns = useVideosColumns({
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
+    onPublishAction: handlePublishAction,
   })
 
-  const hasFilters = search || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all'
+  const hasFilters = search || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -250,11 +275,12 @@ export function VideosPage() {
         onChange={setSearch}
         placeholder="Search videos..."
         filters={filters}
-        activeFilters={{ module: moduleFilter, status: statusFilter, access: accessFilter }}
+        activeFilters={{ module: moduleFilter, status: statusFilter, access: accessFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.module !== undefined) setModuleFilter(f.module)
           if (f.status !== undefined) setStatusFilter(f.status)
           if (f.access !== undefined) setAccessFilter(f.access)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -299,6 +325,20 @@ export function VideosPage() {
         blocked={archiveBlocked}
         blockReason={archiveBlockReason}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null); }}
+          entityType="video"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null);
+            fetchVideos();
+          }}
+        />
+      )}
     </div>
   )
 }

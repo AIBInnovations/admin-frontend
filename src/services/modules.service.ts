@@ -1,6 +1,6 @@
 import { apiService, ApiResponse } from './api.service'
 import { BaseCrudService } from './base.service'
-import type { BaseListParams, PopulatedRef } from '@/types/api.types'
+import type { BaseListParams, PopulatedRef, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface Module {
@@ -12,6 +12,7 @@ export interface Module {
   lesson_count: number
   estimated_duration_minutes: number
   is_active: boolean
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -24,11 +25,13 @@ export interface ModuleFormData {
   lesson_count?: number
   estimated_duration_minutes?: number
   is_active?: boolean
+  publish_status?: PublishStatus
 }
 
 export interface ModulesListParams extends BaseListParams {
   series_id?: string
   is_active?: boolean | null
+  publish_status?: string | null
 }
 
 class ModulesService extends BaseCrudService<Module, ModuleFormData, ModulesListParams> {

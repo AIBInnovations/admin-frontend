@@ -6,6 +6,9 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover'
 import {
@@ -36,6 +39,7 @@ const videoSchema = z.object({
   faculty_id: z.string().optional().or(z.literal('')),
   display_order: z.coerce.number().int().min(0, 'Must be 0 or greater').default(0),
   is_free: z.boolean(),
+  publish_status: z.enum(['draft', 'published']),
   subtitle_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   transcript_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
 })
@@ -73,7 +77,8 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
     resolver: zodResolver(videoSchema),
     defaultValues: {
       title: '', description: '', module_id: '', faculty_id: '',
-      display_order: 0, is_free: false, subtitle_url: '', transcript_url: '',
+      display_order: 0, is_free: false, publish_status: 'draft' as const,
+      subtitle_url: '', transcript_url: '',
     },
   })
 
@@ -109,13 +114,15 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
           faculty_id: video.faculty_id && typeof video.faculty_id === 'object' ? video.faculty_id._id : '',
           display_order: video.display_order ?? 0,
           is_free: video.is_free,
+          publish_status: video.publish_status || 'draft',
           subtitle_url: video.subtitle_url || '',
           transcript_url: video.transcript_url || '',
         })
       } else {
         reset({
           title: '', description: '', module_id: defaultModuleId || '', faculty_id: '',
-          display_order: 0, is_free: false, subtitle_url: '', transcript_url: '',
+          display_order: 0, is_free: false, publish_status: 'draft' as const,
+          subtitle_url: '', transcript_url: '',
         })
       }
     }
@@ -141,6 +148,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         faculty_id: data.faculty_id || undefined,
         display_order: data.display_order,
         is_free: data.is_free,
+        publish_status: data.publish_status,
         subtitle_url: data.subtitle_url || undefined,
         transcript_url: data.transcript_url || undefined,
         tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
@@ -269,7 +277,15 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                                 }}
                               >
                                 <Check className={cn('mr-2 h-4 w-4', field.value === m._id ? 'opacity-100' : 'opacity-0')} />
-                                {m.name}{typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}
+                                <span className="flex items-center gap-2">
+                                  {m.name}{typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}
+                                  {m.publish_status === 'draft' && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                  )}
+                                  {m.is_active === false && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                  )}
+                                </span>
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -279,6 +295,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                   </Popover>
                 )}
               />
+              <p className="text-xs text-muted-foreground">
+                All items shown including drafts and inactive
+              </p>
               {errors.module_id && <p className="text-sm text-red-500">{errors.module_id.message}</p>}
             </div>
             <div className="space-y-2">
@@ -363,6 +382,26 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 />
               </div>
             </div>
+          </div>
+
+          {/* Publish Status */}
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           {/* Subtitle + Transcript URLs */}

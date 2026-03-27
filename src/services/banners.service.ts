@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
 export type BannerType = 'generic' | 'theory_package' | 'practical_package' | 'ebook'
@@ -23,6 +23,7 @@ export interface Banner {
   visible_to_packages: string[]
   display_order: number
   is_active: boolean
+  publish_status: PublishStatus
   start_date: string
   end_date: string | null
   createdAt: string
@@ -44,12 +45,14 @@ export interface BannerFormData {
   visible_to_packages?: string[]
   display_order?: number
   is_active?: boolean
+  publish_status?: PublishStatus
   start_date: string
   end_date?: string
 }
 
 export interface BannersListParams extends BaseListParams {
   is_active?: boolean | null
+  publish_status?: string | null
 }
 
 class BannersService {

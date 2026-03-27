@@ -9,6 +9,7 @@ import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { modulesService, Module, ModuleFormData } from '@/services/modules.service'
 import { seriesService, Series } from '@/services/series.service'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { useModulesColumns } from './ModulesPage.columns'
 
 export function ModulesPage() {
@@ -20,6 +21,7 @@ export function ModulesPage() {
   const [search, setSearch] = useState('')
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -31,6 +33,10 @@ export function ModulesPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedModule, setSelectedModule] = useState<Module | null>(null)
+  const [publishModal, setPublishModal] = useState<{
+    entityId: string;
+    action: 'publish' | 'unpublish';
+  } | null>(null)
 
   // Fetch series for filter dropdown
   useEffect(() => {
@@ -48,6 +54,7 @@ export function ModulesPage() {
         limit: 20,
         series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -64,7 +71,7 @@ export function ModulesPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, seriesFilter, activeFilter])
+  }, [currentPage, seriesFilter, activeFilter, publishFilter])
 
   useEffect(() => { fetchModules() }, [fetchModules])
 
@@ -73,14 +80,15 @@ export function ModulesPage() {
     const params: Record<string, string> = {}
     if (seriesFilter !== 'all') params.series = seriesFilter
     if (activeFilter !== 'all') params.status = activeFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [seriesFilter, activeFilter, currentPage, setSearchParams])
+  }, [seriesFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1)
-  }, [seriesFilter, activeFilter])
+  }, [seriesFilter, activeFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -121,6 +129,10 @@ export function ModulesPage() {
       throw error
     }
   }
+
+  const handlePublishAction = useCallback((mod: Module, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: mod._id, action });
+  }, []);
 
   const handleToggleActive = async (mod: Module) => {
     try {
@@ -176,12 +188,25 @@ export function ModulesPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useModulesColumns({
     onEdit: handleEdit,
     onToggleActive: handleToggleActive,
     onRecalculate: handleRecalculate,
+    onPublishAction: handlePublishAction,
   })
 
   // Client-side filtering
@@ -207,10 +232,11 @@ export function ModulesPage() {
         onChange={setSearch}
         placeholder="Search modules..."
         filters={filters}
-        activeFilters={{ series: seriesFilter, status: activeFilter }}
+        activeFilters={{ series: seriesFilter, status: activeFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.series !== undefined) setSeriesFilter(f.series)
           if (f.status !== undefined) setActiveFilter(f.status)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -226,13 +252,13 @@ export function ModulesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: seriesFilter !== 'all' || activeFilter !== 'all' || search
+          title: seriesFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all' || search
             ? 'No modules found matching your filters'
             : 'No modules yet',
-          description: seriesFilter === 'all' && activeFilter === 'all' && !search
+          description: seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' && !search
             ? 'Get started by creating your first module'
             : undefined,
-          action: seriesFilter === 'all' && activeFilter === 'all' && !search ? (
+          action: seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' && !search ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first module
             </Button>
@@ -248,6 +274,20 @@ export function ModulesPage() {
         module={selectedModule}
         mode={modalMode}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null); }}
+          entityType="module"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null);
+            fetchModules();
+          }}
+        />
+      )}
 
     </div>
   )

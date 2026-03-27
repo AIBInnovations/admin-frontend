@@ -9,6 +9,7 @@ import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { seriesService, Series, SeriesFormData } from '@/services/series.service'
 import { packagesService, Package } from '@/services/packages.service'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { useSeriesColumns } from './SeriesPage.columns'
 
 export function SeriesPage() {
@@ -20,6 +21,7 @@ export function SeriesPage() {
   const [search, setSearch] = useState('')
   const [packageFilter, setPackageFilter] = useState(searchParams.get('package') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -31,6 +33,10 @@ export function SeriesPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null)
+  const [publishModal, setPublishModal] = useState<{
+    entityId: string;
+    action: 'publish' | 'unpublish';
+  } | null>(null)
 
   // Fetch packages for filter dropdown
   useEffect(() => {
@@ -48,6 +54,7 @@ export function SeriesPage() {
         limit: 20,
         package_id: packageFilter !== 'all' ? packageFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -64,7 +71,7 @@ export function SeriesPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, packageFilter, activeFilter])
+  }, [currentPage, packageFilter, activeFilter, publishFilter])
 
   useEffect(() => { fetchSeries() }, [fetchSeries])
 
@@ -73,14 +80,15 @@ export function SeriesPage() {
     const params: Record<string, string> = {}
     if (packageFilter !== 'all') params.package = packageFilter
     if (activeFilter !== 'all') params.status = activeFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [packageFilter, activeFilter, currentPage, setSearchParams])
+  }, [packageFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1)
-  }, [packageFilter, activeFilter])
+  }, [packageFilter, activeFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -122,6 +130,10 @@ export function SeriesPage() {
     }
   }
 
+  const handlePublishAction = useCallback((series: Series, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: series._id, action });
+  }, []);
+
   const handleToggleActive = async (series: Series) => {
     try {
       const response = await seriesService.toggleActive(series._id, !series.is_active)
@@ -162,11 +174,24 @@ export function SeriesPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useSeriesColumns({
     onEdit: handleEdit,
     onToggleActive: handleToggleActive,
+    onPublishAction: handlePublishAction,
   })
 
   // Client-side filtering
@@ -190,10 +215,11 @@ export function SeriesPage() {
         onChange={setSearch}
         placeholder="Search series..."
         filters={filters}
-        activeFilters={{ package: packageFilter, status: activeFilter }}
+        activeFilters={{ package: packageFilter, status: activeFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.package !== undefined) setPackageFilter(f.package)
           if (f.status !== undefined) setActiveFilter(f.status)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -209,13 +235,13 @@ export function SeriesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: search || packageFilter !== 'all' || activeFilter !== 'all'
+          title: search || packageFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all'
             ? 'No series found matching your filters'
             : 'No series yet',
-          description: search === '' && packageFilter === 'all' && activeFilter === 'all'
+          description: search === '' && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first series'
             : undefined,
-          action: search === '' && packageFilter === 'all' && activeFilter === 'all' ? (
+          action: search === '' && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first series
             </Button>
@@ -231,6 +257,20 @@ export function SeriesPage() {
         series={selectedSeries}
         mode={modalMode}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null); }}
+          entityType="series"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null);
+            fetchSeries();
+          }}
+        />
+      )}
 
     </div>
   )

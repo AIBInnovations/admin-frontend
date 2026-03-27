@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface Document {
@@ -19,6 +19,7 @@ export interface Document {
   is_free: boolean
   display_order: number
   download_count: number
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -32,12 +33,14 @@ export interface DocumentFormData {
   display_order?: number
   thumbnail_url?: string
   thumbnail_s3_key?: string
+  publish_status?: PublishStatus
 }
 
 export interface DocumentsListParams extends BaseListParams {
   series_id?: string
   file_format?: string
   is_free?: boolean | null
+  publish_status?: string | null
 }
 
 class DocumentsService {

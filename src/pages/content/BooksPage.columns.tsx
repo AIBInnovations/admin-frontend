@@ -7,14 +7,16 @@ import {
 import { ColumnDef } from '@/components/common/DataTable'
 import { Book } from '@/services/books.service'
 import type { PopulatedRef } from '@/types/api.types'
-import { MoreVertical, Pencil, BookOpen, Package } from 'lucide-react'
+import { MoreVertical, Pencil, BookOpen, Package, Globe, GlobeLock } from 'lucide-react'
 
 interface BooksColumnsProps {
   onEdit: (book: Book) => void
+  onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
 }
 
 export function useBooksColumns({
   onEdit,
+  onPublishAction,
 }: BooksColumnsProps): ColumnDef<Book>[] {
   return [
     {
@@ -111,6 +113,20 @@ export function useBooksColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (book) => (
+        <Badge className={`text-[10px] ${
+          book.publish_status === 'published'
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-amber-500/10 text-amber-600 border-amber-200'
+        }`}>
+          {book.publish_status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
       id: 'actions',
       header: '',
       width: 'w-10',
@@ -125,6 +141,15 @@ export function useBooksColumns({
             <DropdownMenuItem onClick={() => onEdit(book)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
+            {book.publish_status === 'published' ? (
+              <DropdownMenuItem onClick={() => onPublishAction(book._id, 'unpublish')}>
+                <GlobeLock className="mr-2 h-4 w-4" />Unpublish
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => onPublishAction(book._id, 'publish')}>
+                <Globe className="mr-2 h-4 w-4" />Publish
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

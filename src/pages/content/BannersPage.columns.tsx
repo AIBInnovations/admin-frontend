@@ -11,11 +11,13 @@ import { MoreVertical, Pencil, Archive, Image, ExternalLink, BookOpen, FlaskConi
 interface BannersColumnsProps {
   onEdit: (banner: Banner) => void
   onArchive: (banner: Banner) => void
+  onPublishAction: (banner: Banner, action: 'publish' | 'unpublish') => void
 }
 
 export function useBannersColumns({
   onEdit,
   onArchive,
+  onPublishAction,
 }: BannersColumnsProps): ColumnDef<Banner>[] {
   return [
     {
@@ -146,6 +148,20 @@ export function useBannersColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (banner) => (
+        <Badge className={`text-[10px] ${
+          banner.publish_status === 'published'
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-amber-500/10 text-amber-600 border-amber-200'
+        }`}>
+          {banner.publish_status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
       id: 'actions',
       header: '',
       width: 'w-10',
@@ -159,6 +175,11 @@ export function useBannersColumns({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit(banner)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onPublishAction(banner, banner.publish_status === 'draft' ? 'publish' : 'unpublish')}
+            >
+              {banner.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onArchive(banner)} className="text-amber-600">

@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusToggle } from '@/components/common/StatusToggle'
+import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Series } from '@/services/series.service'
 import { GripVertical, MoreVertical, Pencil } from 'lucide-react'
@@ -14,11 +15,13 @@ import { GripVertical, MoreVertical, Pencil } from 'lucide-react'
 interface SeriesColumnsProps {
   onEdit: (series: Series) => void
   onToggleActive: (series: Series) => void
+  onPublishAction: (series: Series, action: 'publish' | 'unpublish') => void
 }
 
 export function useSeriesColumns({
   onEdit,
   onToggleActive,
+  onPublishAction,
 }: SeriesColumnsProps): ColumnDef<Series>[] {
   return [
     {
@@ -57,6 +60,31 @@ export function useSeriesColumns({
           {typeof series.package_id === 'object' ? series.package_id.name : '—'}
         </Badge>
       ),
+    },
+    {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-28',
+      cell: (series) => {
+        const pkg = typeof series.package_id === 'object' ? series.package_id : null
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant={series.publish_status === 'published' ? 'default' : 'secondary'}
+              className={series.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+            >
+              {series.publish_status === 'draft' ? 'Draft' : 'Published'}
+            </Badge>
+            <PublishStatusWarning
+              publishStatus={series.publish_status}
+              parentPublishStatus={pkg?.publish_status}
+              parentIsActive={pkg?.is_active}
+              parentType="package"
+              parentName={pkg?.name}
+            />
+          </div>
+        )
+      },
     },
     {
       id: 'status',
@@ -99,6 +127,14 @@ export function useSeriesColumns({
             <DropdownMenuItem onClick={() => onEdit(series)}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublishAction(series, series.publish_status === 'draft' ? 'publish' : 'unpublish');
+              }}
+            >
+              {series.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

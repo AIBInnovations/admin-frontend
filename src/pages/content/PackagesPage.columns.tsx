@@ -21,12 +21,14 @@ interface PackagesColumnsProps {
   onNavigate: (pkg: Package) => void
   onEdit: (pkg: Package) => void
   onToggleActive: (pkg: Package) => void
+  onPublishAction: (pkg: Package, action: 'publish' | 'unpublish') => void
 }
 
 export function usePackagesColumns({
   onNavigate,
   onEdit,
   onToggleActive,
+  onPublishAction,
 }: PackagesColumnsProps): ColumnDef<Package>[] {
   return [
     {
@@ -120,6 +122,19 @@ export function usePackagesColumns({
       },
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-28',
+      cell: (pkg) => (
+        <Badge
+          variant={pkg.publish_status === 'published' ? 'default' : 'secondary'}
+          className={pkg.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+        >
+          {pkg.publish_status === 'draft' ? 'Draft' : 'Published'}
+        </Badge>
+      ),
+    },
+    {
       id: 'status',
       header: 'Status',
       width: 'w-32',
@@ -167,6 +182,14 @@ export function usePackagesColumns({
               <DropdownMenuItem onClick={() => onEdit(pkg)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPublishAction(pkg, pkg.publish_status === 'draft' ? 'publish' : 'unpublish');
+                }}
+              >
+                {pkg.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

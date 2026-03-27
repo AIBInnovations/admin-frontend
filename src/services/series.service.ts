@@ -1,6 +1,6 @@
 import { BaseCrudService } from './base.service'
 import { apiService, ApiResponse } from './api.service'
-import type { BaseListParams, PopulatedRef } from '@/types/api.types'
+import type { BaseListParams, PopulatedRef, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface Series {
@@ -12,6 +12,7 @@ export interface Series {
   thumbnail_s3_key: string | null
   display_order: number
   is_active: boolean
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -24,11 +25,13 @@ export interface SeriesFormData {
   thumbnail_s3_key?: string | null
   display_order?: number
   is_active?: boolean
+  publish_status?: PublishStatus
 }
 
 export interface SeriesListParams extends BaseListParams {
   package_id?: string
   is_active?: boolean | null
+  publish_status?: string | null
 }
 
 class SeriesService extends BaseCrudService<Series, SeriesFormData, SeriesListParams> {

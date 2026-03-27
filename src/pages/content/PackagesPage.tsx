@@ -10,6 +10,7 @@ import { Plus, Package as PackageIcon, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { packagesService, Package, PackageFormData } from '@/services/packages.service'
 import { subjectsService, Subject } from '@/services/subjects.service'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { usePackagesColumns } from './PackagesPage.columns'
 
 export function PackagesPage() {
@@ -23,6 +24,7 @@ export function PackagesPage() {
   const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [saleFilter, setSaleFilter] = useState(searchParams.get('sale') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -34,6 +36,10 @@ export function PackagesPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null)
+  const [publishModal, setPublishModal] = useState<{
+    entityId: string;
+    action: 'publish' | 'unpublish';
+  } | null>(null)
 
   // Fetch subjects for filter dropdown
   useEffect(() => {
@@ -52,6 +58,7 @@ export function PackagesPage() {
         subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         is_on_sale: saleFilter === 'all' ? null : saleFilter === 'on_sale',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -68,7 +75,7 @@ export function PackagesPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, subjectFilter, activeFilter, saleFilter])
+  }, [currentPage, subjectFilter, activeFilter, saleFilter, publishFilter])
 
   useEffect(() => { fetchPackages() }, [fetchPackages])
 
@@ -78,14 +85,15 @@ export function PackagesPage() {
     if (subjectFilter !== 'all') params.subject = subjectFilter
     if (activeFilter !== 'all') params.status = activeFilter
     if (saleFilter !== 'all') params.sale = saleFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [subjectFilter, activeFilter, saleFilter, currentPage, setSearchParams])
+  }, [subjectFilter, activeFilter, saleFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [subjectFilter, activeFilter, saleFilter])
+  }, [subjectFilter, activeFilter, saleFilter, publishFilter])
 
   // Client-side search filter
   const filteredPackages = search
@@ -186,7 +194,23 @@ export function PackagesPage() {
       placeholder: 'Filter by sale',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
+
+  const handlePublishAction = useCallback((pkg: Package, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: pkg._id, action });
+  }, []);
 
   const handleNavigate = (pkg: Package) => {
     navigate(`/content/packages/${pkg._id}`)
@@ -196,6 +220,7 @@ export function PackagesPage() {
     onNavigate: handleNavigate,
     onEdit: handleEdit,
     onToggleActive: handleToggleActive,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -223,11 +248,12 @@ export function PackagesPage() {
         onChange={setSearch}
         placeholder="Search packages..."
         filters={filters}
-        activeFilters={{ subject: subjectFilter, status: activeFilter, sale: saleFilter }}
+        activeFilters={{ subject: subjectFilter, status: activeFilter, sale: saleFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.subject !== undefined) setSubjectFilter(f.subject)
           if (f.status !== undefined) setActiveFilter(f.status)
           if (f.sale !== undefined) setSaleFilter(f.sale)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -243,13 +269,13 @@ export function PackagesPage() {
         }}
         emptyState={{
           icon: PackageIcon,
-          title: search || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all'
+          title: search || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all' || publishFilter !== 'all'
             ? 'No packages found matching your filters'
             : 'No packages yet',
-          description: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all'
+          description: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first package'
             : undefined,
-          action: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' ? (
+          action: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first package
             </Button>
@@ -266,6 +292,20 @@ export function PackagesPage() {
         pkg={selectedPackage}
         mode={modalMode}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null); }}
+          entityType="package"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null);
+            fetchPackages();
+          }}
+        />
+      )}
 
     </div>
   )

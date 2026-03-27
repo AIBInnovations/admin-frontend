@@ -6,6 +6,9 @@ import axios from 'axios'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
@@ -26,6 +29,7 @@ const documentSchema = z.object({
   series_id: z.string().optional().or(z.literal('')),
   subject_id: z.string().optional().or(z.literal('')),
   is_free: z.boolean(),
+  publish_status: z.enum(['draft', 'published']),
   display_order: z.number().int().min(0).optional().or(z.nan()),
 })
 
@@ -56,7 +60,8 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
   } = useForm<DocumentFormValues>({
     resolver: zodResolver(documentSchema),
     defaultValues: {
-      title: '', description: '', series_id: '', subject_id: '', is_free: false, display_order: 0,
+      title: '', description: '', series_id: '', subject_id: '', is_free: false,
+      publish_status: 'draft' as const, display_order: 0,
     },
   })
 
@@ -89,11 +94,13 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
           series_id: seriesId,
           subject_id: subjectId,
           is_free: doc.is_free,
+          publish_status: doc.publish_status || 'draft',
           display_order: doc.display_order,
         })
       } else {
         reset({
-          title: '', description: '', series_id: defaultSeriesId || '', subject_id: '', is_free: false, display_order: 0,
+          title: '', description: '', series_id: defaultSeriesId || '', subject_id: '', is_free: false,
+          publish_status: 'draft' as const, display_order: 0,
         })
       }
     }
@@ -134,6 +141,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
         series_id: data.series_id || undefined,
         subject_id: data.subject_id || undefined,
         is_free: data.is_free,
+        publish_status: data.publish_status,
         display_order: data.display_order || undefined,
         ...(thumbnailData && {
           thumbnail_url: thumbnailData.thumbnail_url,
@@ -288,7 +296,15 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                                 }}
                               >
                                 <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
-                                {s.name}{typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}
+                                <span className="flex items-center gap-2">
+                                  {s.name}{typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}
+                                  {s.publish_status === 'draft' && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                  )}
+                                  {s.is_active === false && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                  )}
+                                </span>
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -299,6 +315,9 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                 )
               }}
             />
+            <p className="text-xs text-muted-foreground">
+              All items shown including drafts and inactive
+            </p>
             {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}
           </div>
 
@@ -351,6 +370,26 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                 disabled={isSubmitting}
               />
             </div>
+          </div>
+
+          {/* Publish Status */}
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           {/* Upload progress bar */}

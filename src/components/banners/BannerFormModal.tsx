@@ -35,6 +35,7 @@ const bannerSchema = z.object({
   click_url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
+  publish_status: z.enum(['draft', 'published']).default('draft'),
   start_date: z.string().min(1, 'Start date is required'),
   end_date: z.string().optional().or(z.literal('')),
 })
@@ -107,7 +108,8 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
     resolver: zodResolver(bannerSchema),
     defaultValues: {
       title: '', subtitle: '', click_url: '',
-      display_order: NaN, is_active: true, start_date: '', end_date: '',
+      display_order: NaN, is_active: true, publish_status: 'draft',
+      start_date: '', end_date: '',
     },
   })
 
@@ -216,6 +218,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
           click_url: banner.click_url || '',
           display_order: banner.display_order,
           is_active: banner.is_active,
+          publish_status: banner.publish_status || 'draft',
           start_date: banner.start_date ? new Date(banner.start_date).toISOString().split('T')[0] : '',
           end_date: banner.end_date ? new Date(banner.end_date).toISOString().split('T')[0] : '',
         })
@@ -230,7 +233,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       } else {
         reset({
           title: '', subtitle: '', click_url: '',
-          display_order: NaN, is_active: true,
+          display_order: NaN, is_active: true, publish_status: 'draft',
           start_date: new Date().toISOString().split('T')[0], end_date: '',
         })
         setExistingImageUrl(null)
@@ -329,6 +332,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
         display_order: data.display_order && !isNaN(data.display_order) ? data.display_order : undefined,
         is_active: data.is_active,
+        publish_status: data.publish_status,
         start_date: data.start_date,
         end_date: data.end_date || undefined,
       }
@@ -688,6 +692,26 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
               <p className="text-xs text-muted-foreground">{isActive ? 'Banner is visible' : 'Banner is hidden'}</p>
             </div>
             <Switch id="is_active" checked={isActive} onCheckedChange={(c) => setValue('is_active', c)} disabled={isSubmitting || isUploading} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+              disabled={isSubmitting || isUploading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           <DialogFooter>

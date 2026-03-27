@@ -1,3 +1,6 @@
+/** Publish status for content entities */
+export type PublishStatus = 'draft' | 'published';
+
 /** Standard pagination response from backend */
 export interface PaginationResponse {
   total: number

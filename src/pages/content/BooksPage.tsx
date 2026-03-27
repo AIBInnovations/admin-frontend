@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { BookFormModal } from '@/components/books/BookFormModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { Plus, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { booksService, Book, BookFormData } from '@/services/books.service'
@@ -18,6 +19,7 @@ export function BooksPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [availabilityFilter, setAvailabilityFilter] = useState(searchParams.get('availability') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -26,6 +28,7 @@ export function BooksPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Fetch books
   const fetchBooks = useCallback(async () => {
@@ -35,6 +38,7 @@ export function BooksPage() {
         page: 1,
         limit: 100,
         is_available: availabilityFilter === 'all' ? null : availabilityFilter === 'available',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -49,7 +53,7 @@ export function BooksPage() {
     } finally {
       setLoading(false)
     }
-  }, [availabilityFilter])
+  }, [availabilityFilter, publishFilter])
 
   useEffect(() => { fetchBooks() }, [fetchBooks])
 
@@ -58,9 +62,10 @@ export function BooksPage() {
     const params: Record<string, string> = {}
     if (search) params.search = search
     if (availabilityFilter !== 'all') params.availability = availabilityFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, availabilityFilter, currentPage, setSearchParams])
+  }, [search, availabilityFilter, publishFilter, currentPage, setSearchParams])
 
   // Client-side filter
   const filteredBooks = search
@@ -75,13 +80,17 @@ export function BooksPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, availabilityFilter])
+  }, [search, availabilityFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
     setModalMode('create')
     setSelectedBook(null)
     setFormModalOpen(true)
+  }
+
+  const handlePublishAction = (entityId: string, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId, action })
   }
 
   const handleEdit = (book: Book) => {
@@ -140,10 +149,23 @@ export function BooksPage() {
       placeholder: 'Filter by availability',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useBooksColumns({
     onEdit: handleEdit,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -164,9 +186,10 @@ export function BooksPage() {
         onChange={setSearch}
         placeholder="Search title, author, ISBN..."
         filters={filters}
-        activeFilters={{ availability: availabilityFilter }}
+        activeFilters={{ availability: availabilityFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.availability !== undefined) setAvailabilityFilter(f.availability)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -182,13 +205,13 @@ export function BooksPage() {
         }}
         emptyState={{
           icon: BookOpen,
-          title: search || availabilityFilter !== 'all'
+          title: search || availabilityFilter !== 'all' || publishFilter !== 'all'
             ? 'No books found matching your filters'
             : 'No books yet',
-          description: !search && availabilityFilter === 'all'
+          description: !search && availabilityFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first book'
             : undefined,
-          action: !search && availabilityFilter === 'all' ? (
+          action: !search && availabilityFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first book
             </Button>
@@ -205,6 +228,16 @@ export function BooksPage() {
         mode={modalMode}
       />
 
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="book"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={fetchBooks}
+        />
+      )}
     </div>
   )
 }

@@ -42,6 +42,7 @@ const formSchema = z.object({
   exam_process: z.string().max(10000).optional().or(z.literal('')),
   payment_amount: z.number().min(0).optional().or(z.nan()).nullable(),
   is_active: z.boolean(),
+  publish_status: z.enum(['draft', 'published']).default('draft'),
   display_order: z.number().int().min(0).optional().or(z.nan()),
 })
 
@@ -94,6 +95,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
       exam_process: '',
       payment_amount: 0,
       is_active: true,
+      publish_status: 'draft',
       display_order: 0,
     },
   })
@@ -136,6 +138,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         exam_process: form.exam_process || '',
         payment_amount: form.payment_amount || 0,
         is_active: form.is_active,
+        publish_status: form.publish_status || 'draft',
         display_order: form.display_order,
       })
       setExamSlots(form.exam_slots || [])
@@ -151,6 +154,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         exam_process: '',
         payment_amount: 0,
         is_active: true,
+        publish_status: 'draft',
         display_order: 0,
       })
       setExamSlots([])
@@ -223,6 +227,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
         banner_s3_key: bannerS3Key || null,
         payment_amount: isExaminerTemplate ? null : (isNaN(values.payment_amount as number) ? null : (values.payment_amount || null)),
         is_active: values.is_active,
+        publish_status: values.publish_status,
         display_order: isNaN(values.display_order as number) ? undefined : values.display_order,
         exam_slots: isExaminerTemplate ? examSlots : undefined,
       }
@@ -510,6 +515,27 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                   checked={watch('is_active')}
                   onCheckedChange={(v) => setValue('is_active', v)}
                 />
+              </div>
+
+              {/* Publish Status */}
+              <div className="space-y-2">
+                <Label>Publish Status</Label>
+                <Select
+                  value={watch('publish_status')}
+                  onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+                  disabled={submitting || isUploading}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="published">Published</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Draft content is only visible to admins. Publish when ready for users.
+                </p>
               </div>
 
               {/* Zoho Books Item Status (edit mode, paid forms only) */}

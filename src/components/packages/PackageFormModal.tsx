@@ -51,6 +51,7 @@ const packageSchema = z.object({
   features: z.string().max(2000).optional().or(z.literal('')),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
+  publish_status: z.enum(['draft', 'published']),
   tiers: z.array(tierSchema),
 }).refine(
   (data) => {
@@ -100,6 +101,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       price: 0, original_price: null, is_on_sale: false,
       sale_price: null, sale_discount_percent: null, sale_end_date: '',
       duration_days: 365, features: '', display_order: 0, is_active: true,
+      publish_status: 'draft' as const,
       tiers: [],
     },
   })
@@ -158,6 +160,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           features: pkg.features || '',
           display_order: pkg.display_order,
           is_active: pkg.is_active,
+          publish_status: pkg.publish_status || 'draft',
           tiers: existingTiers,
         })
       } else {
@@ -166,6 +169,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           price: 0, original_price: null, is_on_sale: false,
           sale_price: null, sale_discount_percent: null, sale_end_date: '',
           duration_days: 365, features: '', display_order: 0, is_active: true,
+          publish_status: 'draft' as const,
           tiers: [],
         })
       }
@@ -186,6 +190,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
         features: data.features || undefined,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
+        publish_status: data.publish_status,
         tiers: data.tiers.length > 0
           ? data.tiers.map((t, i) => ({ ...t, original_price: t.original_price || null, display_order: t.display_order || i }))
           : [],
@@ -413,6 +418,25 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Publish Status</Label>
+              <Select
+                value={watch('publish_status')}
+                onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Draft content is only visible to admins. Publish when ready for users.
+              </p>
             </div>
           </fieldset>
 

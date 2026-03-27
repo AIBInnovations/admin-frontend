@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface FormTemplateField {
@@ -37,6 +37,7 @@ export interface Form {
   display_order: number
   exam_slots: string[]
   submission_count?: number
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -53,6 +54,7 @@ export interface FormFormData {
   is_active?: boolean
   display_order?: number
   exam_slots?: string[]
+  publish_status?: PublishStatus
 }
 
 export interface FormsListParams extends BaseListParams {
@@ -60,6 +62,7 @@ export interface FormsListParams extends BaseListParams {
   subject_id?: string | null
   template_id?: string | null
   search?: string
+  publish_status?: string | null
 }
 
 export interface FormSubmission {

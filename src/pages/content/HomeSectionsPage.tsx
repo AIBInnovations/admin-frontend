@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { HomeSectionFormModal } from '@/components/homeSections/HomeSectionFormModal'
 import { Plus, Layers } from 'lucide-react'
 import { toast } from 'sonner'
@@ -25,6 +26,7 @@ export function HomeSectionsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -36,6 +38,7 @@ export function HomeSectionsPage() {
   const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null)
   const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
   const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Client-side search filter
   const filteredSections = search
@@ -53,6 +56,7 @@ export function HomeSectionsPage() {
         page: currentPage,
         limit: 20,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -69,7 +73,7 @@ export function HomeSectionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, statusFilter])
+  }, [currentPage, statusFilter, publishFilter])
 
   useEffect(() => { fetchSections() }, [fetchSections])
 
@@ -78,14 +82,15 @@ export function HomeSectionsPage() {
     const params: Record<string, string> = {}
     if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, statusFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, statusFilter])
+  }, [search, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -168,6 +173,10 @@ export function HomeSectionsPage() {
     }
   }
 
+  const handlePublishAction = useCallback((section: HomeSection, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: section._id, action })
+  }, [])
+
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -182,12 +191,25 @@ export function HomeSectionsPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useHomeSectionsColumns({
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
     onViewItems: handleViewItems,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -208,9 +230,10 @@ export function HomeSectionsPage() {
         onChange={setSearch}
         placeholder="Search sections..."
         filters={filters}
-        activeFilters={{ status: statusFilter }}
+        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -227,13 +250,13 @@ export function HomeSectionsPage() {
         onRowClick={handleViewItems}
         emptyState={{
           icon: Layers,
-          title: search || statusFilter !== 'all'
+          title: search || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No sections found matching your filters'
             : 'No home sections yet',
-          description: !search && statusFilter === 'all'
+          description: !search && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first home section'
             : undefined,
-          action: !search && statusFilter === 'all' ? (
+          action: !search && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first section
             </Button>
@@ -269,6 +292,20 @@ export function HomeSectionsPage() {
           })),
         } : undefined}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="homesection"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null)
+            fetchSections()
+          }}
+        />
+      )}
     </div>
   )
 }

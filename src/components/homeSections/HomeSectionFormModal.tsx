@@ -27,6 +27,7 @@ const sectionSchema = z.object({
   text_color: z.string().regex(hexColorRegex, 'Invalid hex (e.g. #FF0000)').optional().or(z.literal('')),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
+  publish_status: z.enum(['draft', 'published']).default('draft'),
   start_date: z.string().optional().or(z.literal('')),
   end_date: z.string().optional().or(z.literal('')),
 })
@@ -61,7 +62,7 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
     defaultValues: {
       title: '', subtitle: '',
       background_color: '', text_color: '',
-      display_order: NaN, is_active: true,
+      display_order: NaN, is_active: true, publish_status: 'draft',
       start_date: '', end_date: '',
     },
   })
@@ -123,6 +124,7 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
           text_color: section.text_color || '',
           display_order: section.display_order,
           is_active: section.is_active,
+          publish_status: section.publish_status || 'draft',
           start_date: section.start_date ? new Date(section.start_date).toISOString().split('T')[0] : '',
           end_date: section.end_date ? new Date(section.end_date).toISOString().split('T')[0] : '',
         })
@@ -133,7 +135,7 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
         reset({
           title: '', subtitle: '',
           background_color: '', text_color: '',
-          display_order: NaN, is_active: true,
+          display_order: NaN, is_active: true, publish_status: 'draft',
           start_date: '', end_date: '',
         })
         setVisibleTo('all')
@@ -154,6 +156,7 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
       visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
       display_order: typeof data.display_order === 'number' && !isNaN(data.display_order) ? data.display_order : undefined,
       is_active: data.is_active,
+      publish_status: data.publish_status,
       start_date: data.start_date || undefined,
       end_date: data.end_date || undefined,
     }
@@ -333,6 +336,26 @@ export function HomeSectionFormModal({ open, onClose, onSubmit, section, mode }:
               onCheckedChange={(c) => setValue('is_active', c)}
               disabled={isSubmitting}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           <DialogFooter>

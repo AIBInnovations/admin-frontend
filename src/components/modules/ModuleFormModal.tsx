@@ -6,6 +6,9 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover'
 import {
@@ -27,6 +30,7 @@ const moduleSchema = z.object({
   series_id: z.string().min(1, 'Series is required'),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
+  publish_status: z.enum(['draft', 'published']),
 })
 
 type ModuleFormValues = z.infer<typeof moduleSchema>
@@ -52,7 +56,7 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
     resolver: zodResolver(moduleSchema),
     defaultValues: {
       name: '', description: '', series_id: '',
-      display_order: 0, is_active: true,
+      display_order: 0, is_active: true, publish_status: 'draft' as const,
     },
   })
 
@@ -77,11 +81,12 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
           series_id: typeof mod.series_id === 'object' ? mod.series_id._id : mod.series_id,
           display_order: mod.display_order,
           is_active: mod.is_active,
+          publish_status: mod.publish_status || 'draft',
         })
       } else {
         reset({
           name: '', description: '', series_id: defaultSeriesId || '',
-          display_order: 0, is_active: true,
+          display_order: 0, is_active: true, publish_status: 'draft' as const,
         })
       }
     }
@@ -95,6 +100,7 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
         series_id: data.series_id,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
+        publish_status: data.publish_status,
       }
       await onSubmit(formData)
       onClose()
@@ -165,7 +171,15 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
                               }}
                             >
                               <Check className={cn('mr-2 h-4 w-4', field.value === s._id ? 'opacity-100' : 'opacity-0')} />
-                              {s.name}
+                              <span className="flex items-center gap-2">
+                                {s.name}
+                                {s.publish_status === 'draft' && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                )}
+                                {s.is_active === false && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                )}
+                              </span>
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -175,6 +189,9 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
                 </Popover>
               )}
             />
+            <p className="text-xs text-muted-foreground">
+              All items shown including drafts and inactive
+            </p>
             {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}
           </div>
 
@@ -194,6 +211,26 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
               </p>
             </div>
             <Switch id="is_active" checked={isActive} onCheckedChange={(checked) => setValue('is_active', checked)} disabled={isSubmitting} />
+          </div>
+
+          {/* Publish Status */}
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           <DialogFooter>

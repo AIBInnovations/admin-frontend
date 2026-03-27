@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { BannerFormModal } from '@/components/banners/BannerFormModal'
 import { Plus, Image } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,6 +20,7 @@ export function BannersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -28,6 +30,7 @@ export function BannersPage() {
   const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Client-side search filter
   const filteredBanners = search
@@ -42,6 +45,7 @@ export function BannersPage() {
         page: currentPage,
         limit: 20,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -58,7 +62,7 @@ export function BannersPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, statusFilter])
+  }, [currentPage, statusFilter, publishFilter])
 
   useEffect(() => { fetchBanners() }, [fetchBanners])
 
@@ -67,14 +71,15 @@ export function BannersPage() {
     const params: Record<string, string> = {}
     if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, statusFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, statusFilter])
+  }, [search, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -138,6 +143,10 @@ export function BannersPage() {
     }
   }
 
+  const handlePublishAction = useCallback((banner: Banner, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: banner._id, action })
+  }, [])
+
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -152,11 +161,24 @@ export function BannersPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useBannersColumns({
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -177,9 +199,10 @@ export function BannersPage() {
         onChange={setSearch}
         placeholder="Search banners..."
         filters={filters}
-        activeFilters={{ status: statusFilter }}
+        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -195,13 +218,13 @@ export function BannersPage() {
         }}
         emptyState={{
           icon: Image,
-          title: search || statusFilter !== 'all'
+          title: search || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No banners found matching your filters'
             : 'No banners yet',
-          description: !search && statusFilter === 'all'
+          description: !search && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first banner'
             : undefined,
-          action: !search && statusFilter === 'all' ? (
+          action: !search && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first banner
             </Button>
@@ -225,6 +248,20 @@ export function BannersPage() {
         title="Archive Banner"
         itemName={selectedBanner?.title}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="banner"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null)
+            fetchBanners()
+          }}
+        />
+      )}
     </div>
   )
 }

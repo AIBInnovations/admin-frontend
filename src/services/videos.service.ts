@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface VideoUrls {
@@ -33,6 +33,7 @@ export interface Video {
   video_urls: VideoUrls
   file_size_mb: number
   scheduled_release_at?: string | null
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -47,6 +48,7 @@ export interface VideoFormData {
   subtitle_url?: string
   transcript_url?: string
   tag_ids?: string[]
+  publish_status?: PublishStatus
 }
 
 export interface UpcomingVideoFormData {
@@ -63,6 +65,7 @@ export interface VideosListParams extends BaseListParams {
   module_id?: string
   processing_status?: string
   is_free?: boolean | null
+  publish_status?: string | null
 }
 
 export interface VideoStatus {

@@ -15,6 +15,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { Loader2, Upload, FileText, X, ChevronsUpDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Book, BookFormData, booksService } from '@/services/books.service'
@@ -38,6 +41,7 @@ const bookSchema = z.object({
   subject_id: z.string().optional().or(z.literal('')),
   stock_quantity: z.number().int().min(0).optional().or(z.nan()),
   is_available: z.boolean(),
+  publish_status: z.enum(['draft', 'published']).default('draft'),
   publisher: z.string().max(100).optional().or(z.literal('')),
   publication_year: z.number().int().min(1900).max(2100).optional().or(z.nan()),
   pages: z.number().int().min(1).optional().or(z.nan()),
@@ -68,6 +72,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
       title: '', author: '', description: '', isbn: '',
       price: 0, original_price: null, is_on_sale: false, sale_price: null,
       ebook: false, category: '', subject_id: '', stock_quantity: 0, is_available: true,
+      publish_status: 'draft',
       publisher: '', publication_year: NaN, pages: NaN, weight_grams: 500,
     },
   })
@@ -126,7 +131,8 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           is_on_sale: book.is_on_sale, sale_price: book.sale_price,
           ebook: book.ebook ?? false, category: book.category || '', subject_id: subId,
           stock_quantity: book.stock_quantity,
-          is_available: book.is_available, publisher: book.publisher || '',
+          is_available: book.is_available, publish_status: book.publish_status || 'draft',
+          publisher: book.publisher || '',
           publication_year: book.publication_year ?? NaN,
           pages: book.pages ?? NaN, weight_grams: book.weight_grams,
         })
@@ -137,6 +143,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
           title: '', author: '', description: '', isbn: '',
           price: 0, original_price: null, is_on_sale: false, sale_price: null,
           ebook: false, category: '', subject_id: '', stock_quantity: 0, is_available: true,
+          publish_status: 'draft',
           publisher: '', publication_year: NaN, pages: NaN, weight_grams: 500,
         })
         setExistingThumbnailUrl(null)
@@ -180,6 +187,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
         subject_id: data.subject_id || undefined,
         stock_quantity: data.stock_quantity || 0,
         is_available: data.is_available,
+        publish_status: data.publish_status,
         publisher: data.publisher || undefined,
         publication_year: data.publication_year && !isNaN(data.publication_year) ? data.publication_year : undefined,
         pages: data.pages && !isNaN(data.pages) ? data.pages : undefined,
@@ -508,6 +516,26 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
               <p className="text-xs text-muted-foreground">{isAvailable ? 'Book is listed' : 'Book is hidden'}</p>
             </div>
             <Switch id="is_available" checked={isAvailable} onCheckedChange={(c) => setValue('is_available', c)} disabled={isSubmitting || isThumbnailUploading} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+              disabled={isSubmitting || isThumbnailUploading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
           </div>
 
           <DialogFooter>

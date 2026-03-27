@@ -5,9 +5,10 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
+import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { Document } from '@/services/documents.service'
 import type { PopulatedRef } from '@/types/api.types'
-import { MoreVertical, Pencil, Archive, FileText, Download } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, FileText, Download, Globe, GlobeLock } from 'lucide-react'
 
 const formatBadge: Record<string, string> = {
   pdf: 'bg-red-500/10 text-red-600 border-red-200',
@@ -26,11 +27,13 @@ function formatFileSize(mb: number): string {
 interface DocumentsColumnsProps {
   onEdit: (doc: Document) => void
   onArchive: (doc: Document) => void
+  onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
 }
 
 export function useDocumentsColumns({
   onEdit,
   onArchive,
+  onPublishAction,
 }: DocumentsColumnsProps): ColumnDef<Document>[] {
   return [
     {
@@ -120,6 +123,32 @@ export function useDocumentsColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (doc) => {
+        const series = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id : null
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge className={`text-[10px] ${
+              doc.publish_status === 'published'
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                : 'bg-amber-500/10 text-amber-600 border-amber-200'
+            }`}>
+              {doc.publish_status === 'published' ? 'Published' : 'Draft'}
+            </Badge>
+            <PublishStatusWarning
+              publishStatus={doc.publish_status}
+              parentPublishStatus={series?.publish_status}
+              parentIsActive={series?.is_active}
+              parentType="series"
+              parentName={series?.name}
+            />
+          </div>
+        )
+      },
+    },
+    {
       id: 'actions',
       header: '',
       width: 'w-10',
@@ -134,6 +163,15 @@ export function useDocumentsColumns({
             <DropdownMenuItem onClick={() => onEdit(doc)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
+            {doc.publish_status === 'published' ? (
+              <DropdownMenuItem onClick={() => onPublishAction(doc._id, 'unpublish')}>
+                <GlobeLock className="mr-2 h-4 w-4" />Unpublish
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => onPublishAction(doc._id, 'publish')}>
+                <Globe className="mr-2 h-4 w-4" />Publish
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onArchive(doc)} className="text-amber-600">
               <Archive className="mr-2 h-4 w-4" />Archive

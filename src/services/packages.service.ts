@@ -1,6 +1,6 @@
 import { BaseCrudService } from './base.service'
 import { apiService, ApiResponse } from './api.service'
-import type { BaseListParams, PopulatedRef } from '@/types/api.types'
+import type { BaseListParams, PopulatedRef, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface PackageTier {
@@ -31,6 +31,7 @@ export interface Package {
   notes_thumbnail_url: string | null
   features: string
   is_active: boolean
+  publish_status: PublishStatus
   display_order: number
   tiers: PackageTier[]
   series_count?: number
@@ -121,6 +122,7 @@ export interface PackageFormData {
   features?: string
   display_order?: number
   is_active?: boolean
+  publish_status?: PublishStatus
   tiers?: PackageTier[]
 }
 
@@ -128,6 +130,7 @@ export interface PackagesListParams extends BaseListParams {
   subject_id?: string
   is_active?: boolean | null
   is_on_sale?: boolean | null
+  publish_status?: string | null
 }
 
 class PackagesService extends BaseCrudService<Package, PackageFormData, PackagesListParams> {

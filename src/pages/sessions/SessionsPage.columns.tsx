@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { LiveSession } from '@/services/liveSessions.service'
-import { MoreVertical, Pencil, Archive, XCircle } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, XCircle, Globe, GlobeLock } from 'lucide-react'
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-blue-500/10 text-blue-600 border-blue-200',
@@ -26,12 +26,14 @@ interface SessionsColumnsProps {
   onEdit: (session: LiveSession) => void
   onCancel: (session: LiveSession) => void
   onArchive: (session: LiveSession) => void
+  onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
 }
 
 export function useSessionsColumns({
   onEdit,
   onCancel,
   onArchive,
+  onPublishAction,
 }: SessionsColumnsProps): ColumnDef<LiveSession>[] {
   return [
     {
@@ -122,6 +124,20 @@ export function useSessionsColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (session) => (
+        <Badge className={`text-[10px] ${
+          session.publish_status === 'published'
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-amber-500/10 text-amber-600 border-amber-200'
+        }`}>
+          {session.publish_status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
       id: 'actions',
       header: '',
       width: 'w-10',
@@ -136,6 +152,15 @@ export function useSessionsColumns({
             <DropdownMenuItem onClick={() => onEdit(session)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
             </DropdownMenuItem>
+            {session.publish_status === 'published' ? (
+              <DropdownMenuItem onClick={() => onPublishAction(session._id, 'unpublish')}>
+                <GlobeLock className="mr-2 h-4 w-4" />Unpublish
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => onPublishAction(session._id, 'publish')}>
+                <Globe className="mr-2 h-4 w-4" />Publish
+              </DropdownMenuItem>
+            )}
             {session.status === 'scheduled' && (
               <DropdownMenuItem onClick={() => onCancel(session)} className="text-amber-600">
                 <XCircle className="mr-2 h-4 w-4" />Cancel Session

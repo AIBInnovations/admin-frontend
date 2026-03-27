@@ -13,6 +13,7 @@ interface FormsColumnsProps {
   onDelete: (form: Form) => void
   onToggleActive: (form: Form) => void
   onViewSubmissions: (form: Form) => void
+  onPublishAction: (form: Form, action: 'publish' | 'unpublish') => void
 }
 
 export function useFormsColumns({
@@ -20,6 +21,7 @@ export function useFormsColumns({
   onDelete,
   onToggleActive,
   onViewSubmissions,
+  onPublishAction,
 }: FormsColumnsProps): ColumnDef<Form>[] {
   return [
     {
@@ -91,6 +93,20 @@ export function useFormsColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (form) => (
+        <Badge className={`text-[10px] ${
+          form.publish_status === 'published'
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-amber-500/10 text-amber-600 border-amber-200'
+        }`}>
+          {form.publish_status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
       id: 'created',
       header: 'Created',
       width: 'w-32',
@@ -126,6 +142,11 @@ export function useFormsColumns({
               ) : (
                 <><ToggleRight className="mr-2 h-4 w-4" />Activate</>
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onPublishAction(form, form.publish_status === 'draft' ? 'publish' : 'unpublish')}
+            >
+              {form.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onDelete(form)} className="text-red-600">

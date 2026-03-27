@@ -12,12 +12,14 @@ interface HomeSectionsColumnsProps {
   onEdit: (section: HomeSection) => void
   onDelete: (section: HomeSection) => void
   onViewItems: (section: HomeSection) => void
+  onPublishAction: (section: HomeSection, action: 'publish' | 'unpublish') => void
 }
 
 export function useHomeSectionsColumns({
   onEdit,
   onDelete,
   onViewItems,
+  onPublishAction,
 }: HomeSectionsColumnsProps): ColumnDef<HomeSection>[] {
   return [
     {
@@ -131,6 +133,20 @@ export function useHomeSectionsColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-24',
+      cell: (section) => (
+        <Badge className={`text-[10px] ${
+          section.publish_status === 'published'
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-amber-500/10 text-amber-600 border-amber-200'
+        }`}>
+          {section.publish_status === 'published' ? 'Published' : 'Draft'}
+        </Badge>
+      ),
+    },
+    {
       id: 'actions',
       header: '',
       width: 'w-10',
@@ -147,6 +163,11 @@ export function useHomeSectionsColumns({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(section)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onPublishAction(section, section.publish_status === 'draft' ? 'publish' : 'unpublish')}
+            >
+              {section.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onDelete(section)} className="text-destructive">

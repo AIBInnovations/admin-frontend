@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
 import { Plus, Video } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ export function SessionsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -34,6 +36,7 @@ export function SessionsPage() {
   const [archiveBlocked, setArchiveBlocked] = useState(false)
   const [archiveBlockReason, setArchiveBlockReason] = useState('')
   const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
@@ -43,6 +46,7 @@ export function SessionsPage() {
         page: currentPage,
         limit: 20,
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -59,7 +63,7 @@ export function SessionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, statusFilter])
+  }, [currentPage, statusFilter, publishFilter])
 
   useEffect(() => { fetchSessions() }, [fetchSessions])
 
@@ -73,14 +77,15 @@ export function SessionsPage() {
     const params: Record<string, string> = {}
     if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, statusFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, statusFilter])
+  }, [search, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -93,6 +98,10 @@ export function SessionsPage() {
     setModalMode('edit')
     setSelectedSession(session)
     setFormModalOpen(true)
+  }
+
+  const handlePublishAction = (entityId: string, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId, action })
   }
 
   const handleArchiveClick = async (session: LiveSession) => {
@@ -193,12 +202,25 @@ export function SessionsPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useSessionsColumns({
     onEdit: handleEdit,
     onCancel: handleCancel,
     onArchive: handleArchiveClick,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -219,9 +241,10 @@ export function SessionsPage() {
         onChange={setSearch}
         placeholder="Search by session title..."
         filters={filters}
-        activeFilters={{ status: statusFilter }}
+        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -237,13 +260,13 @@ export function SessionsPage() {
         }}
         emptyState={{
           icon: Video,
-          title: filteredSessions.length === 0 && (search || statusFilter !== 'all')
+          title: filteredSessions.length === 0 && (search || statusFilter !== 'all' || publishFilter !== 'all')
             ? 'No sessions found matching your filters'
             : 'No live sessions yet',
-          description: filteredSessions.length === 0 && !search && statusFilter === 'all'
+          description: filteredSessions.length === 0 && !search && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by scheduling your first live session'
             : undefined,
-          action: filteredSessions.length === 0 && !search && statusFilter === 'all' ? (
+          action: filteredSessions.length === 0 && !search && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Schedule your first session
             </Button>
@@ -271,6 +294,17 @@ export function SessionsPage() {
         blocked={archiveBlocked}
         blockReason={archiveBlockReason}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="livesession"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={fetchSessions}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
 export interface Book {
@@ -30,6 +30,7 @@ export interface Book {
   ebook_s3_key: string | null
   ebook_file_size_mb: number | null
   ebook_file_format: 'pdf' | 'epub' | null
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -55,6 +56,7 @@ export interface BookFormData {
   pages?: number
   display_order?: number
   ebook?: boolean
+  publish_status?: PublishStatus
 }
 
 export interface BooksListParams extends BaseListParams {
@@ -62,6 +64,7 @@ export interface BooksListParams extends BaseListParams {
   is_available?: boolean | null
   category?: string
   low_stock_threshold?: number
+  publish_status?: string | null
 }
 
 class BooksService {

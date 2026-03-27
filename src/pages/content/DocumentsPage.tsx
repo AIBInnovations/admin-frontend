@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal'
 import { Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ export function DocumentsPage() {
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [formatFilter, setFormatFilter] = useState(searchParams.get('format') || 'all')
   const [accessFilter, setAccessFilter] = useState(searchParams.get('access') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -34,6 +36,7 @@ export function DocumentsPage() {
   const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Fetch series for filter dropdown
   useEffect(() => {
@@ -52,6 +55,7 @@ export function DocumentsPage() {
         series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
         file_format: formatFilter !== 'all' ? formatFilter : undefined,
         is_free: accessFilter === 'all' ? null : accessFilter === 'free',
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -68,7 +72,7 @@ export function DocumentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, seriesFilter, formatFilter, accessFilter])
+  }, [currentPage, seriesFilter, formatFilter, accessFilter, publishFilter])
 
   useEffect(() => { fetchDocuments() }, [fetchDocuments])
 
@@ -78,14 +82,15 @@ export function DocumentsPage() {
     if (seriesFilter !== 'all') params.series = seriesFilter
     if (formatFilter !== 'all') params.format = formatFilter
     if (accessFilter !== 'all') params.access = accessFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [seriesFilter, formatFilter, accessFilter, currentPage, setSearchParams])
+  }, [seriesFilter, formatFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [seriesFilter, formatFilter, accessFilter])
+  }, [seriesFilter, formatFilter, accessFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -98,6 +103,10 @@ export function DocumentsPage() {
     setModalMode('edit')
     setSelectedDocument(doc)
     setFormModalOpen(true)
+  }
+
+  const handlePublishAction = (entityId: string, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId, action })
   }
 
   const handleArchiveClick = (doc: Document) => {
@@ -191,16 +200,29 @@ export function DocumentsPage() {
       placeholder: 'Filter by access',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useDocumentsColumns({
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
+    onPublishAction: handlePublishAction,
   })
 
   const filteredDocuments = search ? documents.filter((d) => d.title.toLowerCase().includes(search.toLowerCase())) : documents
 
-  const hasFilters = search !== '' || seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all'
+  const hasFilters = search !== '' || seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -220,11 +242,12 @@ export function DocumentsPage() {
         onChange={setSearch}
         placeholder="Search documents..."
         filters={filters}
-        activeFilters={{ series: seriesFilter, format: formatFilter, access: accessFilter }}
+        activeFilters={{ series: seriesFilter, format: formatFilter, access: accessFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.series !== undefined) setSeriesFilter(f.series)
           if (f.format !== undefined) setFormatFilter(f.format)
           if (f.access !== undefined) setAccessFilter(f.access)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -266,6 +289,17 @@ export function DocumentsPage() {
         title="Archive Document"
         itemName={selectedDocument?.title}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="document"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={fetchDocuments}
+        />
+      )}
     </div>
   )
 }

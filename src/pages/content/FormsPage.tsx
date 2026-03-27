@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { FormFormModal } from '@/components/forms/FormFormModal'
 import { Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ export function FormsPage() {
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
+  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -34,6 +36,7 @@ export function FormsPage() {
   const [selectedForm, setSelectedForm] = useState<Form | null>(null)
   const [deleteImpactLoading, setDeleteImpactLoading] = useState(false)
   const [deleteWarning, setDeleteWarning] = useState<string | undefined>()
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
   // Client-side search filter
   const filteredForms = search
@@ -58,6 +61,7 @@ export function FormsPage() {
         limit: 20,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         subject_id: subjectFilter === 'all' ? null : subjectFilter,
+        publish_status: publishFilter === 'all' ? null : publishFilter,
       })
 
       if (response.success && response.data) {
@@ -74,7 +78,7 @@ export function FormsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, statusFilter, subjectFilter])
+  }, [currentPage, statusFilter, subjectFilter, publishFilter])
 
   useEffect(() => { fetchForms() }, [fetchForms])
 
@@ -84,14 +88,15 @@ export function FormsPage() {
     if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
     if (subjectFilter !== 'all') params.subject = subjectFilter
+    if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, statusFilter, subjectFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, subjectFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, statusFilter, subjectFilter])
+  }, [search, statusFilter, subjectFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -187,6 +192,10 @@ export function FormsPage() {
     }
   }
 
+  const handlePublishAction = useCallback((form: Form, action: 'publish' | 'unpublish') => {
+    setPublishModal({ entityId: form._id, action })
+  }, [])
+
   // Filters
   const subjectOptions = [
     { label: 'All Subjects', value: 'all' },
@@ -214,6 +223,18 @@ export function FormsPage() {
       placeholder: 'Filter by subject',
       defaultValue: 'all',
     },
+    {
+      key: 'publish_status',
+      label: 'Publish Status',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
+      ],
+      placeholder: 'Filter by publish status',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useFormsColumns({
@@ -221,6 +242,7 @@ export function FormsPage() {
     onDelete: handleDeleteClick,
     onToggleActive: handleToggleActive,
     onViewSubmissions: handleViewSubmissions,
+    onPublishAction: handlePublishAction,
   })
 
   return (
@@ -241,10 +263,11 @@ export function FormsPage() {
         onChange={setSearch}
         placeholder="Search forms..."
         filters={filters}
-        activeFilters={{ status: statusFilter, subject: subjectFilter }}
+        activeFilters={{ status: statusFilter, subject: subjectFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
           if (f.status !== undefined) setStatusFilter(f.status)
           if (f.subject !== undefined) setSubjectFilter(f.subject)
+          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
       />
 
@@ -260,13 +283,13 @@ export function FormsPage() {
         }}
         emptyState={{
           icon: FileText,
-          title: search || statusFilter !== 'all' || subjectFilter !== 'all'
+          title: search || statusFilter !== 'all' || subjectFilter !== 'all' || publishFilter !== 'all'
             ? 'No forms found matching your filters'
             : 'No forms yet',
-          description: !search && statusFilter === 'all' && subjectFilter === 'all'
+          description: !search && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first form'
             : undefined,
-          action: !search && statusFilter === 'all' && subjectFilter === 'all' ? (
+          action: !search && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first form
             </Button>
@@ -292,6 +315,20 @@ export function FormsPage() {
         warning={deleteWarning}
         isLoadingImpact={deleteImpactLoading}
       />
+
+      {publishModal && (
+        <PublishConfirmModal
+          open={!!publishModal}
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="form"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => {
+            setPublishModal(null)
+            fetchForms()
+          }}
+        />
+      )}
     </div>
   )
 }

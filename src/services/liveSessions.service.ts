@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 export type VisibleTo = 'all' | 'subject' | 'package'
 
@@ -37,6 +37,7 @@ export interface LiveSession {
   allow_waitlist: boolean
   auto_admit_users: boolean
   allow_join_before_host: boolean
+  publish_status: PublishStatus
   createdAt: string
   updatedAt: string
 }
@@ -65,12 +66,14 @@ export interface LiveSessionFormData {
   capacity_mode?: 'limited' | 'unlimited'
   allow_waitlist?: boolean
   guaranteed_seats_for_paid?: boolean
+  publish_status?: PublishStatus
 }
 
 export interface LiveSessionsListParams extends BaseListParams {
   subject_id?: string
   status?: string
   upcoming?: boolean
+  publish_status?: string | null
 }
 
 class LiveSessionsService {

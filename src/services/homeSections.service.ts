@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
-import type { ListResponse, BaseListParams, DeleteImpactResponse } from '@/types/api.types'
+import type { ListResponse, BaseListParams, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // ─── Entity Types ────────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ export interface HomeSection {
   visible_to_packages: string[]
   display_order: number
   is_active: boolean
+  publish_status: PublishStatus
   start_date: string | null
   end_date: string | null
   items?: HomeSectionItem[]
@@ -103,6 +104,7 @@ export interface HomeSectionFormData {
   visible_to_packages?: string[]
   display_order?: number
   is_active?: boolean
+  publish_status?: PublishStatus
   start_date?: string
   end_date?: string
 }
@@ -140,6 +142,7 @@ export interface HomeSectionItemFormData {
 
 export interface HomeSectionsListParams extends BaseListParams {
   is_active?: boolean | null
+  publish_status?: string | null
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────

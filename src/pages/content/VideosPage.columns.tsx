@@ -5,6 +5,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
+import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { Video } from '@/services/videos.service'
 import { MoreVertical, Pencil, Archive, Eye, Clock } from 'lucide-react'
 
@@ -25,11 +26,13 @@ const statusColors: Record<string, string> = {
 interface VideosColumnsProps {
   onEdit: (video: Video) => void
   onArchive: (video: Video) => void
+  onPublishAction: (video: Video, action: 'publish' | 'unpublish') => void
 }
 
 export function useVideosColumns({
   onEdit,
   onArchive,
+  onPublishAction,
 }: VideosColumnsProps): ColumnDef<Video>[] {
   return [
     {
@@ -71,6 +74,31 @@ export function useVideosColumns({
       cell: (video) => (
         <span className="text-xs text-muted-foreground">{formatFileSize(video.file_size_mb)}</span>
       ),
+    },
+    {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-28',
+      cell: (video) => {
+        const mod = video.module_id && typeof video.module_id === 'object' ? video.module_id : null
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant={video.publish_status === 'published' ? 'default' : 'secondary'}
+              className={video.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+            >
+              {video.publish_status === 'draft' ? 'Draft' : 'Published'}
+            </Badge>
+            <PublishStatusWarning
+              publishStatus={video.publish_status}
+              parentPublishStatus={mod?.publish_status}
+              parentIsActive={mod?.is_active}
+              parentType="module"
+              parentName={mod?.name}
+            />
+          </div>
+        )
+      },
     },
     {
       id: 'status',
@@ -129,6 +157,14 @@ export function useVideosColumns({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit(video)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublishAction(video, video.publish_status === 'draft' ? 'publish' : 'unpublish');
+              }}
+            >
+              {video.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onArchive(video)} className="text-amber-600">

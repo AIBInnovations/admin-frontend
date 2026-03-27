@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusToggle } from '@/components/common/StatusToggle'
+import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Module } from '@/services/modules.service'
 import { GripVertical, MoreVertical, Pencil, BookOpen, Clock, RefreshCw } from 'lucide-react'
@@ -21,12 +22,14 @@ interface ModulesColumnsProps {
   onEdit: (mod: Module) => void
   onToggleActive: (mod: Module) => void
   onRecalculate: (mod: Module) => void
+  onPublishAction: (mod: Module, action: 'publish' | 'unpublish') => void
 }
 
 export function useModulesColumns({
   onEdit,
   onToggleActive,
   onRecalculate,
+  onPublishAction,
 }: ModulesColumnsProps): ColumnDef<Module>[] {
   return [
     {
@@ -84,6 +87,31 @@ export function useModulesColumns({
       ),
     },
     {
+      id: 'publish_status',
+      header: 'Publish',
+      width: 'w-28',
+      cell: (mod) => {
+        const series = typeof mod.series_id === 'object' ? mod.series_id : null
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant={mod.publish_status === 'published' ? 'default' : 'secondary'}
+              className={mod.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+            >
+              {mod.publish_status === 'draft' ? 'Draft' : 'Published'}
+            </Badge>
+            <PublishStatusWarning
+              publishStatus={mod.publish_status}
+              parentPublishStatus={series?.publish_status}
+              parentIsActive={series?.is_active}
+              parentType="series"
+              parentName={series?.name}
+            />
+          </div>
+        )
+      },
+    },
+    {
       id: 'status',
       header: 'Status',
       width: 'w-32',
@@ -128,6 +156,14 @@ export function useModulesColumns({
             <DropdownMenuItem onClick={() => onRecalculate(mod)}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Recalculate Stats
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublishAction(mod, mod.publish_status === 'draft' ? 'publish' : 'unpublish');
+              }}
+            >
+              {mod.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

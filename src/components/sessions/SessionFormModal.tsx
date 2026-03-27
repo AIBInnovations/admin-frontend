@@ -45,6 +45,7 @@ const sessionSchema = z.object({
   price: z.number().min(0).optional().nullable(),
   allow_waitlist: z.boolean(),
   guaranteed_seats_for_paid: z.boolean(),
+  publish_status: z.enum(['draft', 'published']).default('draft'),
 }).refine(
   (data) => data.capacity_mode === 'unlimited' || (data.max_attendees && data.max_attendees > 0),
   { message: 'Max attendees required for limited capacity', path: ['max_attendees'] },
@@ -107,6 +108,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
       capacity_mode: 'limited', max_attendees: 100,
       is_free: false, price: 299,
       allow_waitlist: true, guaranteed_seats_for_paid: true,
+      publish_status: 'draft',
     },
   })
 
@@ -188,6 +190,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
           max_attendees: session.max_attendees, is_free: session.is_free,
           price: session.is_free ? null : session.price,
           allow_waitlist: session.allow_waitlist, guaranteed_seats_for_paid: session.guaranteed_seats_for_paid,
+          publish_status: session.publish_status || 'draft',
         })
         setExistingThumbnailUrl(session.thumbnail_url)
         setExistingThumbnailS3Key(session.thumbnail_s3_key)
@@ -203,6 +206,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
           capacity_mode: 'limited', max_attendees: 100,
           is_free: false, price: 299,
           allow_waitlist: true, guaranteed_seats_for_paid: true,
+          publish_status: 'draft',
         })
         setExistingThumbnailUrl(null)
         setExistingThumbnailS3Key(null)
@@ -252,6 +256,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
         visible_to: visibleTo,
         visible_to_subjects: visibleTo === 'subject' ? selectedSubjectIds : [],
         visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
+        publish_status: data.publish_status,
       }
       await onSubmit(formData)
       onClose()
@@ -599,6 +604,26 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
               {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Publish Status</Label>
+            <Select
+              value={watch('publish_status')}
+              onValueChange={(value) => setValue('publish_status', value as 'draft' | 'published')}
+              disabled={isSubmitting || isUploading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft content is only visible to admins. Publish when ready for users.
+            </p>
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting || isUploading}>Cancel</Button>
