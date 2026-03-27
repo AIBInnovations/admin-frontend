@@ -124,15 +124,15 @@ class NotificationsService {
   }
 
   async sendEmailToAll(data: { subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
-    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-all`, data)
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-all`, data, { timeout: 120000 })
   }
 
   async sendEmailToSubject(data: { subject_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
-    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-subject`, data)
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-subject`, data, { timeout: 120000 })
   }
 
   async sendEmailToUsers(data: { user_ids: string[]; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
-    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-users`, data)
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-users`, data, { timeout: 120000 })
   }
 
   async sendSmsToAll(data: { message: string }): Promise<ApiResponse<SendEmailResult>> {
@@ -158,11 +158,11 @@ class NotificationsService {
   }
 
   async sendEmailToPackage(data: { package_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
-    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-package`, data)
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-package`, data, { timeout: 120000 })
   }
 
   async sendEmailToSeries(data: { series_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
-    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-series`, data)
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-series`, data, { timeout: 120000 })
   }
 
   async sendSmsToPackage(data: { package_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
