@@ -33,9 +33,10 @@ const sessionSchema = z.object({
   description: z.string().max(1000).optional().or(z.literal('')),
   subject_id: z.string().min(1, 'Subject is required'),
   faculty_id: z.string().optional().or(z.literal('')),
-  scheduled_date: z.string().min(1, 'Date is required'),
-  scheduled_time: z.string().min(1, 'Start time is required'),
-  duration_minutes: z.number({ error: 'Duration is required' }).int().min(15, 'Min 15 minutes').max(480, 'Max 8 hours'),
+  start_date: z.string().min(1, 'Start date is required'),
+  start_time: z.string().min(1, 'Start time is required'),
+  end_date: z.string().min(1, 'End date is required'),
+  end_time: z.string().min(1, 'End time is required'),
   platform: z.enum(['zoom', 'agora', 'teams', 'other']),
   enrollment_mode: z.enum(['open', 'enrollment_required', 'disabled']),
   capacity_mode: z.enum(['limited', 'unlimited']),
@@ -50,6 +51,13 @@ const sessionSchema = z.object({
 ).refine(
   (data) => data.is_free || (data.price && data.price > 0),
   { message: 'Price is required for paid sessions', path: ['price'] },
+).refine(
+  (data) => {
+    const start = new Date(`${data.start_date}T${data.start_time}:00`)
+    const end = new Date(`${data.end_date}T${data.end_time}:00`)
+    return end > start
+  },
+  { message: 'End date/time must be after start date/time', path: ['end_time'] },
 )
 
 type SessionFormValues = z.infer<typeof sessionSchema>
@@ -94,7 +102,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
     resolver: zodResolver(sessionSchema),
     defaultValues: {
       title: '', description: '', subject_id: '', faculty_id: '',
-      scheduled_date: '', scheduled_time: '', duration_minutes: 60,
+      start_date: '', start_time: '', end_date: '', end_time: '',
       platform: 'zoom', enrollment_mode: 'enrollment_required',
       capacity_mode: 'limited', max_attendees: 100,
       is_free: false, price: 299,
@@ -104,6 +112,17 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
 
   const isFree = watch('is_free')
   const capacityMode = watch('capacity_mode')
+  const startDate = watch('start_date')
+
+  // Auto-fill end date when start date changes (if end date is empty)
+  useEffect(() => {
+    if (startDate) {
+      const currentEndDate = watch('end_date')
+      if (!currentEndDate) {
+        setValue('end_date', startDate)
+      }
+    }
+  }, [startDate, setValue, watch])
 
   // Manage thumbnail preview URL
   useEffect(() => {
@@ -154,14 +173,17 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
     if (open) {
       if (mode === 'edit' && session) {
         const startDate = new Date(session.scheduled_start_time)
+        const endDate = new Date(session.scheduled_end_time)
         const subjectId = typeof session.subject_id === 'object' ? session.subject_id._id : session.subject_id
         const facultyId = typeof session.faculty_id === 'object' && session.faculty_id ? session.faculty_id._id : (session.faculty_id as string || '')
         reset({
           title: session.title, description: session.description || '',
           subject_id: subjectId, faculty_id: facultyId,
-          scheduled_date: startDate.toISOString().split('T')[0],
-          scheduled_time: startDate.toTimeString().slice(0, 5),
-          duration_minutes: session.duration_minutes, platform: session.platform,
+          start_date: startDate.toISOString().split('T')[0],
+          start_time: startDate.toTimeString().slice(0, 5),
+          end_date: endDate.toISOString().split('T')[0],
+          end_time: endDate.toTimeString().slice(0, 5),
+          platform: session.platform,
           enrollment_mode: session.enrollment_mode, capacity_mode: session.capacity_mode,
           max_attendees: session.max_attendees, is_free: session.is_free,
           price: session.is_free ? null : session.price,
@@ -176,7 +198,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
       } else {
         reset({
           title: '', description: '', subject_id: '', faculty_id: '',
-          scheduled_date: '', scheduled_time: '', duration_minutes: 60,
+          start_date: '', start_time: '', end_date: '', end_time: '',
           platform: 'zoom', enrollment_mode: 'enrollment_required',
           capacity_mode: 'limited', max_attendees: 100,
           is_free: false, price: 299,
@@ -194,8 +216,8 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
 
   const handleFormSubmit = async (data: SessionFormValues) => {
     try {
-      const startDateTime = new Date(`${data.scheduled_date}T${data.scheduled_time}:00`)
-      const endDateTime = new Date(startDateTime.getTime() + data.duration_minutes * 60000)
+      const startDateTime = new Date(`${data.start_date}T${data.start_time}:00`)
+      const endDateTime = new Date(`${data.end_date}T${data.end_time}:00`)
 
       let thumbnailUrl = existingThumbnailUrl || undefined
       let thumbnailS3Key = existingThumbnailS3Key || undefined
@@ -391,21 +413,29 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="scheduled_date">Date <span className="text-red-500">*</span></Label>
-              <Input id="scheduled_date" type="date" disabled={isSubmitting || isUploading} {...register('scheduled_date')} />
-              {errors.scheduled_date && <p className="text-sm text-red-500">{errors.scheduled_date.message}</p>}
+              <Label htmlFor="start_date">Start Date <span className="text-red-500">*</span></Label>
+              <Input id="start_date" type="date" disabled={isSubmitting || isUploading} {...register('start_date')} />
+              {errors.start_date && <p className="text-sm text-red-500">{errors.start_date.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="scheduled_time">Start Time <span className="text-red-500">*</span></Label>
-              <Input id="scheduled_time" type="time" disabled={isSubmitting || isUploading} {...register('scheduled_time')} />
-              {errors.scheduled_time && <p className="text-sm text-red-500">{errors.scheduled_time.message}</p>}
+              <Label htmlFor="start_time">Start Time <span className="text-red-500">*</span></Label>
+              <Input id="start_time" type="time" disabled={isSubmitting || isUploading} {...register('start_time')} />
+              {errors.start_time && <p className="text-sm text-red-500">{errors.start_time.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="end_date">End Date <span className="text-red-500">*</span></Label>
+              <Input id="end_date" type="date" disabled={isSubmitting || isUploading} {...register('end_date')} />
+              {errors.end_date && <p className="text-sm text-red-500">{errors.end_date.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="duration_minutes">Duration (min) <span className="text-red-500">*</span></Label>
-              <Input id="duration_minutes" type="number" min={15} max={480} step={15} disabled={isSubmitting || isUploading} {...register('duration_minutes', { valueAsNumber: true })} />
-              {errors.duration_minutes && <p className="text-sm text-red-500">{errors.duration_minutes.message}</p>}
+              <Label htmlFor="end_time">End Time <span className="text-red-500">*</span></Label>
+              <Input id="end_time" type="time" disabled={isSubmitting || isUploading} {...register('end_time')} />
+              {errors.end_time && <p className="text-sm text-red-500">{errors.end_time.message}</p>}
             </div>
           </div>
 
