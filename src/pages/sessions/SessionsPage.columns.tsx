@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { LiveSession } from '@/services/liveSessions.service'
-import { MoreVertical, Pencil, Trash2, XCircle } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, XCircle } from 'lucide-react'
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-blue-500/10 text-blue-600 border-blue-200',
@@ -25,13 +25,13 @@ const platformLabels: Record<string, string> = {
 interface SessionsColumnsProps {
   onEdit: (session: LiveSession) => void
   onCancel: (session: LiveSession) => void
-  onDelete: (session: LiveSession) => void
+  onArchive: (session: LiveSession) => void
 }
 
 export function useSessionsColumns({
   onEdit,
   onCancel,
-  onDelete,
+  onArchive,
 }: SessionsColumnsProps): ColumnDef<LiveSession>[] {
   return [
     {
@@ -142,8 +142,8 @@ export function useSessionsColumns({
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(session)} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />Delete
+            <DropdownMenuItem onClick={() => onArchive(session)} className="text-amber-600">
+              <Archive className="mr-2 h-4 w-4" />Archive
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

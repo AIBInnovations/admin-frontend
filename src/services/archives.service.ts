@@ -3,7 +3,7 @@ import type { ListResponse, BaseListParams } from '@/types/api.types'
 
 export interface ArchivedItem {
   _id: string
-  _type: 'video' | 'document' | 'banner'
+  _type: 'video' | 'document' | 'banner' | 'live_session'
   title: string
   archivedAt: string
   createdAt: string
@@ -20,17 +20,22 @@ export interface ArchivedItem {
   // Banner-specific
   image_url?: string
   is_active?: boolean
+  // Live session-specific
+  scheduled_start_time?: string
+  status?: string
+  platform?: string
 }
 
 export interface ArchiveCounts {
   video: number
   document: number
   banner: number
+  live_session: number
   total: number
 }
 
 export interface ArchivesListParams extends BaseListParams {
-  type?: 'video' | 'document' | 'banner' | 'all'
+  type?: 'video' | 'document' | 'banner' | 'live_session' | 'all'
 }
 
 class ArchivesService {
@@ -56,13 +61,13 @@ class ArchivesService {
     return apiService.get<ArchiveCounts>(`${this.basePath}/counts`)
   }
 
-  async restore(type: 'video' | 'document' | 'banner', id: string): Promise<ApiResponse<void>> {
-    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners' }
+  async restore(type: 'video' | 'document' | 'banner' | 'live_session', id: string): Promise<ApiResponse<void>> {
+    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners', live_session: 'live-sessions' }
     return apiService.patch<void>(`admin/${typePathMap[type]}/${id}/restore`, {})
   }
 
-  async permanentDelete(type: 'video' | 'document' | 'banner', id: string): Promise<ApiResponse<void>> {
-    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners' }
+  async permanentDelete(type: 'video' | 'document' | 'banner' | 'live_session', id: string): Promise<ApiResponse<void>> {
+    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners', live_session: 'live-sessions' }
     return apiService.delete<void>(`admin/${typePathMap[type]}/${id}`)
   }
 }

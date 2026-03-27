@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table'
 import {
   Video, Users, Calendar, Clock, DollarSign, Settings,
-  Monitor, Link as LinkIcon, UserCheck, Eye, Edit, Trash2,
+  Monitor, Link as LinkIcon, UserCheck, Eye, Edit, Archive,
   CheckCircle, XCircle, AlertCircle, PlayCircle, ExternalLink, Film,
   Package, Loader2,
 } from 'lucide-react'
@@ -27,7 +27,7 @@ import { liveSessionsService, LiveSession, LiveSessionFormData } from '@/service
 import { recordingsService, Recording } from '@/services/recordings.service'
 import { packageTypesService, PackageType } from '@/services/packageTypes.service'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
-import { DeleteModal } from '@/components/modals/DeleteModal'
+import { ArchiveModal } from '@/components/modals/ArchiveModal'
 
 export function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -36,7 +36,10 @@ export function SessionDetailPage() {
   const [session, setSession] = useState<LiveSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
+  const [archiveBlocked, setArchiveBlocked] = useState(false)
+  const [archiveBlockReason, setArchiveBlockReason] = useState('')
+  const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [loadingRecordings, setLoadingRecordings] = useState(true)
 
@@ -92,8 +95,27 @@ export function SessionDetailPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = () => {
-    setDeleteModalOpen(true)
+  const handleArchiveClick = async () => {
+    setArchiveModalOpen(true)
+    setLoadingArchiveImpact(true)
+    setArchiveBlocked(false)
+    setArchiveBlockReason('')
+
+    try {
+      const response = await liveSessionsService.getDeleteImpact(session!._id)
+      if (response.success && response.data && response.data.blocked) {
+        setArchiveBlocked(true)
+        const reasons = response.data.dependencies
+          ?.filter((d: any) => d.blocking)
+          .map((d: any) => `${d.count} ${d.label}`)
+          .join(', ')
+        setArchiveBlockReason(`Cannot archive. Remove dependencies first: ${reasons}`)
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check dependencies')
+    } finally {
+      setLoadingArchiveImpact(false)
+    }
   }
 
   const handleFormSubmit = async (data: LiveSessionFormData) => {
@@ -113,19 +135,19 @@ export function SessionDetailPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleArchiveConfirm = async () => {
     if (!session) return
     try {
-      const response = await liveSessionsService.delete(session._id)
+      const response = await liveSessionsService.archive(session._id)
       if (response.success) {
-        toast.success('Session deleted successfully')
+        toast.success('Session archived successfully')
         navigate('/sessions')
       } else {
-        toast.error(response.message || 'Failed to delete session')
-        throw new Error(response.message || 'Failed to delete session')
+        toast.error(response.message || 'Failed to archive session')
+        throw new Error(response.message || 'Failed to archive session')
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete session')
+      toast.error(error.message || 'Failed to archive session')
       throw error
     }
   }
@@ -275,9 +297,9 @@ export function SessionDetailPage() {
               <Edit className="mr-2 h-4 w-4" />
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDeleteClick}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+            <Button variant="outline" size="sm" onClick={handleArchiveClick}>
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
             </Button>
           </div>
         }
@@ -702,13 +724,16 @@ export function SessionDetailPage() {
         mode="edit"
       />
 
-      {/* Delete Modal */}
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Session"
+      {/* Archive Modal */}
+      <ArchiveModal
+        open={archiveModalOpen}
+        onClose={() => { setArchiveModalOpen(false); setArchiveBlocked(false); setArchiveBlockReason(''); }}
+        onConfirm={handleArchiveConfirm}
+        title="Archive Session"
         itemName={session.title}
+        isLoadingImpact={loadingArchiveImpact}
+        blocked={archiveBlocked}
+        blockReason={archiveBlockReason}
       />
 
       {/* Convert to Package Modal */}

@@ -4,11 +4,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
+import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
 import { Plus, Video } from 'lucide-react'
 import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
 import {
   liveSessionsService, LiveSession, LiveSessionFormData,
 } from '@/services/liveSessions.service'
@@ -29,11 +28,12 @@ export function SessionsPage() {
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedSession, setSelectedSession] = useState<LiveSession | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
+  const [archiveBlocked, setArchiveBlocked] = useState(false)
+  const [archiveBlockReason, setArchiveBlockReason] = useState('')
+  const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
 
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
@@ -95,23 +95,27 @@ export function SessionsPage() {
     setFormModalOpen(true)
   }
 
-  const handleDeleteClick = async (session: LiveSession) => {
+  const handleArchiveClick = async (session: LiveSession) => {
     setSelectedSession(session)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
+    setArchiveModalOpen(true)
+    setLoadingArchiveImpact(true)
+    setArchiveBlocked(false)
+    setArchiveBlockReason('')
+
     try {
       const response = await liveSessionsService.getDeleteImpact(session._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
+      if (response.success && response.data && response.data.blocked) {
+        setArchiveBlocked(true)
+        const reasons = response.data.dependencies
+          ?.filter((d: any) => d.blocking)
+          .map((d: any) => `${d.count} ${d.label}`)
+          .join(', ')
+        setArchiveBlockReason(`Cannot archive. Remove dependencies first: ${reasons}`)
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
+      toast.error(error.message || 'Failed to check dependencies')
     } finally {
-      setLoadingDeleteImpact(false)
+      setLoadingArchiveImpact(false)
     }
   }
 
@@ -156,19 +160,19 @@ export function SessionsPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleArchiveConfirm = async () => {
     if (!selectedSession) return
     try {
-      const response = await liveSessionsService.delete(selectedSession._id)
+      const response = await liveSessionsService.archive(selectedSession._id)
       if (response.success) {
-        toast.success('Session deleted successfully')
+        toast.success('Session archived successfully')
         fetchSessions()
       } else {
-        toast.error(response.message || 'Failed to delete session')
-        throw new Error(response.message || 'Failed to delete session')
+        toast.error(response.message || 'Failed to archive session')
+        throw new Error(response.message || 'Failed to archive session')
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete session')
+      toast.error(error.message || 'Failed to archive session')
       throw error
     }
   }
@@ -194,7 +198,7 @@ export function SessionsPage() {
   const columns = useSessionsColumns({
     onEdit: handleEdit,
     onCancel: handleCancel,
-    onDelete: handleDeleteClick,
+    onArchive: handleArchiveClick,
   })
 
   return (
@@ -257,24 +261,15 @@ export function SessionsPage() {
         mode={modalMode}
       />
 
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Session"
+      <ArchiveModal
+        open={archiveModalOpen}
+        onClose={() => { setArchiveModalOpen(false); setArchiveBlocked(false); setArchiveBlockReason(''); }}
+        onConfirm={handleArchiveConfirm}
+        title="Archive Session"
         itemName={selectedSession?.title}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
+        isLoadingImpact={loadingArchiveImpact}
+        blocked={archiveBlocked}
+        blockReason={archiveBlockReason}
       />
     </div>
   )

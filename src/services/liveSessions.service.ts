@@ -141,6 +141,10 @@ class LiveSessionsService {
     return apiService.get<DeleteImpactResponse>(`${this.basePath}/${sessionId}/delete-impact`)
   }
 
+  async archive(sessionId: string): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/${sessionId}/archive`, {})
+  }
+
   async delete(sessionId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${sessionId}`)
   }
