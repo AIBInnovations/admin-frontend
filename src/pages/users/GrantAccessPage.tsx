@@ -24,6 +24,7 @@ interface GrantHistoryItem {
   name: string
   amount: number
   currency: string
+  invoiceCreated: boolean
   reason: string | null
   grantedAt: string
   expiresAt: string | null
@@ -55,6 +56,7 @@ function buildHistory(detail: UserDetail): GrantHistoryItem[] {
       name: pkg?.name || (p.package_id as string),
       amount: p.amount_paid,
       currency: p.currency || 'INR',
+      invoiceCreated: !!p.zoho_invoice_id,
       reason: p.admin_grant_reason || null,
       grantedAt: p.purchased_at,
       expiresAt: p.expires_at || null,
@@ -75,6 +77,7 @@ function buildHistory(detail: UserDetail): GrantHistoryItem[] {
       name: book?.title || (ep.book_id as string),
       amount: ep.amount_paid,
       currency: ep.currency || 'INR',
+      invoiceCreated: !!ep.zoho_invoice_id,
       reason: ep.admin_grant_reason || null,
       grantedAt: ep.purchased_at,
       expiresAt: null,
@@ -95,6 +98,7 @@ function buildHistory(detail: UserDetail): GrantHistoryItem[] {
       name: session?.title || (sp.session_id as string),
       amount: sp.amount_paid,
       currency: sp.currency || 'INR',
+      invoiceCreated: !!sp.zoho_invoice_id,
       reason: sp.admin_grant_reason || null,
       grantedAt: sp.purchased_at,
       expiresAt: null,
@@ -482,6 +486,7 @@ export function GrantAccessPage() {
                       <TableHead className="text-xs">Type</TableHead>
                       <TableHead className="text-xs">Item</TableHead>
                       <TableHead className="text-xs">Amount</TableHead>
+                      <TableHead className="text-xs">Invoice</TableHead>
                       <TableHead className="text-xs">Reason</TableHead>
                       <TableHead className="text-xs">Granted</TableHead>
                       <TableHead className="text-xs">Expires</TableHead>
@@ -495,6 +500,13 @@ export function GrantAccessPage() {
                         <TableCell className="text-sm font-medium max-w-48 truncate">{item.name}</TableCell>
                         <TableCell className="text-sm">
                           {item.amount > 0 ? `${item.currency} ${item.amount}` : 'Free'}
+                        </TableCell>
+                        <TableCell>
+                          {item.invoiceCreated ? (
+                            <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200">Yes</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-40 truncate" title={item.reason || undefined}>
                           {item.reason || '—'}

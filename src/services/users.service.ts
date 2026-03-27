@@ -13,6 +13,7 @@ export interface UserPurchase {
   package_id: { _id: string; name: string; price: number; duration_days: number }
   payment_gateway: 'zoho_payments' | 'razorpay'
   zoho_payment_id: string | null
+  zoho_invoice_id?: string | null
   amount_paid: number
   currency: string
   payment_status: 'pending' | 'completed' | 'failed' | 'refunded'
@@ -105,6 +106,9 @@ export interface GrantPackageData {
   package_id: string
   duration_days: number
   tier_index?: number
+  create_invoice?: boolean
+  invoice_amount?: number
+  is_inclusive_tax?: boolean
   reason?: string
   notes?: string
 }
@@ -138,6 +142,7 @@ export interface SessionPurchase {
   session_id: { _id: string; title: string; scheduled_start_time: string; price: number } | string
   payment_gateway: 'zoho_payments' | 'razorpay'
   zoho_payment_id: string | null
+  zoho_invoice_id?: string | null
   amount_paid: number
   currency: string
   payment_status: 'pending' | 'completed' | 'failed' | 'refunded'
@@ -156,6 +161,7 @@ export interface EbookPurchase {
   book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string } | string
   payment_gateway: 'zoho_payments'
   zoho_payment_id: string | null
+  zoho_invoice_id?: string | null
   amount_paid: number
   currency: string
   payment_status: 'pending' | 'completed' | 'failed' | 'refunded'

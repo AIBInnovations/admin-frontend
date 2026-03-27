@@ -40,6 +40,34 @@ export interface SendResult {
   total: number
 }
 
+export interface PushPayload {
+  title: string
+  message: string
+  click_url?: string
+  link_type?: 'internal' | 'external' | 'none'
+  external_url?: string
+  internal_route?: string
+  internal_params?: Record<string, string>
+  image_url?: string
+}
+
+export interface NavigationTargetParam {
+  name: string
+  type: string
+  required: boolean
+  label: string
+  options?: string[]
+  autoFrom?: string
+  filterPackageType?: string
+}
+
+export interface NavigationTarget {
+  key: string
+  label: string
+  route: string
+  params: NavigationTargetParam[]
+}
+
 export interface ImageUploadResult {
   uploadUrl: string
   s3Key: string
@@ -107,15 +135,19 @@ class NotificationsService {
     return apiService.post<ImageUploadResult>(`${this.basePath}/upload-image`, { mimeType })
   }
 
-  async sendToAll(data: { title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+  async getNavigationTargets(): Promise<ApiResponse<{ targets: NavigationTarget[] }>> {
+    return apiService.get<{ targets: NavigationTarget[] }>(`${this.basePath}/navigation-targets`)
+  }
+
+  async sendToAll(data: PushPayload): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-all`, data)
   }
 
-  async sendToSubject(data: { subject_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToSubject(data: PushPayload & { subject_id: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-subject`, data)
   }
 
-  async sendToUsers(data: { user_ids: string[]; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToUsers(data: PushPayload & { user_ids: string[] }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-users`, data)
   }
 
@@ -149,11 +181,11 @@ class NotificationsService {
 
   // ── Package & Series Targeting ──
 
-  async sendToPackage(data: { package_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToPackage(data: PushPayload & { package_id: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-package`, data)
   }
 
-  async sendToSeries(data: { series_id: string; title: string; message: string; click_url?: string; image_url?: string }): Promise<ApiResponse<SendResult>> {
+  async sendToSeries(data: PushPayload & { series_id: string }): Promise<ApiResponse<SendResult>> {
     return apiService.post<SendResult>(`${this.basePath}/send-series`, data)
   }
 

@@ -34,6 +34,9 @@ const grantSessionSchema = z.object({
   is_inclusive_tax: z.boolean().optional(),
   reason: z.string().max(500).optional(),
   notes: z.string().max(1000).optional(),
+}).refine((data) => !data.create_invoice || (data.invoice_amount && data.invoice_amount > 0), {
+  message: 'Invoice amount must be greater than 0 when creating an invoice',
+  path: ['invoice_amount'],
 })
 
 const GST_RATE = 0.18
@@ -66,6 +69,7 @@ export function GrantSessionModal({ open, onClose, onSubmit, userName }: GrantSe
       session_id: '',
       create_invoice: false,
       invoice_amount: 0,
+      is_inclusive_tax: false,
       reason: '',
       notes: '',
     },
@@ -112,6 +116,7 @@ export function GrantSessionModal({ open, onClose, onSubmit, userName }: GrantSe
         session_id: '',
         create_invoice: false,
         invoice_amount: 0,
+        is_inclusive_tax: false,
         reason: '',
         notes: '',
       })

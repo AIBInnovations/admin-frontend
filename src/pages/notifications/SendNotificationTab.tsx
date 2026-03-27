@@ -12,16 +12,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2, Package, Layers } from 'lucide-react'
+import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2, Package, Layers, MousePointerClick } from 'lucide-react'
 import { toast } from 'sonner'
 import { notificationsService } from '@/services/notifications.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
 import { packagesService, type Package as PackageType } from '@/services/packages.service'
+import { packageTypesService, type PackageType as PkgType } from '@/services/packageTypes.service'
+import { booksService, type Book } from '@/services/books.service'
 import { seriesService, type Series } from '@/services/series.service'
 import { usersService, type User } from '@/services/users.service'
 
 type TargetAudience = 'all' | 'subject' | 'specific'
 type SubjectScope = 'subscribers' | 'package' | 'series'
+type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
 
 export function SendNotificationTab() {
   // Form state
@@ -29,8 +32,20 @@ export function SendNotificationTab() {
   const [subjectId, setSubjectId] = useState('')
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [clickUrl, setClickUrl] = useState('')
   const [sending, setSending] = useState(false)
+
+  // Click action state (internal screen redirection)
+  const [clickAction, setClickAction] = useState<ClickAction>('none')
+  const [externalUrl, setExternalUrl] = useState('')
+  const [selectedNavPackageId, setSelectedNavPackageId] = useState('')
+  const [selectedBookId, setSelectedBookId] = useState('')
+
+  // Click action data
+  const [navPackages, setNavPackages] = useState<PackageType[]>([])
+  const [navPackageTypes, setNavPackageTypes] = useState<PkgType[]>([])
+  const [navBooks, setNavBooks] = useState<Book[]>([])
+  const [navPackagesLoading, setNavPackagesLoading] = useState(false)
+  const [navBooksLoading, setNavBooksLoading] = useState(false)
 
   // Image upload state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -105,6 +120,54 @@ export function SendNotificationTab() {
         .finally(() => setLoadingSeries(false))
     }
   }, [packageId, subjectScope])
+
+  // Load packages & books for click action when needed
+  useEffect(() => {
+    if (clickAction === 'theory_package' || clickAction === 'practical_package') {
+      if (navPackages.length === 0) {
+        setNavPackagesLoading(true)
+        Promise.all([
+          packagesService.getAll({ is_active: true, limit: 100 } as any),
+          packageTypesService.getAllPublic(),
+        ]).then(([pkgRes, typesRes]) => {
+          if (pkgRes.success && pkgRes.data) setNavPackages(pkgRes.data.entities || [])
+          if (typesRes.success && typesRes.data) setNavPackageTypes(typesRes.data)
+        }).catch(() => toast.error('Failed to load packages'))
+          .finally(() => setNavPackagesLoading(false))
+      }
+    }
+    if (clickAction === 'ebook') {
+      if (navBooks.length === 0) {
+        setNavBooksLoading(true)
+        booksService.getAll({ limit: 100, is_available: true } as any)
+          .then((res) => {
+            if (res.success && res.data) setNavBooks((res.data.entities || []).filter((b: Book) => b.ebook))
+          })
+          .catch(() => toast.error('Failed to load books'))
+          .finally(() => setNavBooksLoading(false))
+      }
+    }
+  }, [clickAction])
+
+  // Package filtering helpers for click action
+  const getNavTypeName = (pkg: PackageType): string => {
+    const ref = pkg.package_type_id as any
+    if (typeof ref === 'object' && ref !== null && 'name' in ref) return ref.name.toLowerCase()
+    return ''
+  }
+
+  const matchesNavType = (pkg: PackageType, typeName: string): boolean => {
+    const name = getNavTypeName(pkg)
+    if (name) return name === typeName
+    const typeId = navPackageTypes.find((t) => t.name.toLowerCase() === typeName)?._id
+    if (!typeId) return false
+    const ref = pkg.package_type_id as any
+    const pkgTypeId = typeof ref === 'object' && ref !== null ? ref._id : ref as string
+    return pkgTypeId === typeId
+  }
+
+  const theoryNavPackages = navPackages.filter((p) => matchesNavType(p, 'theory'))
+  const practicalNavPackages = navPackages.filter((p) => matchesNavType(p, 'practical'))
 
   // Search users with debounce
   const searchUsers = useCallback(async (query: string) => {
@@ -210,7 +273,10 @@ export function SendNotificationTab() {
   const resetForm = () => {
     setTitle('')
     setMessage('')
-    setClickUrl('')
+    setClickAction('none')
+    setExternalUrl('')
+    setSelectedNavPackageId('')
+    setSelectedBookId('')
     setSubjectId('')
     setSubjectScope('subscribers')
     setPackageId('')
@@ -231,6 +297,10 @@ export function SendNotificationTab() {
       if (subjectScope === 'series' && !seriesId) return false
     }
     if (target === 'specific' && selectedUsers.length === 0) return false
+    // Validate click action requirements
+    if (clickAction === 'external_url' && !externalUrl.trim()) return false
+    if ((clickAction === 'theory_package' || clickAction === 'practical_package') && !selectedNavPackageId) return false
+    if (clickAction === 'ebook' && !selectedBookId) return false
     return true
   }
 
@@ -249,10 +319,27 @@ export function SendNotificationTab() {
         }
       }
 
+      // Resolve click action to link fields
+      const resolveLinkData = () => {
+        switch (clickAction) {
+          case 'theory_package':
+            return { link_type: 'internal' as const, internal_route: '/revision-series', internal_params: { packageId: selectedNavPackageId } }
+          case 'practical_package':
+            return { link_type: 'internal' as const, internal_route: '/practical-series', internal_params: { packageId: selectedNavPackageId } }
+          case 'ebook':
+            return { link_type: 'internal' as const, internal_route: '/ebook-store', internal_params: { bookId: selectedBookId } }
+          case 'external_url':
+            return { link_type: 'external' as const, external_url: externalUrl.trim() }
+          default:
+            return { link_type: 'none' as const }
+        }
+      }
+
+      const linkData = resolveLinkData()
       const payload = {
         title: title.trim(),
         message: message.trim(),
-        ...(clickUrl.trim() && { click_url: clickUrl.trim() }),
+        ...linkData,
         ...(finalImageUrl && { image_url: finalImageUrl }),
       }
 
@@ -620,18 +707,114 @@ export function SendNotificationTab() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notif-url">Click URL <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              <Input
-                id="notif-url"
-                type="url"
-                placeholder="https://pgme.app/sessions/abc123"
-                value={clickUrl}
-                onChange={(e) => setClickUrl(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Deep link users will be taken to when they tap the notification
-              </p>
+            {/* Click Action (internal screen redirection) */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  Click Action <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Select
+                  value={clickAction}
+                  onValueChange={(v) => { setClickAction(v as ClickAction); setSelectedNavPackageId(''); setSelectedBookId(''); setExternalUrl('') }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Action</SelectItem>
+                    <SelectItem value="external_url">External URL</SelectItem>
+                    <SelectItem value="theory_package">Open Theory Package</SelectItem>
+                    <SelectItem value="practical_package">Open Practical Package</SelectItem>
+                    <SelectItem value="ebook">Open Ebook Store</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {clickAction === 'none' && 'No navigation when the notification is tapped.'}
+                  {clickAction === 'external_url' && 'Opens an external URL in the browser.'}
+                  {clickAction === 'theory_package' && 'Navigates to the selected theory package screen in the app.'}
+                  {clickAction === 'practical_package' && 'Navigates to the selected practical package screen in the app.'}
+                  {clickAction === 'ebook' && 'Opens the ebook store in the app.'}
+                </p>
+              </div>
+
+              {/* External URL input */}
+              {clickAction === 'external_url' && (
+                <div className="space-y-2">
+                  <Label htmlFor="notif-external-url">External URL <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="notif-external-url"
+                    type="url"
+                    placeholder="https://..."
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* Package selector */}
+              {(clickAction === 'theory_package' || clickAction === 'practical_package') && (
+                <div className="space-y-2">
+                  <Label>
+                    Select {clickAction === 'theory_package' ? 'Theory' : 'Practical'} Package <span className="text-red-500">*</span>
+                  </Label>
+                  {navPackagesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading packages...
+                    </div>
+                  ) : (
+                    <Select value={selectedNavPackageId} onValueChange={setSelectedNavPackageId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={`Select a ${clickAction === 'theory_package' ? 'theory' : 'practical'} package`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(clickAction === 'theory_package' ? theoryNavPackages : practicalNavPackages).length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No {clickAction === 'theory_package' ? 'theory' : 'practical'} packages found
+                          </div>
+                        ) : (
+                          (clickAction === 'theory_package' ? theoryNavPackages : practicalNavPackages).map((pkg) => (
+                            <SelectItem key={pkg._id} value={pkg._id}>
+                              {pkg.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
+              {/* Book selector */}
+              {clickAction === 'ebook' && (
+                <div className="space-y-2">
+                  <Label>Select Book <span className="text-red-500">*</span></Label>
+                  {navBooksLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading books...
+                    </div>
+                  ) : (
+                    <Select value={selectedBookId} onValueChange={setSelectedBookId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a book" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {navBooks.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No ebooks found</div>
+                        ) : (
+                          navBooks.map((book) => (
+                            <SelectItem key={book._id} value={book._id}>
+                              {book.title}{book.author ? ` — ${book.author}` : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

@@ -21,17 +21,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, Package as PackageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { GrantPackageData } from '@/services/users.service'
 import { type Package, packagesService } from '@/services/packages.service'
 
+const GST_RATE = 0.18
+
 const grantPackageSchema = z.object({
   package_id: z.string().min(1, 'Package is required'),
   duration_days: z.number().min(1, 'Min 1 day').max(3650, 'Max 3650 days'),
   tier_index: z.number().optional(),
+  create_invoice: z.boolean().optional(),
+  invoice_amount: z.number().min(0).optional(),
+  is_inclusive_tax: z.boolean().optional(),
   reason: z.string().max(500).optional(),
   notes: z.string().max(1000).optional(),
+}).refine((data) => !data.create_invoice || (data.invoice_amount && data.invoice_amount > 0), {
+  message: 'Invoice amount must be greater than 0 when creating an invoice',
+  path: ['invoice_amount'],
 })
 
 type GrantPackageFormValues = z.infer<typeof grantPackageSchema>
@@ -62,12 +71,19 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
       package_id: '',
       duration_days: 365,
       tier_index: undefined,
+      create_invoice: false,
+      invoice_amount: 0,
+      is_inclusive_tax: false,
       reason: '',
       notes: '',
     },
   })
 
   const watchPackageId = watch('package_id')
+  const watchCreateInvoice = watch('create_invoice')
+  const watchInvoiceAmount = watch('invoice_amount')
+  const watchInclusiveTax = watch('is_inclusive_tax')
+  const watchTierIndex = watch('tier_index')
 
   // Fetch packages
   useEffect(() => {
@@ -94,11 +110,25 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
       // Auto-set duration from package default
       if (pkg) {
         setValue('duration_days', pkg.duration_days)
+        // Auto-populate invoice amount with package price
+        const effectivePrice = pkg.is_on_sale && pkg.sale_price ? pkg.sale_price : (pkg.price ?? 0)
+        setValue('invoice_amount', effectivePrice)
       }
     } else {
       setSelectedPackage(null)
     }
   }, [watchPackageId, packages, setValue])
+
+  // Update invoice amount when tier changes
+  useEffect(() => {
+    if (selectedPackage?.tiers && selectedPackage.tiers.length > 0 && watchTierIndex !== undefined) {
+      const tier = selectedPackage.tiers[watchTierIndex]
+      if (tier) {
+        setValue('duration_days', tier.duration_days)
+        setValue('invoice_amount', tier.price ?? 0)
+      }
+    }
+  }, [watchTierIndex, selectedPackage, setValue])
 
   // Reset form
   useEffect(() => {
@@ -107,6 +137,9 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
         package_id: '',
         duration_days: 365,
         tier_index: undefined,
+        create_invoice: false,
+        invoice_amount: 0,
+        is_inclusive_tax: false,
         reason: '',
         notes: '',
       })
@@ -120,6 +153,20 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
   }
 
   const hasTiers = selectedPackage?.tiers && selectedPackage.tiers.length > 0
+
+  // Get current effective price for display
+  const getDefaultPrice = () => {
+    if (hasTiers && watchTierIndex !== undefined) {
+      const tier = selectedPackage.tiers[watchTierIndex]
+      return tier?.price ?? 0
+    }
+    if (selectedPackage) {
+      return selectedPackage.is_on_sale && selectedPackage.sale_price
+        ? selectedPackage.sale_price
+        : (selectedPackage.price ?? 0)
+    }
+    return 0
+  }
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
@@ -232,6 +279,119 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
             </p>
           </div>
 
+          {/* Invoice Toggle */}
+          <div className="flex items-center space-x-2">
+            <Controller
+              name="create_invoice"
+              control={control}
+              render={({ field }) => (
+                <Checkbox
+                  id="create_invoice"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={isSubmitting}
+                />
+              )}
+            />
+            <Label htmlFor="create_invoice" className="text-sm font-normal cursor-pointer">
+              Create Zoho Invoice (payment collected externally)
+            </Label>
+          </div>
+
+          {/* Invoice Amount + Tax Mode (shown only when invoice toggle is ON) */}
+          {watchCreateInvoice && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="invoice_amount">
+                  Amount (INR) <span className="text-red-500">*</span>
+                </Label>
+                <Controller
+                  name="invoice_amount"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="invoice_amount"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      disabled={isSubmitting}
+                      {...field}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value)
+                        field.onChange(Number.isNaN(v) ? 0 : v)
+                      }}
+                    />
+                  )}
+                />
+                {errors.invoice_amount && (
+                  <p className="text-sm text-red-500">{errors.invoice_amount.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Enter the amount collected. Default: package price ₹{getDefaultPrice()}
+                </p>
+              </div>
+
+              {/* Tax Mode */}
+              <div className="flex items-center space-x-2">
+                <Controller
+                  name="is_inclusive_tax"
+                  control={control}
+                  render={({ field }) => (
+                    <Checkbox
+                      id="is_inclusive_tax"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  )}
+                />
+                <Label htmlFor="is_inclusive_tax" className="text-sm font-normal cursor-pointer">
+                  Amount is inclusive of GST (18%)
+                </Label>
+              </div>
+
+              {/* Price Breakdown Preview */}
+              {watchInvoiceAmount && watchInvoiceAmount > 0 && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+                  {watchInclusiveTax ? (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Base amount</span>
+                        <span>₹{(watchInvoiceAmount / (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>GST (18%)</span>
+                        <span>₹{(watchInvoiceAmount - watchInvoiceAmount / (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium border-t pt-1">
+                        <span>Invoice Total</span>
+                        <span>₹{watchInvoiceAmount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Base amount</span>
+                        <span>₹{watchInvoiceAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>GST (18%)</span>
+                        <span>₹{(watchInvoiceAmount * GST_RATE).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium border-t pt-1">
+                        <span>Invoice Total</span>
+                        <span>₹{(watchInvoiceAmount * (1 + GST_RATE)).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Final amount calculated by Zoho based on customer's state (CGST+SGST or IGST).
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Reason */}
           <div className="space-y-2">
             <Label htmlFor="reason">Reason</Label>
@@ -266,7 +426,11 @@ export function GrantPackageModal({ open, onClose, onSubmit, userName }: GrantPa
               </div>
               <p className="text-muted-foreground">
                 User will get <strong>{selectedPackage.name}</strong> for{' '}
-                <strong>{watch('duration_days')} days</strong> at no cost.
+                <strong>{watch('duration_days')} days</strong>
+                {watchCreateInvoice && watchInvoiceAmount && watchInvoiceAmount > 0
+                  ? <> for <strong>₹{watchInvoiceAmount}</strong> (invoice will be created).</>
+                  : <> at no cost.</>
+                }
               </p>
             </div>
           )}
