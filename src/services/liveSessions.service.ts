@@ -23,6 +23,7 @@ export interface LiveSession {
   status: 'scheduled' | 'live' | 'completed' | 'cancelled'
   max_attendees: number | null
   current_attendees: number
+  enrollment_count: number
   thumbnail_url: string | null
   thumbnail_s3_key: string | null
   visible_to: VisibleTo

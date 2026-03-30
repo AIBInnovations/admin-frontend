@@ -521,16 +521,23 @@ export function SessionDetailPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Current Attendees</p>
+                <p className="text-xs text-muted-foreground mb-1">Enrolled Users</p>
+                <p className="text-sm font-medium">{session.enrollment_count || 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Current Attendees{' '}
+                  <span className="text-muted-foreground font-normal">(users who joined the live meeting)</span>
+                </p>
                 <p className="text-sm font-medium">{session.current_attendees || 0}</p>
               </div>
-              {session.max_attendees && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Max Attendees</p>
-                  <p className="text-sm font-medium">{session.max_attendees}</p>
-                </div>
-              )}
             </div>
+            {session.max_attendees && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Max Attendees</p>
+                <p className="text-sm font-medium">{session.max_attendees}</p>
+              </div>
+            )}
             {/* Waitlist and guaranteed seats are always enabled */}
           </CardContent>
         </Card>
