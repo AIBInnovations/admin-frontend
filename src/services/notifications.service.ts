@@ -210,6 +210,20 @@ class NotificationsService {
   async sendSmsToSeries(data: { series_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-series`, data)
   }
+
+  // ── Session Enrollee Targeting ──
+
+  async sendToSession(data: PushPayload & { session_id: string }): Promise<ApiResponse<SendResult>> {
+    return apiService.post<SendResult>(`${this.basePath}/send-session`, data)
+  }
+
+  async sendEmailToSession(data: { session_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-email-session`, data, { timeout: 120000 })
+  }
+
+  async sendSmsToSession(data: { session_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
+    return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-session`, data)
+  }
 }
 
 export const notificationsService = new NotificationsService()

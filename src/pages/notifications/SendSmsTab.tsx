@@ -12,15 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MessageSquare, Users, BookOpen, UserCheck, X, Search, Loader2, Send, Package, Layers } from 'lucide-react'
+import { MessageSquare, Users, BookOpen, UserCheck, X, Search, Loader2, Send, Package, Layers, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { notificationsService } from '@/services/notifications.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
 import { usersService, type User } from '@/services/users.service'
 import { packagesService, type Package as PackageType } from '@/services/packages.service'
 import { seriesService, type Series } from '@/services/series.service'
+import { liveSessionsService, type LiveSession } from '@/services/liveSessions.service'
 
-type TargetAudience = 'all' | 'subject' | 'specific'
+type TargetAudience = 'all' | 'subject' | 'specific' | 'session'
 type SubjectScope = 'subscribers' | 'package' | 'series'
 
 // SMS character limits
@@ -56,6 +57,11 @@ export function SendSmsTab() {
   const [searchingUsers, setSearchingUsers] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
 
+  // Session selection
+  const [sessions, setSessions] = useState<LiveSession[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(false)
+  const [sessionId, setSessionId] = useState('')
+
   // Message
   const [message, setMessage] = useState('')
 
@@ -77,6 +83,20 @@ export function SendSmsTab() {
         .finally(() => setLoadingSubjects(false))
     }
   }, [target, subjects.length])
+
+  // Load sessions when target changes to 'session'
+  useEffect(() => {
+    if (target === 'session' && sessions.length === 0) {
+      setLoadingSessions(true)
+      liveSessionsService
+        .getAll({ limit: 100, publish_status: 'published' })
+        .then((res) => {
+          if (res.success && res.data) setSessions(res.data.entities || [])
+        })
+        .catch(() => toast.error('Failed to load sessions'))
+        .finally(() => setLoadingSessions(false))
+    }
+  }, [target, sessions.length])
 
   // Load packages when subject is selected and scope is package or series
   useEffect(() => {
@@ -157,6 +177,7 @@ export function SendSmsTab() {
       if (subjectScope === 'series' && !seriesId) return false
     }
     if (target === 'specific' && selectedUsers.length === 0) return false
+    if (target === 'session' && !sessionId) return false
     return true
   }
 
@@ -177,6 +198,8 @@ export function SendSmsTab() {
         } else {
           response = await notificationsService.sendSmsToSubject({ subject_id: subjectId, message: message.trim() })
         }
+      } else if (target === 'session') {
+        response = await notificationsService.sendSmsToSession({ session_id: sessionId, message: message.trim() })
       } else {
         response = await notificationsService.sendSmsToUsers({
           user_ids: selectedUsers.map((u) => u._id),
@@ -209,6 +232,7 @@ export function SendSmsTab() {
     setSeriesId('')
     setPackages([])
     setSeries([])
+    setSessionId('')
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -226,13 +250,14 @@ export function SendSmsTab() {
           {/* ── Target Audience ── */}
           <div className="space-y-2">
             <Label>Target Audience</Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {(
                 [
-                  { value: 'all', icon: Users, label: 'All Users', desc: 'Send to everyone' },
-                  { value: 'subject', icon: BookOpen, label: 'By Subject', desc: 'Subject subscribers' },
-                  { value: 'specific', icon: UserCheck, label: 'Specific Users', desc: 'Pick individual users' },
-                ] as const
+                  { value: 'all' as const, icon: Users, label: 'All Users', desc: 'Send to everyone' },
+                  { value: 'subject' as const, icon: BookOpen, label: 'By Subject', desc: 'Subject subscribers' },
+                  { value: 'session' as const, icon: Video, label: 'By Session', desc: 'Session enrollees' },
+                  { value: 'specific' as const, icon: UserCheck, label: 'Specific Users', desc: 'Pick individual users' },
+                ]
               ).map(({ value, icon: Icon, label, desc }) => (
                 <button
                   key={value}
@@ -380,6 +405,33 @@ export function SendSmsTab() {
             </div>
           )}
 
+          {/* ── Session selector ── */}
+          {target === 'session' && (
+            <div className="space-y-2">
+              <Label>Live Session</Label>
+              {loadingSessions ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading sessions...
+                </div>
+              ) : (
+                <Select value={sessionId} onValueChange={setSessionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a live session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sessions.map((s) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        {s.title}
+                        {s.enrollment_count !== undefined ? ` (${s.enrollment_count} enrolled)` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           {/* ── User selector ── */}
           {target === 'specific' && (
             <div className="space-y-3">
@@ -495,6 +547,8 @@ export function SendSmsTab() {
               {target === 'subject' && subjectId && subjectScope === 'package' && packageId && 'Sending to package purchasers with a registered phone'}
               {target === 'subject' && subjectId && subjectScope === 'series' && !seriesId && 'Select a package and series'}
               {target === 'subject' && subjectId && subjectScope === 'series' && seriesId && 'Sending to series users with a registered phone'}
+              {target === 'session' && !sessionId && 'Select a live session first'}
+              {target === 'session' && sessionId && 'Sending to all confirmed enrollees of the selected session'}
               {target === 'specific' && selectedUsers.length > 0 && `Sending to ${selectedUsers.length} selected user${selectedUsers.length > 1 ? 's' : ''}`}
               {target === 'specific' && selectedUsers.length === 0 && 'Search and select users first'}
             </p>
