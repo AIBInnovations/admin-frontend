@@ -26,6 +26,7 @@ import {
 import { Package, packagesService } from '@/services/packages.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { Book, booksService } from '@/services/books.service'
+import { LiveSession, liveSessionsService } from '@/services/liveSessions.service'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ const DEFAULT_VALUES: FormValues = {
 
 // ─── Click action types (same as banners) ────────────────────────────────────
 
-type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
+type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
 
 /** Derive click action from stored item fields */
 function deriveClickAction(item: HomeSectionItem): ClickAction {
@@ -99,6 +100,7 @@ function deriveClickAction(item: HomeSectionItem): ClickAction {
     if (item.internal_route === '/revision-series') return 'theory_package'
     if (item.internal_route === '/practical-series') return 'practical_package'
     if (item.internal_route === '/ebook-store') return 'ebook'
+    if (item.internal_route === '/session/:id') return 'live_session'
   }
   return 'none'
 }
@@ -128,15 +130,19 @@ export function HomeSectionItemFormModal({
   const [secondaryClickAction, setSecondaryClickAction] = useState<ClickAction>('none')
   const [selectedPackageId, setSelectedPackageId] = useState('')
   const [selectedBookId, setSelectedBookId] = useState('')
+  const [selectedSessionId, setSelectedSessionId] = useState('')
   const [selectedSecondaryPackageId, setSelectedSecondaryPackageId] = useState('')
   const [selectedSecondaryBookId, setSelectedSecondaryBookId] = useState('')
+  const [selectedSecondarySessionId, setSelectedSecondarySessionId] = useState('')
 
   // ── Package & book data ───────────────────────────────────────────────
   const [packages, setPackages] = useState<Package[]>([])
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
   const [books, setBooks] = useState<Book[]>([])
+  const [sessions, setSessions] = useState<LiveSession[]>([])
   const [packagesLoading, setPackagesLoading] = useState(false)
   const [booksLoading, setBooksLoading] = useState(false)
+  const [sessionsLoading, setSessionsLoading] = useState(false)
 
   // ── Image / icon state ──────────────────────────────────────────────────
   const [imageFile, setImageFile] = useState<File[]>([])
@@ -216,6 +222,12 @@ export function HomeSectionItemFormModal({
     booksService.getAll({ limit: 100, is_available: true } as any).then(res => {
       if (res.success && res.data) setBooks((res.data.entities || []).filter((b: Book) => b.ebook))
     }).catch(() => {}).finally(() => setBooksLoading(false))
+
+    // Fetch live sessions
+    setSessionsLoading(true)
+    liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any).then(res => {
+      if (res.success && res.data) setSessions(res.data.entities || [])
+    }).catch(() => {}).finally(() => setSessionsLoading(false))
   }, [open])
 
   // ── 2. Initialize form once reference data is ready ─────────────────────
@@ -260,6 +272,7 @@ export function HomeSectionItemFormModal({
       setPrimaryClickAction(deriveClickAction(item))
       setSelectedPackageId(item.internal_params?.packageId || '')
       setSelectedBookId(item.internal_params?.bookId || '')
+      setSelectedSessionId(item.internal_params?.id || '')
 
       // Secondary
       const secAction = (() => {
@@ -268,12 +281,14 @@ export function HomeSectionItemFormModal({
           if (item.secondary_internal_route === '/revision-series') return 'theory_package' as ClickAction
           if (item.secondary_internal_route === '/practical-series') return 'practical_package' as ClickAction
           if (item.secondary_internal_route === '/ebook-store') return 'ebook' as ClickAction
+          if (item.secondary_internal_route === '/session/:id') return 'live_session' as ClickAction
         }
         return 'none' as ClickAction
       })()
       setSecondaryClickAction(secAction)
       setSelectedSecondaryPackageId(item.secondary_internal_params?.packageId || '')
       setSelectedSecondaryBookId(item.secondary_internal_params?.bookId || '')
+      setSelectedSecondarySessionId(item.secondary_internal_params?.id || '')
     } else {
       reset(DEFAULT_VALUES)
       setExistingImageUrl(null)
@@ -282,8 +297,10 @@ export function HomeSectionItemFormModal({
       setSecondaryClickAction('none')
       setSelectedPackageId('')
       setSelectedBookId('')
+      setSelectedSessionId('')
       setSelectedSecondaryPackageId('')
       setSelectedSecondaryBookId('')
+      setSelectedSecondarySessionId('')
     }
 
     setFormReady(true)
@@ -346,7 +363,7 @@ export function HomeSectionItemFormModal({
       }
 
       // Build submission data — map click actions to backend fields (same as banners)
-      const resolveAction = (action: ClickAction, pkgId: string, bookId: string): {
+      const resolveAction = (action: ClickAction, pkgId: string, bookId: string, sessionId: string): {
         link_type: string
         internal_route?: string
         internal_params?: Record<string, string>
@@ -358,6 +375,8 @@ export function HomeSectionItemFormModal({
             return { link_type: 'internal', internal_route: '/practical-series', internal_params: { packageId: pkgId } }
           case 'ebook':
             return { link_type: 'internal', internal_route: '/ebook-store', internal_params: { bookId } }
+          case 'live_session':
+            return { link_type: 'internal', internal_route: '/session/:id', internal_params: { id: sessionId } }
           case 'external_url':
             return { link_type: 'external' }
           default:
@@ -365,8 +384,8 @@ export function HomeSectionItemFormModal({
         }
       }
 
-      const primary = resolveAction(primaryClickAction, selectedPackageId, selectedBookId)
-      const secondary = resolveAction(secondaryClickAction, selectedSecondaryPackageId, selectedSecondaryBookId)
+      const primary = resolveAction(primaryClickAction, selectedPackageId, selectedBookId, selectedSessionId)
+      const secondary = resolveAction(secondaryClickAction, selectedSecondaryPackageId, selectedSecondaryBookId, selectedSecondarySessionId)
 
       const submitData: HomeSectionItemFormData = {
         card_type: data.card_type,
@@ -445,6 +464,8 @@ export function HomeSectionItemFormModal({
     setPkgId: (v: string) => void,
     bookId: string,
     setBookId: (v: string) => void,
+    sessionId: string,
+    setSessionId: (v: string) => void,
   ) => {
     const externalUrlField = isSecondary ? 'secondary_external_url' : 'external_url'
     const buttonTextField = isSecondary ? 'secondary_button_text' : 'button_text'
@@ -464,7 +485,7 @@ export function HomeSectionItemFormModal({
           <Label className="text-xs">{isSecondary ? 'Secondary ' : ''}Click Action</Label>
           <Select
             value={clickAction}
-            onValueChange={(v) => { setClickAction(v as ClickAction); setPkgId(''); setBookId('') }}
+            onValueChange={(v) => { setClickAction(v as ClickAction); setPkgId(''); setBookId(''); setSessionId('') }}
           >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -475,6 +496,7 @@ export function HomeSectionItemFormModal({
               <SelectItem value="theory_package">Theory Package</SelectItem>
               <SelectItem value="practical_package">Practical Package</SelectItem>
               <SelectItem value="ebook">Book</SelectItem>
+              <SelectItem value="live_session">Live Session</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
@@ -483,6 +505,7 @@ export function HomeSectionItemFormModal({
             {clickAction === 'theory_package' && 'Navigates to the selected theory package screen.'}
             {clickAction === 'practical_package' && 'Navigates to the selected practical package screen.'}
             {clickAction === 'ebook' && 'Opens the selected book details page.'}
+            {clickAction === 'live_session' && 'Opens the selected live session details.'}
           </p>
         </div>
 
@@ -550,6 +573,34 @@ export function HomeSectionItemFormModal({
                   books.map((book) => (
                     <SelectItem key={book._id} value={book._id}>
                       {book.title}{book.author ? ` — ${book.author}` : ''}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Live session selector */}
+        {clickAction === 'live_session' && (
+          <div className="space-y-1">
+            <Label className="text-xs">Select Live Session *</Label>
+            <Select
+              value={sessionId}
+              onValueChange={setSessionId}
+              disabled={sessionsLoading}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder={sessionsLoading ? 'Loading sessions...' : 'Select a session'} />
+              </SelectTrigger>
+              <SelectContent>
+                {sessions.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No scheduled sessions found</div>
+                ) : (
+                  sessions.map((session) => (
+                    <SelectItem key={session._id} value={session._id}>
+                      {session.title}
+                      {session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
                     </SelectItem>
                   ))
                 )}
@@ -761,6 +812,7 @@ export function HomeSectionItemFormModal({
                   primaryClickAction, setPrimaryClickAction,
                   selectedPackageId, setSelectedPackageId,
                   selectedBookId, setSelectedBookId,
+                  selectedSessionId, setSelectedSessionId,
                 )}
               </div>
 
@@ -772,6 +824,7 @@ export function HomeSectionItemFormModal({
                   secondaryClickAction, setSecondaryClickAction,
                   selectedSecondaryPackageId, setSelectedSecondaryPackageId,
                   selectedSecondaryBookId, setSelectedSecondaryBookId,
+                  selectedSecondarySessionId, setSelectedSecondarySessionId,
                 )}
               </div>
 

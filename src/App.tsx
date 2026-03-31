@@ -44,6 +44,7 @@ import { VideoReviewsPage } from '@/pages/content/VideoReviewsPage'
 import { ArchivesPage } from '@/pages/content/ArchivesPage'
 import { FormsPage } from '@/pages/content/FormsPage'
 import { FormSubmissionsPage } from '@/pages/content/FormSubmissionsPage'
+import { TutorialsPage } from '@/pages/content/TutorialsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
@@ -91,6 +92,7 @@ function App() {
               <Route path="/content/archives" element={<ArchivesPage />} />
               <Route path="/content/forms" element={<FormsPage />} />
               <Route path="/content/forms/:formId/submissions" element={<FormSubmissionsPage />} />
+              <Route path="/content/tutorials" element={<TutorialsPage />} />
 
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />

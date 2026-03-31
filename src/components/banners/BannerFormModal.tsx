@@ -21,13 +21,14 @@ import { Banner, BannerFormData, BannerType, VisibleTo, bannersService } from '@
 import { Package, packagesService } from '@/services/packages.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { Book, booksService } from '@/services/books.service'
+import { LiveSession, liveSessionsService } from '@/services/liveSessions.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: full-width x 140px on phone (~360px wide) ≈ 18:7 */
 const BANNER_ASPECT_RATIO = 18 / 7
 
-type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
+type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -55,6 +56,7 @@ function deriveLinkAction(banner: Banner): LinkAction {
   if (banner.banner_type === 'theory_package') return 'theory_package'
   if (banner.banner_type === 'practical_package') return 'practical_package'
   if (banner.banner_type === 'ebook') return 'ebook'
+  if (banner.banner_type === 'live_session') return 'live_session'
   if (banner.click_url && banner.link_type === 'external') return 'external_url'
   return 'none'
 }
@@ -82,6 +84,11 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [books, setBooks] = useState<Book[]>([])
   const [booksLoading, setBooksLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
+
+  // Live session state
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('')
+  const [sessions, setSessions] = useState<LiveSession[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
 
   // Visibility state
   const [visibleTo, setVisibleTo] = useState<VisibleTo>('all')
@@ -120,6 +127,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
     if (open) {
       fetchPackagesAndTypes()
       fetchBooks()
+      fetchSessions()
       fetchSubjects()
     }
   }, [open])
@@ -161,6 +169,19 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       console.error('Failed to fetch books')
     }
     setBooksLoading(false)
+  }
+
+  const fetchSessions = async () => {
+    setSessionsLoading(true)
+    try {
+      const response = await liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any)
+      if (response.success && response.data) {
+        setSessions(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch sessions')
+    }
+    setSessionsLoading(false)
   }
 
   const fetchSubjects = async () => {
@@ -227,6 +248,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setLinkAction(deriveLinkAction(banner))
         setSelectedPackageId(banner.target_package_id || '')
         setSelectedBookId(banner.target_book_id || '')
+        setSelectedSessionId(banner.target_session_id || '')
         setVisibleTo(banner.visible_to || 'all')
         setSelectedSubjectIds(banner.visible_to_subjects || [])
         setSelectedVisibilityPackageIds(banner.visible_to_packages || [])
@@ -241,6 +263,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setLinkAction('none')
         setSelectedPackageId('')
         setSelectedBookId('')
+        setSelectedSessionId('')
         setVisibleTo('all')
         setSelectedSubjectIds([])
         setSelectedVisibilityPackageIds([])
@@ -298,6 +321,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       let linkType: 'internal' | 'external' | 'none' = 'none'
       let targetPackageId: string | null = null
       let targetBookId: string | null = null
+      let targetSessionId: string | null = null
 
       if (linkAction === 'external_url') {
         bannerType = 'generic'
@@ -315,6 +339,10 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         bannerType = 'ebook'
         linkType = 'internal'
         targetBookId = selectedBookId
+      } else if (linkAction === 'live_session') {
+        bannerType = 'live_session'
+        linkType = 'internal'
+        targetSessionId = selectedSessionId
       }
 
       const formData: BannerFormData = {
@@ -327,6 +355,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         banner_type: bannerType,
         target_package_id: targetPackageId,
         target_book_id: targetBookId,
+        target_session_id: targetSessionId,
         visible_to: visibleTo,
         visible_to_subjects: visibleTo === 'subject' ? selectedSubjectIds : [],
         visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
@@ -374,6 +403,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
     setLinkAction(value)
     setSelectedPackageId('')
     setSelectedBookId('')
+    setSelectedSessionId('')
     setPackageError(null)
     setBookError(null)
   }
@@ -478,6 +508,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 <SelectItem value="theory_package">Theory Package</SelectItem>
                 <SelectItem value="practical_package">Practical Package</SelectItem>
                 <SelectItem value="ebook">Book</SelectItem>
+                <SelectItem value="live_session">Live Session</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -486,6 +517,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
               {linkAction === 'theory_package' && 'Navigates to the selected theory package screen when tapped.'}
               {linkAction === 'practical_package' && 'Navigates to the selected practical package screen when tapped.'}
               {linkAction === 'ebook' && 'Opens the selected book details page when tapped.'}
+              {linkAction === 'live_session' && 'Opens the selected live session details when tapped.'}
             </p>
           </div>
 
@@ -568,6 +600,40 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 </SelectContent>
               </Select>
               {bookError && <p className="text-sm text-red-500">{bookError}</p>}
+            </div>
+          )}
+
+          {/* Live session selector - shown for live_session action */}
+          {linkAction === 'live_session' && (
+            <div className="space-y-2">
+              <Label>
+                Select Live Session <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={selectedSessionId}
+                onValueChange={setSelectedSessionId}
+                disabled={isSubmitting || isUploading || sessionsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    sessionsLoading ? 'Loading sessions...' : 'Select a session'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {sessions.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No scheduled sessions found
+                    </div>
+                  ) : (
+                    sessions.map((session) => (
+                      <SelectItem key={session._id} value={session._id}>
+                        {session.title}
+                        {session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

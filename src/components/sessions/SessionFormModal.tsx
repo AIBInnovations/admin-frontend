@@ -642,9 +642,9 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
     <ImageCropper
       file={cropperFile}
       open={showCropper}
-      aspectRatio={18 / 7}
+      aspectRatio={4 / 5}
       title="Crop Thumbnail"
-      description="Adjust the crop area for the session thumbnail (18:7 ratio)."
+      description="Adjust the crop area for the session thumbnail (4:5 ratio)."
       onClose={() => { setShowCropper(false); setCropperFile(null) }}
       onCropComplete={(croppedFile) => { setThumbnailFile([croppedFile]); setShowCropper(false); setCropperFile(null) }}
     />

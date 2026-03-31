@@ -234,10 +234,10 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
             <ImageUploadWithCrop
               value={thumbnailFile}
               onChange={setThumbnailFile}
-              aspectRatio={3 / 4}
+              aspectRatio={4 / 5}
               maxSize={5 * 1024 * 1024}
               label="Upload thumbnail"
-              description="Recommended ratio: 3:4. Max 5MB. JPEG, PNG, or WebP."
+              description="Recommended ratio: 4:5. Max 5MB. JPEG, PNG, or WebP."
               disabled={isSubmitting}
               currentImageUrl={mode === 'edit' ? series?.thumbnail_url : undefined}
             />

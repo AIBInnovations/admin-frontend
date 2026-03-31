@@ -20,12 +20,12 @@ import { packagesService, type Package as PackageType } from '@/services/package
 import { packageTypesService, type PackageType as PkgType } from '@/services/packageTypes.service'
 import { booksService, type Book } from '@/services/books.service'
 import { seriesService, type Series } from '@/services/series.service'
-import { usersService, type User } from '@/services/users.service'
 import { liveSessionsService, type LiveSession } from '@/services/liveSessions.service'
+import { usersService, type User } from '@/services/users.service'
 
 type TargetAudience = 'all' | 'subject' | 'specific' | 'session'
 type SubjectScope = 'subscribers' | 'package' | 'series'
-type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook'
+type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
 
 export function SendNotificationTab() {
   // Form state
@@ -40,13 +40,16 @@ export function SendNotificationTab() {
   const [externalUrl, setExternalUrl] = useState('')
   const [selectedNavPackageId, setSelectedNavPackageId] = useState('')
   const [selectedBookId, setSelectedBookId] = useState('')
+  const [selectedSessionId, setSelectedSessionId] = useState('')
 
   // Click action data
   const [navPackages, setNavPackages] = useState<PackageType[]>([])
   const [navPackageTypes, setNavPackageTypes] = useState<PkgType[]>([])
   const [navBooks, setNavBooks] = useState<Book[]>([])
+  const [navSessions, setNavSessions] = useState<LiveSession[]>([])
   const [navPackagesLoading, setNavPackagesLoading] = useState(false)
   const [navBooksLoading, setNavBooksLoading] = useState(false)
+  const [navSessionsLoading, setNavSessionsLoading] = useState(false)
 
   // Image upload state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -167,6 +170,17 @@ export function SendNotificationTab() {
           })
           .catch(() => toast.error('Failed to load books'))
           .finally(() => setNavBooksLoading(false))
+      }
+    }
+    if (clickAction === 'live_session') {
+      if (navSessions.length === 0) {
+        setNavSessionsLoading(true)
+        liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any)
+          .then((res) => {
+            if (res.success && res.data) setNavSessions(res.data.entities || [])
+          })
+          .catch(() => toast.error('Failed to load sessions'))
+          .finally(() => setNavSessionsLoading(false))
       }
     }
   }, [clickAction])
@@ -299,6 +313,7 @@ export function SendNotificationTab() {
     setExternalUrl('')
     setSelectedNavPackageId('')
     setSelectedBookId('')
+    setSelectedSessionId('')
     setSubjectId('')
     setSubjectScope('subscribers')
     setPackageId('')
@@ -325,6 +340,7 @@ export function SendNotificationTab() {
     if (clickAction === 'external_url' && !externalUrl.trim()) return false
     if ((clickAction === 'theory_package' || clickAction === 'practical_package') && !selectedNavPackageId) return false
     if (clickAction === 'ebook' && !selectedBookId) return false
+    if (clickAction === 'live_session' && !selectedSessionId) return false
     return true
   }
 
@@ -344,18 +360,20 @@ export function SendNotificationTab() {
       }
 
       // Resolve click action to link fields
-      const resolveLinkData = () => {
+      const resolveLinkData = (): Partial<Pick<import('@/services/notifications.service').PushPayload, 'link_type' | 'external_url' | 'internal_route' | 'internal_params'>> => {
         switch (clickAction) {
           case 'theory_package':
-            return { link_type: 'internal' as const, internal_route: '/revision-series', internal_params: { packageId: selectedNavPackageId } }
+            return { link_type: 'internal', internal_route: '/revision-series', internal_params: { packageId: selectedNavPackageId } }
           case 'practical_package':
-            return { link_type: 'internal' as const, internal_route: '/practical-series', internal_params: { packageId: selectedNavPackageId } }
+            return { link_type: 'internal', internal_route: '/practical-series', internal_params: { packageId: selectedNavPackageId } }
           case 'ebook':
-            return { link_type: 'internal' as const, internal_route: '/ebook-store', internal_params: { bookId: selectedBookId } }
+            return { link_type: 'internal', internal_route: '/ebook-store', internal_params: { bookId: selectedBookId } }
+          case 'live_session':
+            return { link_type: 'internal', internal_route: '/session/:id', internal_params: { id: selectedSessionId } }
           case 'external_url':
-            return { link_type: 'external' as const, external_url: externalUrl.trim() }
+            return { link_type: 'external', external_url: externalUrl.trim() }
           default:
-            return { link_type: 'none' as const }
+            return { link_type: 'none' }
         }
       }
 
@@ -737,7 +755,7 @@ export function SendNotificationTab() {
                 </Label>
                 <Select
                   value={clickAction}
-                  onValueChange={(v) => { setClickAction(v as ClickAction); setSelectedNavPackageId(''); setSelectedBookId(''); setExternalUrl('') }}
+                  onValueChange={(v) => { setClickAction(v as ClickAction); setSelectedNavPackageId(''); setSelectedBookId(''); setSelectedSessionId(''); setExternalUrl('') }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -748,6 +766,7 @@ export function SendNotificationTab() {
                     <SelectItem value="theory_package">Open Theory Package</SelectItem>
                     <SelectItem value="practical_package">Open Practical Package</SelectItem>
                     <SelectItem value="ebook">Open Ebook Store</SelectItem>
+                    <SelectItem value="live_session">Open Live Session</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -756,6 +775,7 @@ export function SendNotificationTab() {
                   {clickAction === 'theory_package' && 'Navigates to the selected theory package screen in the app.'}
                   {clickAction === 'practical_package' && 'Navigates to the selected practical package screen in the app.'}
                   {clickAction === 'ebook' && 'Opens the ebook store in the app.'}
+                  {clickAction === 'live_session' && 'Opens the selected live session details in the app.'}
                 </p>
               </div>
 
@@ -828,6 +848,37 @@ export function SendNotificationTab() {
                           navBooks.map((book) => (
                             <SelectItem key={book._id} value={book._id}>
                               {book.title}{book.author ? ` — ${book.author}` : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
+              {/* Live session selector */}
+              {clickAction === 'live_session' && (
+                <div className="space-y-2">
+                  <Label>Select Live Session <span className="text-red-500">*</span></Label>
+                  {navSessionsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading sessions...
+                    </div>
+                  ) : (
+                    <Select value={selectedSessionId} onValueChange={setSelectedSessionId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a live session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {navSessions.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No scheduled sessions found</div>
+                        ) : (
+                          navSessions.map((session) => (
+                            <SelectItem key={session._id} value={session._id}>
+                              {session.title}
+                              {session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
                             </SelectItem>
                           ))
                         )}
