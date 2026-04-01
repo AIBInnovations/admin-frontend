@@ -24,7 +24,7 @@ import {
   Package, Loader2, Bell, Image,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { liveSessionsService, LiveSession, LiveSessionFormData, Enrollee } from '@/services/liveSessions.service'
+import { liveSessionsService, LiveSession, LiveSessionFormData } from '@/services/liveSessions.service'
 import { recordingsService, Recording } from '@/services/recordings.service'
 import { packageTypesService, PackageType } from '@/services/packageTypes.service'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
@@ -64,11 +64,6 @@ export function SessionDetailPage() {
   // Create banner state
   const [bannerLoading, setBannerLoading] = useState(false)
 
-  // Enrollees state
-  const [enrollees, setEnrollees] = useState<Enrollee[]>([])
-  const [loadingEnrollees, setLoadingEnrollees] = useState(true)
-  const [enrolleesStatusFilter, setEnrolleesStatusFilter] = useState<string>('all')
-  const [enrolleesStats, setEnrolleesStats] = useState<{ confirmed: number; waitlisted: number; cancelled: number }>({ confirmed: 0, waitlisted: 0, cancelled: 0 })
 
   const fetchSession = useCallback(async () => {
     if (!sessionId) return
@@ -109,25 +104,6 @@ export function SessionDetailPage() {
   }, [sessionId])
 
   useEffect(() => { fetchRecordings() }, [fetchRecordings])
-
-  const fetchEnrollees = useCallback(async () => {
-    if (!sessionId) return
-    try {
-      setLoadingEnrollees(true)
-      const statusParam = enrolleesStatusFilter === 'all' ? undefined : enrolleesStatusFilter
-      const response = await liveSessionsService.getEnrollees(sessionId, statusParam)
-      if (response.success && response.data) {
-        setEnrollees(response.data.enrollees || [])
-        setEnrolleesStats(response.data.by_status)
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load enrollees')
-    } finally {
-      setLoadingEnrollees(false)
-    }
-  }, [sessionId, enrolleesStatusFilter])
-
-  useEffect(() => { fetchEnrollees() }, [fetchEnrollees])
 
   const handleEdit = () => {
     setFormModalOpen(true)
@@ -377,6 +353,10 @@ export function SessionDetailPage() {
         ]}
         action={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/sessions/${sessionId}/attendees`)}>
+              <Users className="mr-2 h-4 w-4" />
+              View Attendees
+            </Button>
             <Button variant="outline" size="sm" onClick={handleOpenNotifyModal}>
               <Bell className="mr-2 h-4 w-4" />
               Send Notification
@@ -826,119 +806,6 @@ export function SessionDetailPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Registered Users / Enrollees */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-4 w-4" />
-            Registered Users
-            <Badge variant="secondary" className="text-[10px] ml-1">
-              {enrolleesStats.confirmed + enrolleesStats.waitlisted + enrolleesStats.cancelled}
-            </Badge>
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Select value={enrolleesStatusFilter} onValueChange={setEnrolleesStatusFilter}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All ({enrolleesStats.confirmed + enrolleesStats.waitlisted + enrolleesStats.cancelled})</SelectItem>
-                <SelectItem value="confirmed">Confirmed ({enrolleesStats.confirmed})</SelectItem>
-                <SelectItem value="waitlisted">Waitlisted ({enrolleesStats.waitlisted})</SelectItem>
-                <SelectItem value="cancelled">Cancelled ({enrolleesStats.cancelled})</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingEnrollees ? (
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : enrollees.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p>No registered users yet</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto -mx-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-6">#</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead className="hidden md:table-cell">Email</TableHead>
-                    <TableHead className="hidden sm:table-cell">Phone</TableHead>
-                    <TableHead className="hidden lg:table-cell">UG College</TableHead>
-                    <TableHead className="hidden lg:table-cell">PG College</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="hidden md:table-cell">Paid</TableHead>
-                    <TableHead className="hidden sm:table-cell pr-6">Enrolled</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {enrollees.map((enrollee, index) => {
-                    const user = enrollee.user_id
-                    return (
-                      <TableRow key={enrollee._id}>
-                        <TableCell className="pl-6 text-xs text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-sm">{user?.name || '—'}</p>
-                            <p className="text-xs text-muted-foreground md:hidden">{user?.email || ''}</p>
-                            <p className="text-xs text-muted-foreground sm:hidden">{user?.phone_number || ''}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm font-mono">{user?.student_id || '—'}</TableCell>
-                        <TableCell className="hidden md:table-cell text-sm">{user?.email || '—'}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm">{user?.phone_number || '—'}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs">{user?.ug_college || '—'}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs">{user?.pg_college || '—'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] capitalize">
-                            {enrollee.enrollment_type.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] capitalize ${
-                              enrollee.enrollment_status === 'confirmed'
-                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                                : enrollee.enrollment_status === 'waitlisted'
-                                  ? 'bg-amber-500/10 text-amber-600 border-amber-200'
-                                  : 'bg-red-500/10 text-red-600 border-red-200'
-                            }`}
-                          >
-                            {enrollee.enrollment_status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm">
-                          {enrollee.purchase_id
-                            ? `₹${enrollee.purchase_id.amount_paid?.toLocaleString('en-IN')}`
-                            : '—'}
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground pr-6">
-                          {new Date(enrollee.enrolled_at).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
           )}
         </CardContent>
       </Card>

@@ -22,6 +22,7 @@ import { VideosPage } from '@/pages/content/VideosPage'
 import { DocumentsPage } from '@/pages/content/DocumentsPage'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
 import { SessionDetailPage } from '@/pages/sessions/SessionDetailPage'
+import { SessionAttendeesPage } from '@/pages/sessions/SessionAttendeesPage'
 import { FacultyPage } from '@/pages/faculty/FacultyPage'
 import { PurchasesPage } from '@/pages/commerce/PurchasesPage'
 import { PaymentsPage } from '@/pages/commerce/PaymentsPage'
@@ -97,6 +98,7 @@ function App() {
               {/* Live Sessions */}
               <Route path="/sessions" element={<SessionsPage />} />
               <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+              <Route path="/sessions/:sessionId/attendees" element={<SessionAttendeesPage />} />
 
               {/* Faculty */}
               <Route path="/faculty" element={<FacultyPage />} />
