@@ -229,8 +229,16 @@ class LiveSessionsService {
     return apiService.post(`${this.basePath}/${sessionId}/send-notification`, data)
   }
 
+  async getBannerStatus(sessionId: string): Promise<ApiResponse<{ has_active_banner: boolean; banner_id: string | null }>> {
+    return apiService.get(`${this.basePath}/${sessionId}/banner-status`)
+  }
+
   async createBanner(sessionId: string): Promise<ApiResponse<{ banner: any }>> {
     return apiService.post(`${this.basePath}/${sessionId}/create-banner`)
+  }
+
+  async hideBanner(sessionId: string): Promise<ApiResponse<{ banner: any }>> {
+    return apiService.post(`${this.basePath}/${sessionId}/hide-banner`)
   }
 
   async convertToPackage(

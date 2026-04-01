@@ -61,9 +61,9 @@ export function SessionDetailPage() {
   const [notifyAudienceLabel, setNotifyAudienceLabel] = useState('')
   const [notifyUserCount, setNotifyUserCount] = useState(0)
 
-  // Create banner state
+  // Banner state
   const [bannerLoading, setBannerLoading] = useState(false)
-
+  const [hasActiveBanner, setHasActiveBanner] = useState(false)
 
   const fetchSession = useCallback(async () => {
     if (!sessionId) return
@@ -85,6 +85,20 @@ export function SessionDetailPage() {
   }, [sessionId, navigate])
 
   useEffect(() => { fetchSession() }, [fetchSession])
+
+  const fetchBannerStatus = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      const response = await liveSessionsService.getBannerStatus(sessionId)
+      if (response.success && response.data) {
+        setHasActiveBanner(response.data.has_active_banner)
+      }
+    } catch {
+      // silently ignore
+    }
+  }, [sessionId])
+
+  useEffect(() => { fetchBannerStatus() }, [fetchBannerStatus])
 
   const fetchRecordings = useCallback(async () => {
     if (!sessionId) return
@@ -263,11 +277,30 @@ export function SessionDetailPage() {
       const response = await liveSessionsService.createBanner(sessionId)
       if (response.success) {
         toast.success('Banner created successfully')
+        setHasActiveBanner(true)
       } else {
         toast.error(response.message || 'Failed to create banner')
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create banner')
+    } finally {
+      setBannerLoading(false)
+    }
+  }
+
+  const handleHideBanner = async () => {
+    if (!sessionId) return
+    try {
+      setBannerLoading(true)
+      const response = await liveSessionsService.hideBanner(sessionId)
+      if (response.success) {
+        toast.success('Banner hidden successfully')
+        setHasActiveBanner(false)
+      } else {
+        toast.error(response.message || 'Failed to hide banner')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to hide banner')
     } finally {
       setBannerLoading(false)
     }
@@ -361,14 +394,25 @@ export function SessionDetailPage() {
               <Bell className="mr-2 h-4 w-4" />
               Send Notification
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCreateBanner} disabled={bannerLoading}>
-              {bannerLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Image className="mr-2 h-4 w-4" />
-              )}
-              Create Banner
-            </Button>
+            {hasActiveBanner ? (
+              <Button variant="outline" size="sm" onClick={handleHideBanner} disabled={bannerLoading}>
+                {bannerLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Eye className="mr-2 h-4 w-4" />
+                )}
+                Hide Banner
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleCreateBanner} disabled={bannerLoading}>
+                {bannerLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Image className="mr-2 h-4 w-4" />
+                )}
+                Create Banner
+              </Button>
+            )}
             {recordings.length > 0 && (
               <Button size="sm" onClick={handleOpenConvertModal}>
                 <Package className="mr-2 h-4 w-4" />
