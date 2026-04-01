@@ -21,7 +21,6 @@ export function TutorialsPage() {
   const [tutorials, setTutorials] = useState<Tutorial[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('search') || '')
-  const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || 'all')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -46,7 +45,6 @@ export function TutorialsPage() {
       const response = await tutorialsService.getAll({
         page: currentPage,
         limit: 20,
-        type: typeFilter === 'all' ? null : typeFilter,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
@@ -65,7 +63,7 @@ export function TutorialsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, typeFilter, statusFilter, publishFilter])
+  }, [currentPage, statusFilter, publishFilter])
 
   useEffect(() => { fetchTutorials() }, [fetchTutorials])
 
@@ -73,17 +71,16 @@ export function TutorialsPage() {
   useEffect(() => {
     const params: Record<string, string> = {}
     if (search) params.search = search
-    if (typeFilter !== 'all') params.type = typeFilter
     if (statusFilter !== 'all') params.status = statusFilter
     if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, typeFilter, statusFilter, publishFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, typeFilter, statusFilter, publishFilter])
+  }, [search, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -150,18 +147,6 @@ export function TutorialsPage() {
   // Filters
   const filters: FilterConfig[] = [
     {
-      key: 'type',
-      label: 'Type',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Video', value: 'video' },
-        { label: 'PDF', value: 'pdf' },
-      ],
-      placeholder: 'Filter by type',
-      defaultValue: 'all',
-    },
-    {
       key: 'status',
       label: 'Status',
       type: 'select',
@@ -210,9 +195,8 @@ export function TutorialsPage() {
         onChange={setSearch}
         placeholder="Search tutorials..."
         filters={filters}
-        activeFilters={{ type: typeFilter, status: statusFilter, publish_status: publishFilter }}
+        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
         onFiltersChange={(f) => {
-          if (f.type !== undefined) setTypeFilter(f.type)
           if (f.status !== undefined) setStatusFilter(f.status)
           if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
         }}
@@ -230,13 +214,13 @@ export function TutorialsPage() {
         }}
         emptyState={{
           icon: GraduationCap,
-          title: search || typeFilter !== 'all' || statusFilter !== 'all' || publishFilter !== 'all'
+          title: search || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No tutorials found matching your filters'
             : 'No tutorials yet',
-          description: !search && typeFilter === 'all' && statusFilter === 'all' && publishFilter === 'all'
+          description: !search && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first free tutorial'
             : undefined,
-          action: !search && typeFilter === 'all' && statusFilter === 'all' && publishFilter === 'all' ? (
+          action: !search && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first tutorial
             </Button>

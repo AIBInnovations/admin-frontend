@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Tutorial } from '@/services/tutorials.service'
-import { MoreVertical, Pencil, Trash2, Video, FileText, ExternalLink, Image, FileCheck } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, ExternalLink, Image, FileCheck } from 'lucide-react'
 
 interface TutorialsColumnsProps {
   onEdit: (tutorial: Tutorial) => void
@@ -37,24 +37,6 @@ export function useTutorialsColumns({
             )}
           </div>
         </div>
-      ),
-    },
-    {
-      id: 'type',
-      header: 'Type',
-      width: 'w-24',
-      cell: (tutorial) => (
-        <Badge className={`text-[10px] ${
-          tutorial.type === 'video'
-            ? 'bg-red-500/10 text-red-600 border-red-200'
-            : 'bg-blue-500/10 text-blue-600 border-blue-200'
-        }`}>
-          {tutorial.type === 'video' ? (
-            <><Video className="mr-1 h-3 w-3" />Video</>
-          ) : (
-            <><FileText className="mr-1 h-3 w-3" />PDF</>
-          )}
-        </Badge>
       ),
     },
     {
