@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { FileUpload } from '@/components/common/FileUpload'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, X, Image, FileVideo } from 'lucide-react'
+import { Loader2, X, FileText, FileVideo } from 'lucide-react'
 import { Tutorial, TutorialFormData, tutorialsService } from '@/services/tutorials.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
@@ -24,11 +24,11 @@ import { toast } from 'sonner'
 const tutorialSchema = z.object({
   title: z.string().min(2, 'Title is required').max(300),
   url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
-  type: z.enum(['video', 'pdf']),
-  description: z.string().max(1000).optional().or(z.literal('')),
+  description: z.string().max(500).optional().or(z.literal('')),
+  body: z.string().max(5000).optional().or(z.literal('')),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
-  publish_status: z.enum(['draft', 'published']).default('draft'),
+  publish_status: z.enum(['draft', 'published']),
 })
 
 type TutorialFormValues = z.infer<typeof tutorialSchema>
@@ -39,6 +39,24 @@ interface TutorialFormModalProps {
   onSubmit: (data: TutorialFormData) => Promise<void>
   tutorial?: Tutorial | null
   mode: 'create' | 'edit'
+}
+
+/** Auto-detect type from media file or existing mime */
+function detectType(mediaFile: File | null, existingMime: string | null, url: string): 'video' | 'pdf' {
+  if (mediaFile) {
+    return mediaFile.type.startsWith('video/') ? 'video' : 'pdf'
+  }
+  if (existingMime) {
+    return existingMime.startsWith('video/') ? 'video' : 'pdf'
+  }
+  if (url) {
+    const lower = url.toLowerCase()
+    if (lower.includes('youtube') || lower.includes('youtu.be') || lower.includes('vimeo') || lower.endsWith('.mp4')) {
+      return 'video'
+    }
+    if (lower.endsWith('.pdf')) return 'pdf'
+  }
+  return 'video'
 }
 
 export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: TutorialFormModalProps) {
@@ -61,19 +79,18 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
   const [mediaProgress, setMediaProgress] = useState<number | null>(null)
 
   const {
-    register, handleSubmit, control,
+    register, handleSubmit,
     formState: { errors, isSubmitting },
-    reset, setValue, watch,
+    reset, setValue, watch, control,
   } = useForm<TutorialFormValues>({
     resolver: zodResolver(tutorialSchema),
     defaultValues: {
-      title: '', url: '', type: 'video', description: '',
+      title: '', url: '', description: '', body: '',
       display_order: NaN, is_active: true, publish_status: 'draft',
     },
   })
 
   const isActive = watch('is_active')
-  const tutorialType = watch('type')
   const isUploading = thumbnailProgress !== null || mediaProgress !== null
 
   useEffect(() => {
@@ -88,8 +105,8 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
         reset({
           title: tutorial.title,
           url: tutorial.url,
-          type: tutorial.type,
           description: tutorial.description || '',
+          body: tutorial.body || '',
           display_order: tutorial.display_order,
           is_active: tutorial.is_active,
           publish_status: tutorial.publish_status || 'draft',
@@ -110,7 +127,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
         setExistingMediaSize(tutorial.media_file_size_mb)
       } else {
         reset({
-          title: '', url: '', type: 'video', description: '',
+          title: '', url: '', description: '', body: '',
           display_order: NaN, is_active: true, publish_status: 'draft',
         })
         setSelectedSubjectId('')
@@ -141,7 +158,6 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
     let thumbnailUrl = existingThumbnailUrl
     let thumbnailS3Key = existingThumbnailS3Key
 
-    // Upload thumbnail if new file selected
     if (thumbnailFile.length > 0) {
       setThumbnailProgress(0)
       try {
@@ -156,11 +172,19 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
       setThumbnailProgress(null)
     }
 
+    // Auto-detect type from media
+    const autoType = detectType(
+      mediaFile.length > 0 ? mediaFile[0] : null,
+      existingMediaMime,
+      data.url || '',
+    )
+
     const formData: TutorialFormData = {
       title: data.title,
       url: data.url || undefined,
-      type: data.type,
+      type: autoType,
       description: data.description || undefined,
+      body: data.body || undefined,
       subject_id: selectedSubjectId && selectedSubjectId !== 'none' ? selectedSubjectId : null,
       display_screens: selectedScreens.length > 0 ? selectedScreens : ['notes'],
       thumbnail_url: thumbnailUrl,
@@ -172,10 +196,6 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
     await onSubmit(formData)
   }
 
-  /**
-   * Upload media file after tutorial is created/updated.
-   * Called from parent after successful form submit when mediaFile is set.
-   */
   const handleMediaUpload = async (tutorialId: string) => {
     if (mediaFile.length === 0) return
     setMediaProgress(0)
@@ -188,27 +208,15 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
     setMediaProgress(null)
   }
 
-  // Expose media upload handler via a wrapper submit
   const handleFullSubmit = async (data: TutorialFormValues) => {
     await handleFormSubmit(data)
 
-    // If media file selected and we're editing an existing tutorial, upload it
     if (mediaFile.length > 0 && mode === 'edit' && tutorial?._id) {
       await handleMediaUpload(tutorial._id)
     }
   }
 
   const handleClose = () => { if (!isSubmitting && !isUploading) onClose() }
-
-  const mediaAccept = tutorialType === 'video'
-    ? { 'video/mp4': ['.mp4'], 'video/quicktime': ['.mov'], 'video/webm': ['.webm'] }
-    : { 'application/pdf': ['.pdf'] }
-
-  const mediaLabel = tutorialType === 'video' ? 'Upload video file' : 'Upload PDF file'
-  const mediaDesc = tutorialType === 'video'
-    ? 'MP4, MOV, or WebM. Max 500MB.'
-    : 'PDF files only. Max 100MB.'
-  const mediaMaxSize = tutorialType === 'video' ? 500 * 1024 * 1024 : 100 * 1024 * 1024
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -217,7 +225,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
           <DialogTitle>{mode === 'create' ? 'Add Tutorial' : 'Edit Tutorial'}</DialogTitle>
           <DialogDescription>
             {mode === 'create'
-              ? 'Add a free tutorial (video or PDF) visible to all users.'
+              ? 'Add a free tutorial visible to app users.'
               : 'Update the tutorial details.'}
           </DialogDescription>
         </DialogHeader>
@@ -225,8 +233,28 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
         <form onSubmit={handleSubmit(handleFullSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
-            <Input id="title" placeholder="e.g. Introduction to Anatomy - Free Lecture" disabled={isSubmitting || isUploading} {...register('title')} />
+            <Input id="title" placeholder="e.g. How to study Anatomy effectively" disabled={isSubmitting || isUploading} {...register('title')} />
             {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Short Description</Label>
+            <Input id="description" placeholder="Brief one-liner shown below title" disabled={isSubmitting || isUploading} {...register('description')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="body">Body Text</Label>
+            <Textarea
+              id="body"
+              placeholder="Detailed explanation or instructions shown when user taps the tutorial..."
+              disabled={isSubmitting || isUploading}
+              rows={5}
+              {...register('body')}
+            />
+            {errors.body && <p className="text-sm text-red-500">{errors.body.message}</p>}
+            <p className="text-xs text-muted-foreground">
+              Optional detailed content. Shown in the app when the user opens this tutorial.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -234,27 +262,8 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
             <Input id="url" placeholder="https://youtube.com/... (optional)" disabled={isSubmitting || isUploading} {...register('url')} />
             {errors.url && <p className="text-sm text-red-500">{errors.url.message}</p>}
             <p className="text-xs text-muted-foreground">
-              Optional external link (e.g. YouTube). You can also upload a file below instead.
+              Optional link (e.g. YouTube video). You can also upload a file below.
             </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Type <span className="text-red-500">*</span></Label>
-            <Controller
-              name="type"
-              control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || isUploading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="pdf">PDF</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            />
           </div>
 
           {/* Thumbnail Upload */}
@@ -263,40 +272,25 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
             {thumbnailFile.length > 0 ? (
               <div className="relative rounded-lg border overflow-hidden">
                 <img src={URL.createObjectURL(thumbnailFile[0])} alt="Thumbnail" className="w-full h-32 object-cover" />
-                <Button
-                  type="button" variant="destructive" size="icon"
-                  className="absolute top-2 right-2 h-7 w-7"
-                  onClick={() => setThumbnailFile([])}
-                  disabled={isSubmitting || isUploading}
-                >
+                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7"
+                  onClick={() => setThumbnailFile([])} disabled={isSubmitting || isUploading}>
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ) : existingThumbnailUrl ? (
               <div className="relative rounded-lg border overflow-hidden">
                 <img src={existingThumbnailUrl} alt="Thumbnail" className="w-full h-32 object-cover" />
-                <Button
-                  type="button" variant="destructive" size="icon"
-                  className="absolute top-2 right-2 h-7 w-7"
-                  onClick={() => { setExistingThumbnailUrl(null); setExistingThumbnailS3Key(null) }}
-                  disabled={isSubmitting || isUploading}
-                >
+                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7"
+                  onClick={() => { setExistingThumbnailUrl(null); setExistingThumbnailS3Key(null) }} disabled={isSubmitting || isUploading}>
                   <X className="h-3.5 w-3.5" />
                 </Button>
-                <p className="text-xs text-muted-foreground px-3 py-1.5 bg-muted/80">
-                  Current thumbnail. Upload a new one to replace.
-                </p>
+                <p className="text-xs text-muted-foreground px-3 py-1.5 bg-muted/80">Current thumbnail. Upload a new one to replace.</p>
               </div>
             ) : (
               <FileUpload
                 accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }}
-                maxSize={5 * 1024 * 1024}
-                maxFiles={1}
-                value={[]}
-                onChange={setThumbnailFile}
-                disabled={isSubmitting || isUploading}
-                label="Upload thumbnail"
-                description="JPEG, PNG, or WebP. Max 5MB."
+                maxSize={5 * 1024 * 1024} maxFiles={1} value={[]} onChange={setThumbnailFile}
+                disabled={isSubmitting || isUploading} label="Upload thumbnail" description="JPEG, PNG, or WebP. Max 5MB."
               />
             )}
             {thumbnailProgress !== null && (
@@ -309,23 +303,18 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
 
           {/* Media File Upload */}
           <div className="space-y-2">
-            <Label>{tutorialType === 'video' ? 'Video File' : 'PDF File'}</Label>
+            <Label>Media File</Label>
             {mediaFile.length > 0 ? (
               <div className="flex items-center gap-3 rounded-lg border p-3">
-                {tutorialType === 'video'
+                {mediaFile[0].type.startsWith('video/')
                   ? <FileVideo className="h-8 w-8 text-red-500 shrink-0" />
-                  : <Image className="h-8 w-8 text-blue-500 shrink-0" />}
+                  : <FileText className="h-8 w-8 text-blue-500 shrink-0" />}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{mediaFile[0].name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(mediaFile[0].size / (1024 * 1024)).toFixed(1)} MB
-                  </p>
+                  <p className="text-xs text-muted-foreground">{(mediaFile[0].size / (1024 * 1024)).toFixed(1)} MB</p>
                 </div>
-                <Button
-                  type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
-                  onClick={() => setMediaFile([])}
-                  disabled={isSubmitting || isUploading}
-                >
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+                  onClick={() => setMediaFile([])} disabled={isSubmitting || isUploading}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -333,7 +322,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
               <div className="flex items-center gap-3 rounded-lg border p-3">
                 {existingMediaMime?.startsWith('video/')
                   ? <FileVideo className="h-8 w-8 text-red-500 shrink-0" />
-                  : <Image className="h-8 w-8 text-blue-500 shrink-0" />}
+                  : <FileText className="h-8 w-8 text-blue-500 shrink-0" />}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">Current file</p>
                   <p className="text-xs text-muted-foreground">
@@ -341,24 +330,22 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
                     {existingMediaMime ? ` · ${existingMediaMime}` : ''}
                   </p>
                 </div>
-                <Button
-                  type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
                   onClick={() => { setExistingMediaUrl(null); setExistingMediaMime(null); setExistingMediaSize(null) }}
-                  disabled={isSubmitting || isUploading}
-                >
+                  disabled={isSubmitting || isUploading}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
               <FileUpload
-                accept={mediaAccept}
-                maxSize={mediaMaxSize}
-                maxFiles={1}
-                value={[]}
-                onChange={setMediaFile}
+                accept={{
+                  'video/mp4': ['.mp4'], 'video/quicktime': ['.mov'], 'video/webm': ['.webm'],
+                  'application/pdf': ['.pdf'],
+                }}
+                maxSize={500 * 1024 * 1024} maxFiles={1} value={[]} onChange={setMediaFile}
                 disabled={isSubmitting || isUploading}
-                label={mediaLabel}
-                description={mediaDesc}
+                label="Upload video or PDF"
+                description="MP4, MOV, WebM, or PDF. Max 500MB."
               />
             )}
             {mediaProgress !== null && (
@@ -376,26 +363,18 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
 
           <div className="space-y-2">
             <Label>Subject</Label>
-            <Select
-              value={selectedSubjectId}
-              onValueChange={setSelectedSubjectId}
-              disabled={isSubmitting || isUploading || subjectsLoading}
-            >
+            <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}
+              disabled={isSubmitting || isUploading || subjectsLoading}>
               <SelectTrigger>
                 <SelectValue placeholder={subjectsLoading ? 'Loading subjects...' : 'All Subjects (optional)'} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">All Subjects</SelectItem>
                 {subjects.map((subject) => (
-                  <SelectItem key={subject._id} value={subject._id}>
-                    {subject.name}
-                  </SelectItem>
+                  <SelectItem key={subject._id} value={subject._id}>{subject.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Optionally restrict this tutorial to a specific subject.
-            </p>
           </div>
 
           {/* Display Screens */}
@@ -413,9 +392,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
                     checked={selectedScreens.includes(screen.id)}
                     onCheckedChange={(checked) => {
                       setSelectedScreens((prev) =>
-                        checked
-                          ? [...prev, screen.id]
-                          : prev.filter((s) => s !== screen.id)
+                        checked ? [...prev, screen.id] : prev.filter((s) => s !== screen.id)
                       )
                     }}
                     disabled={isSubmitting || isUploading}
@@ -427,29 +404,12 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
             {selectedScreens.length === 0 && (
               <p className="text-xs text-amber-600">Select at least one screen</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Choose which app screens will show this tutorial in the "How To" section.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Optional description..."
-              disabled={isSubmitting || isUploading}
-              rows={3}
-              {...register('description')}
-            />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="display_order">Display Order</Label>
-            <Input
-              id="display_order" type="number" min={0} placeholder="0"
-              disabled={isSubmitting || isUploading}
-              {...register('display_order', { valueAsNumber: true })}
-            />
+            <Input id="display_order" type="number" min={0} placeholder="0"
+              disabled={isSubmitting || isUploading} {...register('display_order', { valueAsNumber: true })} />
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -462,9 +422,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
 
           <div className="space-y-2">
             <Label>Publish Status</Label>
-            <Controller
-              name="publish_status"
-              control={control}
+            <Controller name="publish_status" control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting || isUploading}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -475,9 +433,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
                 </Select>
               )}
             />
-            <p className="text-xs text-muted-foreground">
-              Only published tutorials are visible to app users.
-            </p>
+            <p className="text-xs text-muted-foreground">Only published tutorials are visible to app users.</p>
           </div>
 
           <DialogFooter>

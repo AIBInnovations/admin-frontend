@@ -10,6 +10,7 @@ export interface Tutorial {
   type: 'video' | 'pdf'
   subject_id: PopulatedRef | string | null
   description: string | null
+  body: string | null
   thumbnail_url: string | null
   thumbnail_s3_key: string | null
   media_url: string | null
@@ -30,6 +31,7 @@ export interface TutorialFormData {
   type: 'video' | 'pdf'
   subject_id?: string | null
   description?: string
+  body?: string
   thumbnail_url?: string | null
   thumbnail_s3_key?: string | null
   display_screens?: string[]
