@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Tutorial } from '@/services/tutorials.service'
-import { MoreVertical, Pencil, Trash2, Video, FileText, ExternalLink } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, Video, FileText, ExternalLink, Image, FileCheck } from 'lucide-react'
 
 interface TutorialsColumnsProps {
   onEdit: (tutorial: Tutorial) => void
@@ -22,11 +22,20 @@ export function useTutorialsColumns({
       id: 'title',
       header: 'Title',
       cell: (tutorial) => (
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate max-w-[300px]">{tutorial.title}</p>
-          {tutorial.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-[300px]">{tutorial.description}</p>
-          )}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-14 items-center justify-center rounded bg-muted overflow-hidden shrink-0">
+            {tutorial.thumbnail_url ? (
+              <img src={tutorial.thumbnail_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Image className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate max-w-[250px]">{tutorial.title}</p>
+            {tutorial.description && (
+              <p className="text-xs text-muted-foreground truncate max-w-[250px]">{tutorial.description}</p>
+            )}
+          </div>
         </div>
       ),
     },
@@ -69,6 +78,39 @@ export function useTutorialsColumns({
             <ExternalLink className="h-3 w-3 shrink-0" />
             {hostname}
           </a>
+        )
+      },
+    },
+    {
+      id: 'media',
+      header: 'Media',
+      width: 'w-24',
+      cell: (tutorial) => {
+        if (tutorial.media_url) {
+          return (
+            <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-200">
+              <FileCheck className="mr-1 h-3 w-3" />Uploaded
+            </Badge>
+          )
+        }
+        return <span className="text-xs text-muted-foreground">None</span>
+      },
+    },
+    {
+      id: 'screens',
+      header: 'Screens',
+      width: 'w-32',
+      cell: (tutorial) => {
+        const screens = tutorial.display_screens || []
+        if (screens.length === 0) return <span className="text-xs text-muted-foreground">None</span>
+        return (
+          <div className="flex flex-wrap gap-1">
+            {screens.map((s: string) => (
+              <Badge key={s} className="text-[9px] bg-indigo-500/10 text-indigo-600 border-indigo-200 capitalize">
+                {s}
+              </Badge>
+            ))}
+          </div>
         )
       },
     },

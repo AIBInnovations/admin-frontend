@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef, PublishStatus } from '@/types/api.types'
 
@@ -9,6 +10,13 @@ export interface Tutorial {
   type: 'video' | 'pdf'
   subject_id: PopulatedRef | string | null
   description: string | null
+  thumbnail_url: string | null
+  thumbnail_s3_key: string | null
+  media_url: string | null
+  media_s3_key: string | null
+  media_file_size_mb: number | null
+  media_mime_type: string | null
+  display_screens: string[]
   display_order: number
   is_active: boolean
   publish_status: PublishStatus
@@ -18,10 +26,13 @@ export interface Tutorial {
 
 export interface TutorialFormData {
   title: string
-  url: string
+  url?: string
   type: 'video' | 'pdf'
   subject_id?: string | null
   description?: string
+  thumbnail_url?: string | null
+  thumbnail_s3_key?: string | null
+  display_screens?: string[]
   display_order?: number
   is_active?: boolean
   publish_status?: PublishStatus
@@ -78,6 +89,76 @@ class TutorialsService {
 
   async delete(tutorialId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${tutorialId}`)
+  }
+
+  /**
+   * Upload thumbnail image to S3.
+   * 2-step flow: get presigned URL → upload to S3
+   */
+  async uploadThumbnail(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ thumbnailUrl: string; s3Key: string }> {
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/thumbnail-upload-url`,
+      { mimeType: file.type || 'image/jpeg' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    return { thumbnailUrl, s3Key }
+  }
+
+  /**
+   * Upload media file (PDF or video) to S3.
+   * 3-step flow: get presigned URL → upload to S3 → confirm with backend
+   */
+  async uploadMedia(
+    tutorialId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ media_url: string; media_file_size_mb: number }> {
+    // Step 1: Get presigned URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+      `${this.basePath}/media-upload-url`,
+      { mimeType: file.type || 'application/pdf' },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key } = urlRes.data
+
+    // Step 2: Upload to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': file.type || 'application/pdf' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    // Step 3: Confirm with backend
+    const confirmRes = await apiService.post<{ media_url: string; media_file_size_mb: number }>(
+      `${this.basePath}/${tutorialId}/media-confirm`,
+      { s3Key, fileSize: file.size, mimeType: file.type },
+    )
+    if (!confirmRes.success || !confirmRes.data) {
+      throw new Error(confirmRes.message || 'Failed to confirm upload')
+    }
+
+    return confirmRes.data
   }
 }
 
