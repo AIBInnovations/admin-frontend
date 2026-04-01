@@ -221,6 +221,7 @@ export function SessionsPage() {
     onCancel: handleCancel,
     onArchive: handleArchiveClick,
     onPublishAction: handlePublishAction,
+    onViewAttendees: (session) => navigate(`/sessions/${session._id}`),
   })
 
   return (

@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { LiveSession } from '@/services/liveSessions.service'
-import { MoreVertical, Pencil, Archive, XCircle, Globe, GlobeLock } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, XCircle, Globe, GlobeLock, Users } from 'lucide-react'
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-blue-500/10 text-blue-600 border-blue-200',
@@ -27,6 +27,7 @@ interface SessionsColumnsProps {
   onCancel: (session: LiveSession) => void
   onArchive: (session: LiveSession) => void
   onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
+  onViewAttendees: (session: LiveSession) => void
 }
 
 export function useSessionsColumns({
@@ -34,6 +35,7 @@ export function useSessionsColumns({
   onCancel,
   onArchive,
   onPublishAction,
+  onViewAttendees,
 }: SessionsColumnsProps): ColumnDef<LiveSession>[] {
   return [
     {
@@ -151,6 +153,9 @@ export function useSessionsColumns({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit(session)}>
               <Pencil className="mr-2 h-4 w-4" />Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewAttendees(session)}>
+              <Users className="mr-2 h-4 w-4" />View Attendees
             </DropdownMenuItem>
             {session.publish_status === 'published' ? (
               <DropdownMenuItem onClick={() => onPublishAction(session._id, 'unpublish')}>

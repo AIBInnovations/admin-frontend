@@ -70,6 +70,34 @@ export interface LiveSessionFormData {
   publish_status?: PublishStatus
 }
 
+export interface EnrolleeUser {
+  _id: string
+  name: string
+  email: string
+  phone_number: string
+  student_id: string | null
+  ug_college: string | null
+  pg_college: string | null
+}
+
+export interface Enrollee {
+  _id: string
+  session_id: string
+  user_id: EnrolleeUser
+  enrollment_type: 'paid' | 'free' | 'admin_override'
+  enrollment_status: 'confirmed' | 'waitlisted' | 'cancelled'
+  has_guaranteed_seat: boolean
+  enrolled_at: string
+  purchase_id: { amount_paid: number; purchased_at: string } | null
+}
+
+export interface EnrolleesResponse {
+  session: { _id: string; title: string; scheduled_start_time: string; max_attendees: number | null }
+  total_enrollees: number
+  by_status: { confirmed: number; waitlisted: number; cancelled: number }
+  enrollees: Enrollee[]
+}
+
 export interface LiveSessionsListParams extends BaseListParams {
   subject_id?: string
   status?: string
@@ -112,6 +140,11 @@ class LiveSessionsService {
       return { ...response, data: response.data.session }
     }
     return response as ApiResponse<LiveSession>
+  }
+
+  async getEnrollees(sessionId: string, enrollmentStatus?: string): Promise<ApiResponse<EnrolleesResponse>> {
+    const query = enrollmentStatus ? `?enrollment_status=${enrollmentStatus}` : ''
+    return apiService.get<EnrolleesResponse>(`admin/session-enrollments/${sessionId}/enrollees${query}`)
   }
 
   async create(data: LiveSessionFormData): Promise<ApiResponse<LiveSession>> {
@@ -176,6 +209,28 @@ class LiveSessionsService {
     })
 
     return { thumbnailUrl, s3Key }
+  }
+
+  async getNotificationPreview(sessionId: string): Promise<ApiResponse<{
+    title: string
+    message: string
+    audience_label: string
+    user_count: number
+    visible_to: VisibleTo
+  }>> {
+    return apiService.get(`${this.basePath}/${sessionId}/notification-preview`)
+  }
+
+  async sendNotification(sessionId: string, data: { title: string; message: string }): Promise<ApiResponse<{
+    sent: number
+    failed: number
+    total: number
+  }>> {
+    return apiService.post(`${this.basePath}/${sessionId}/send-notification`, data)
+  }
+
+  async createBanner(sessionId: string): Promise<ApiResponse<{ banner: any }>> {
+    return apiService.post(`${this.basePath}/${sessionId}/create-banner`)
   }
 
   async convertToPackage(

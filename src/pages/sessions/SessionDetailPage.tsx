@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -20,10 +21,10 @@ import {
   Video, Users, Calendar, Clock, DollarSign, Settings,
   Monitor, Link as LinkIcon, UserCheck, Eye, Edit, Archive,
   CheckCircle, XCircle, AlertCircle, PlayCircle, ExternalLink, Film,
-  Package, Loader2,
+  Package, Loader2, Bell, Image,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { liveSessionsService, LiveSession, LiveSessionFormData } from '@/services/liveSessions.service'
+import { liveSessionsService, LiveSession, LiveSessionFormData, Enrollee } from '@/services/liveSessions.service'
 import { recordingsService, Recording } from '@/services/recordings.service'
 import { packageTypesService, PackageType } from '@/services/packageTypes.service'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
@@ -50,6 +51,24 @@ export function SessionDetailPage() {
   const [selectedPackageTypeId, setSelectedPackageTypeId] = useState('')
   const [convertPrice, setConvertPrice] = useState('0')
   const [convertDuration, setConvertDuration] = useState('365')
+
+  // Send notification state
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false)
+  const [notifyLoading, setNotifyLoading] = useState(false)
+  const [notifyPreviewLoading, setNotifyPreviewLoading] = useState(false)
+  const [notifyTitle, setNotifyTitle] = useState('')
+  const [notifyMessage, setNotifyMessage] = useState('')
+  const [notifyAudienceLabel, setNotifyAudienceLabel] = useState('')
+  const [notifyUserCount, setNotifyUserCount] = useState(0)
+
+  // Create banner state
+  const [bannerLoading, setBannerLoading] = useState(false)
+
+  // Enrollees state
+  const [enrollees, setEnrollees] = useState<Enrollee[]>([])
+  const [loadingEnrollees, setLoadingEnrollees] = useState(true)
+  const [enrolleesStatusFilter, setEnrolleesStatusFilter] = useState<string>('all')
+  const [enrolleesStats, setEnrolleesStats] = useState<{ confirmed: number; waitlisted: number; cancelled: number }>({ confirmed: 0, waitlisted: 0, cancelled: 0 })
 
   const fetchSession = useCallback(async () => {
     if (!sessionId) return
@@ -90,6 +109,25 @@ export function SessionDetailPage() {
   }, [sessionId])
 
   useEffect(() => { fetchRecordings() }, [fetchRecordings])
+
+  const fetchEnrollees = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      setLoadingEnrollees(true)
+      const statusParam = enrolleesStatusFilter === 'all' ? undefined : enrolleesStatusFilter
+      const response = await liveSessionsService.getEnrollees(sessionId, statusParam)
+      if (response.success && response.data) {
+        setEnrollees(response.data.enrollees || [])
+        setEnrolleesStats(response.data.by_status)
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load enrollees')
+    } finally {
+      setLoadingEnrollees(false)
+    }
+  }, [sessionId, enrolleesStatusFilter])
+
+  useEffect(() => { fetchEnrollees() }, [fetchEnrollees])
 
   const handleEdit = () => {
     setFormModalOpen(true)
@@ -201,6 +239,64 @@ export function SessionDetailPage() {
     }
   }
 
+  const handleOpenNotifyModal = async () => {
+    if (!sessionId) return
+    setNotifyModalOpen(true)
+    setNotifyPreviewLoading(true)
+    try {
+      const response = await liveSessionsService.getNotificationPreview(sessionId)
+      if (response.success && response.data) {
+        setNotifyTitle(response.data.title)
+        setNotifyMessage(response.data.message)
+        setNotifyAudienceLabel(response.data.audience_label)
+        setNotifyUserCount(response.data.user_count)
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load notification preview')
+    } finally {
+      setNotifyPreviewLoading(false)
+    }
+  }
+
+  const handleSendNotification = async () => {
+    if (!sessionId || !notifyTitle || !notifyMessage) return
+    try {
+      setNotifyLoading(true)
+      const response = await liveSessionsService.sendNotification(sessionId, {
+        title: notifyTitle,
+        message: notifyMessage,
+      })
+      if (response.success) {
+        const data = response.data
+        toast.success(`Notification sent to ${data?.sent || 0} user(s)`)
+        setNotifyModalOpen(false)
+      } else {
+        toast.error(response.message || 'Failed to send notification')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send notification')
+    } finally {
+      setNotifyLoading(false)
+    }
+  }
+
+  const handleCreateBanner = async () => {
+    if (!sessionId) return
+    try {
+      setBannerLoading(true)
+      const response = await liveSessionsService.createBanner(sessionId)
+      if (response.success) {
+        toast.success('Banner created successfully')
+      } else {
+        toast.error(response.message || 'Failed to create banner')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create banner')
+    } finally {
+      setBannerLoading(false)
+    }
+  }
+
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`
     const mins = Math.floor(seconds / 60)
@@ -281,6 +377,18 @@ export function SessionDetailPage() {
         ]}
         action={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleOpenNotifyModal}>
+              <Bell className="mr-2 h-4 w-4" />
+              Send Notification
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCreateBanner} disabled={bannerLoading}>
+              {bannerLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Image className="mr-2 h-4 w-4" />
+              )}
+              Create Banner
+            </Button>
             {recordings.length > 0 && (
               <Button size="sm" onClick={handleOpenConvertModal}>
                 <Package className="mr-2 h-4 w-4" />
@@ -722,6 +830,119 @@ export function SessionDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Registered Users / Enrollees */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-4 w-4" />
+            Registered Users
+            <Badge variant="secondary" className="text-[10px] ml-1">
+              {enrolleesStats.confirmed + enrolleesStats.waitlisted + enrolleesStats.cancelled}
+            </Badge>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Select value={enrolleesStatusFilter} onValueChange={setEnrolleesStatusFilter}>
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All ({enrolleesStats.confirmed + enrolleesStats.waitlisted + enrolleesStats.cancelled})</SelectItem>
+                <SelectItem value="confirmed">Confirmed ({enrolleesStats.confirmed})</SelectItem>
+                <SelectItem value="waitlisted">Waitlisted ({enrolleesStats.waitlisted})</SelectItem>
+                <SelectItem value="cancelled">Cancelled ({enrolleesStats.cancelled})</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingEnrollees ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : enrollees.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p>No registered users yet</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">#</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead className="hidden md:table-cell">Email</TableHead>
+                    <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                    <TableHead className="hidden lg:table-cell">UG College</TableHead>
+                    <TableHead className="hidden lg:table-cell">PG College</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Paid</TableHead>
+                    <TableHead className="hidden sm:table-cell pr-6">Enrolled</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrollees.map((enrollee, index) => {
+                    const user = enrollee.user_id
+                    return (
+                      <TableRow key={enrollee._id}>
+                        <TableCell className="pl-6 text-xs text-muted-foreground">{index + 1}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{user?.name || '—'}</p>
+                            <p className="text-xs text-muted-foreground md:hidden">{user?.email || ''}</p>
+                            <p className="text-xs text-muted-foreground sm:hidden">{user?.phone_number || ''}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm font-mono">{user?.student_id || '—'}</TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">{user?.email || '—'}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm">{user?.phone_number || '—'}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs">{user?.ug_college || '—'}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs">{user?.pg_college || '—'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] capitalize">
+                            {enrollee.enrollment_type.replace(/_/g, ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] capitalize ${
+                              enrollee.enrollment_status === 'confirmed'
+                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                                : enrollee.enrollment_status === 'waitlisted'
+                                  ? 'bg-amber-500/10 text-amber-600 border-amber-200'
+                                  : 'bg-red-500/10 text-red-600 border-red-200'
+                            }`}
+                          >
+                            {enrollee.enrollment_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">
+                          {enrollee.purchase_id
+                            ? `₹${enrollee.purchase_id.amount_paid?.toLocaleString('en-IN')}`
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground pr-6">
+                          {new Date(enrollee.enrolled_at).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Edit Modal */}
       <SessionFormModal
         open={formModalOpen}
@@ -835,6 +1056,91 @@ export function SessionDetailPage() {
                 <>
                   <Package className="mr-2 h-4 w-4" />
                   Create Package
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Notification Modal */}
+      <Dialog open={notifyModalOpen} onOpenChange={(open) => !notifyLoading && setNotifyModalOpen(open)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Send Session Notification</DialogTitle>
+            <DialogDescription>
+              Send a push notification to the target audience for this session.
+            </DialogDescription>
+          </DialogHeader>
+
+          {notifyPreviewLoading ? (
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Audience Info */}
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                <p>
+                  <span className="font-medium">Target Audience:</span>{' '}
+                  {notifyAudienceLabel || 'Unknown'}
+                </p>
+                <p>
+                  <span className="font-medium">Users:</span>{' '}
+                  {notifyUserCount} user{notifyUserCount !== 1 ? 's' : ''} will receive this notification
+                </p>
+              </div>
+
+              {/* Editable Title */}
+              <div className="space-y-2">
+                <Label htmlFor="notify-title">Title</Label>
+                <Input
+                  id="notify-title"
+                  value={notifyTitle}
+                  onChange={(e) => setNotifyTitle(e.target.value)}
+                  disabled={notifyLoading}
+                  placeholder="Notification title"
+                />
+              </div>
+
+              {/* Editable Message */}
+              <div className="space-y-2">
+                <Label htmlFor="notify-message">Message</Label>
+                <Textarea
+                  id="notify-message"
+                  value={notifyMessage}
+                  onChange={(e) => setNotifyMessage(e.target.value)}
+                  disabled={notifyLoading}
+                  placeholder="Notification message"
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setNotifyModalOpen(false)}
+              disabled={notifyLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendNotification}
+              disabled={notifyLoading || notifyPreviewLoading || !notifyTitle || !notifyMessage || notifyUserCount === 0}
+            >
+              {notifyLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Bell className="mr-2 h-4 w-4" />
+                  Send to {notifyUserCount} User{notifyUserCount !== 1 ? 's' : ''}
                 </>
               )}
             </Button>
