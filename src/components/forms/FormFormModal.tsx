@@ -21,7 +21,7 @@ import { Form, FormFormData, FormTemplate, formsService } from '@/services/forms
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
-const BANNER_ASPECT_RATIO = 18 / 7
+const BANNER_ASPECT_RATIO = 4 / 5
 const STORE_BASE_URL = 'https://pgmeessentials.com'
 
 function slugify(str: string): string {
@@ -408,7 +408,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                   aspectRatio={BANNER_ASPECT_RATIO}
                   maxSize={5 * 1024 * 1024}
                   label="Upload banner image"
-                  description="Banner image (18:7 ratio). JPEG, PNG, or WebP. Max 5MB."
+                  description="Banner image (4:5 ratio). JPEG, PNG, or WebP. Max 5MB."
                   disabled={submitting || isUploading}
                   currentImageUrl={existingBannerUrl}
                   onDelete={() => {
@@ -654,13 +654,13 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
                 <div className="flex flex-col w-full text-left bg-white rounded-2xl border overflow-hidden shadow-sm">
                   {/* Banner / Placeholder */}
                   {previewBannerUrl ? (
-                    <div className="w-full" style={{ aspectRatio: '18/7' }}>
+                    <div className="w-full" style={{ aspectRatio: '4/5' }}>
                       <img src={previewBannerUrl} alt="" className="w-full h-full object-cover" />
                     </div>
                   ) : (
                     <div
                       className={`w-full flex items-center justify-center ${isExaminerTemplate ? 'bg-purple-500/5' : 'bg-blue-500/5'}`}
-                      style={{ aspectRatio: '18/7' }}
+                      style={{ aspectRatio: '4/5' }}
                     >
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className={isExaminerTemplate ? 'text-purple-400/40' : 'text-blue-400/30'}>
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -721,7 +721,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
               <div className="bg-white rounded-2xl border overflow-hidden shadow-sm max-h-[60vh] overflow-y-auto">
                 {/* Banner */}
                 {previewBannerUrl ? (
-                  <div className="w-full" style={{ aspectRatio: '18/7' }}>
+                  <div className="w-full" style={{ aspectRatio: '4/5' }}>
                     <img src={previewBannerUrl} alt="" className="w-full h-full object-cover" />
                   </div>
                 ) : null}

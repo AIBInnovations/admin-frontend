@@ -161,10 +161,10 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
               <ImageUploadWithCrop
                 value={thumbnailFile}
                 onChange={setThumbnailFile}
-                aspectRatio={16 / 9}
+                aspectRatio={4 / 5}
                 maxSize={5 * 1024 * 1024}
                 label="Upload thumbnail image"
-                description="16:9 aspect ratio. Max 5MB."
+                description="4:5 aspect ratio. Max 5MB."
                 disabled={isSubmitting}
                 currentImageUrl={packageType?.thumbnail_url}
               />

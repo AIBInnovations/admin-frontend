@@ -61,7 +61,7 @@ export function ImageUploadWithCrop({
   }
 
   const aspectRatioText =
-    aspectRatio === 1 ? '1:1' : aspectRatio === 16 / 9 ? '16:9' : `${aspectRatio}:1`
+    aspectRatio === 1 ? '1:1' : aspectRatio === 16 / 9 ? '16:9' : aspectRatio === 4 / 5 ? '4:5' : `${aspectRatio}:1`
 
   const finalDescription =
     description || `Recommended ratio: ${aspectRatioText}. Max ${Math.round(maxSize / (1024 * 1024))}MB.`

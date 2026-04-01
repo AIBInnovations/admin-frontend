@@ -307,7 +307,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                 onChange={handleThumbnailSelected}
                 disabled={isSubmitting || isThumbnailUploading}
                 label="Upload book thumbnail"
-                description="JPEG, PNG, or WebP. Max 5MB. Will be cropped to 3:4 book cover ratio."
+                description="JPEG, PNG, or WebP. Max 5MB. Will be cropped to 4:5 portrait ratio."
               />
             )}
             {thumbnailUploadProgress !== null && (
