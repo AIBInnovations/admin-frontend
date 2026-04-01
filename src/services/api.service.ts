@@ -253,11 +253,33 @@ class ApiService {
   private handleError(error: unknown): Error {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<ApiResponse>;
+      const status = axiosError.response?.status;
+
+      if (axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout')) {
+        const err = new Error('Request timed out — the operation may still be processing on the server.');
+        (err as any).status = 408;
+        return err;
+      }
 
       if (axiosError.response) {
         // Server responded with error status
-        const message = axiosError.response.data?.message || axiosError.response.data?.error || 'An error occurred';
-        return new Error(message);
+        const serverMsg = axiosError.response.data?.message || axiosError.response.data?.error || '';
+        let message: string;
+
+        if (status === 504) {
+          message = 'Gateway timeout — the operation is taking longer than expected. It may still complete on the server.';
+        } else if (status === 403) {
+          message = serverMsg || 'Permission denied — you do not have access to perform this action.';
+        } else if (status === 401) {
+          message = 'Session expired — please log in again.';
+        } else {
+          message = serverMsg || 'An error occurred';
+        }
+
+        const err = new Error(message);
+        (err as any).status = status;
+        (err as any).serverMessage = serverMsg;
+        return err;
       } else if (axiosError.request) {
         // Request made but no response received
         return new Error('No response from server. Please check your connection.');

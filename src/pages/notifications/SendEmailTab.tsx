@@ -351,17 +351,18 @@ export function SendEmailTab() {
       console.log('[SendEmail] Response:', response)
 
       if (response.success && response.data) {
-        const { sent, failed, total, failedEmails } = response.data
+        const { sent, failed, total, failedEmails, account } = response.data
+        const accountNote = account === 'fallback' ? ' (via fallback account)' : ''
 
         if (failed === 0) {
-          toast.success(`All ${sent} emails delivered successfully!`)
+          toast.success(`All ${sent} emails delivered successfully!${accountNote}`)
         } else if (sent === 0) {
           const reason = failedEmails?.[0]?.error || 'Unknown error'
-          toast.error(`All ${total} emails failed. Reason: ${reason}`, { duration: 10000 })
+          toast.error(`All ${total} emails failed${accountNote}. Reason: ${reason}`, { duration: 10000 })
           console.error('[SendEmail] All failed. Errors:', failedEmails)
         } else {
           toast.warning(
-            `${sent}/${total} delivered, ${failed} failed.${failedEmails?.[0]?.error ? ` Common error: ${failedEmails[0].error}` : ''}`,
+            `${sent}/${total} delivered, ${failed} failed${accountNote}.${failedEmails?.[0]?.error ? ` Common error: ${failedEmails[0].error}` : ''}`,
             { duration: 10000 }
           )
           console.warn('[SendEmail] Partial failure. Failed emails:', failedEmails)
@@ -374,18 +375,20 @@ export function SendEmailTab() {
       }
     } catch (error: any) {
       const msg = error.message || 'Failed to send email'
-      console.error('[SendEmail] Error:', msg, error)
+      const status = error.status
+      console.error('[SendEmail] Error:', msg, 'Status:', status, error)
 
-      if (msg.includes('timeout') || msg.includes('ECONNABORTED')) {
-        toast.error('Request timed out — emails may still be sending on the server. Check logs.', { duration: 10000 })
+      if (status === 504 || status === 408 || msg.includes('timeout') || msg.includes('ECONNABORTED')) {
+        toast.warning('Request timed out — but emails are likely still being sent on the server. Check back in a minute.', { duration: 15000 })
+        resetForm()
+      } else if (status === 403) {
+        toast.error(`Permission denied: ${msg}`, { duration: 10000 })
+      } else if (status === 401) {
+        toast.error('Session expired — please log in again.', { duration: 8000 })
       } else if (msg.includes('Network Error') || msg.includes('No response from server')) {
         toast.error('Network error — could not reach the server. Check your connection.', { duration: 8000 })
-      } else if (msg.includes('403') || msg.includes('Insufficient permissions')) {
-        toast.error('Permission denied — you do not have access to send emails.', { duration: 8000 })
-      } else if (msg.includes('401')) {
-        toast.error('Session expired — please log in again.', { duration: 8000 })
       } else {
-        toast.error(msg, { duration: 8000 })
+        toast.error(msg, { duration: 10000 })
       }
     } finally {
       setSending(false)

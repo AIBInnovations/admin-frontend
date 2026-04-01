@@ -96,6 +96,7 @@ export interface SendEmailResult {
   failed: number
   total: number
   failedEmails?: FailedEmail[]
+  account?: 'primary' | 'fallback'
 }
 
 class NotificationsService {
