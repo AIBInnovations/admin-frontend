@@ -939,7 +939,7 @@ export function HomeSectionItemFormModal({
           setImageFile([croppedFile])
           setShowImageCropper(false)
         }}
-        aspectRatio={4 / 5}
+        aspectRatio={16 / 9}
         title="Crop Image"
       />
 

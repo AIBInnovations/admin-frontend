@@ -190,10 +190,10 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             <ImageUploadWithCrop
               value={thumbnailFile}
               onChange={setThumbnailFile}
-              aspectRatio={4 / 5}
+              aspectRatio={16 / 9}
               maxSize={5 * 1024 * 1024}
               label="Upload cover image"
-              description="Recommended ratio: 4:5. Max 5MB. JPEG, PNG, or WebP."
+              description="Recommended ratio: 16:9. Max 5MB. JPEG, PNG, or WebP."
               disabled={isSubmitting}
               currentImageUrl={mode === 'edit' ? doc?.thumbnail_url : undefined}
             />

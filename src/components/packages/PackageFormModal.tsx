@@ -688,10 +688,10 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                   <ImageUploadWithCrop
                     value={thumbnailFile}
                     onChange={setThumbnailFile}
-                    aspectRatio={4 / 5}
+                    aspectRatio={16 / 9}
                     maxSize={5 * 1024 * 1024}
                     label="Upload image"
-                    description="4:5 ratio. Max 5MB."
+                    description="16:9 ratio. Max 5MB."
                     disabled={isSubmitting}
                     currentImageUrl={pkg?.thumbnail_url}
                     onDelete={async () => {
@@ -746,10 +746,10 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                   <ImageUploadWithCrop
                     value={notesThumbnailFile}
                     onChange={setNotesThumbnailFile}
-                    aspectRatio={4 / 5}
+                    aspectRatio={16 / 9}
                     maxSize={5 * 1024 * 1024}
                     label="Upload image"
-                    description="4:5 ratio."
+                    description="16:9 ratio."
                     disabled={isSubmitting}
                     currentImageUrl={pkg?.notes_thumbnail_url}
                     onDelete={async () => {

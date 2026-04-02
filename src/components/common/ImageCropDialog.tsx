@@ -129,7 +129,7 @@ export function ImageCropDialog({
   }
 
   const aspectRatioLabel =
-    aspectRatio === 1 ? '1:1 (Square)' : aspectRatio === 16 / 9 ? '16:9 (Thumbnail)' : aspectRatio === 4 / 5 ? '4:5 (Portrait)' : `${aspectRatio}:1`
+    aspectRatio === 1 ? '1:1 (Square)' : aspectRatio === 16 / 9 ? '16:9 (Thumbnail)' : `${aspectRatio}:1`
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onCancel()}>

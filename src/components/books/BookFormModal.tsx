@@ -24,8 +24,8 @@ import { Book, BookFormData, booksService } from '@/services/books.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
-/** Book thumbnail aspect ratio: 4:5 (standard portrait poster) */
-const BOOK_THUMBNAIL_ASPECT_RATIO = 4 / 5
+/** Book thumbnail aspect ratio: 16:9 standard landscape */
+const BOOK_THUMBNAIL_ASPECT_RATIO = 16 / 9
 
 const bookSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -307,7 +307,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                 onChange={handleThumbnailSelected}
                 disabled={isSubmitting || isThumbnailUploading}
                 label="Upload book thumbnail"
-                description="JPEG, PNG, or WebP. Max 5MB. Will be cropped to 4:5 portrait ratio."
+                description="JPEG, PNG, or WebP. Max 5MB. Will be cropped to 16:9 ratio."
               />
             )}
             {thumbnailUploadProgress !== null && (
@@ -560,7 +560,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
       onCropComplete={handleCropComplete}
       aspectRatio={BOOK_THUMBNAIL_ASPECT_RATIO}
       title="Crop Book Thumbnail"
-      description="Adjust the crop area for the book cover (4:5 portrait ratio)."
+      description="Adjust the crop area for the book cover (16:9 ratio)."
     />
     </>
   )

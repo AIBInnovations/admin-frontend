@@ -25,8 +25,8 @@ import { LiveSession, liveSessionsService } from '@/services/liveSessions.servic
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
-/** Banner aspect ratio: 4:5 portrait (1080×1350, standard poster) */
-const BANNER_ASPECT_RATIO = 4 / 5
+/** Banner aspect ratio: 16:9 standard landscape */
+const BANNER_ASPECT_RATIO = 16 / 9
 
 type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
 
@@ -802,7 +802,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       onCropComplete={handleCropComplete}
       aspectRatio={BANNER_ASPECT_RATIO}
       title="Crop Banner Image"
-      description="Adjust the crop area to fit the banner dimensions (4:5 ratio)."
+      description="Adjust the crop area to fit the banner dimensions (16:9 ratio)."
     />
     </>
   )
