@@ -30,6 +30,7 @@ export interface Package {
   video_lectures_thumbnail_url: string | null
   notes_thumbnail_url: string | null
   features: string
+  rich_description: string | null
   is_active: boolean
   publish_status: PublishStatus
   display_order: number
@@ -120,6 +121,7 @@ export interface PackageFormData {
   trailer_video_id?: string | null
   thumbnail_url?: string | null
   features?: string
+  rich_description?: string
   display_order?: number
   is_active?: boolean
   publish_status?: PublishStatus

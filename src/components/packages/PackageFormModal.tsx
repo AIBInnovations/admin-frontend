@@ -26,6 +26,7 @@ import { Subject, subjectsService } from '@/services/subjects.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
+import RichTextEditor from '@/components/common/RichTextEditor'
 import { toast } from 'sonner'
 
 const tierSchema = z.object({
@@ -49,6 +50,7 @@ const packageSchema = z.object({
   sale_end_date: z.string().optional().or(z.literal('')),
   duration_days: z.number({ error: 'Duration is required' }).int().min(1, 'Minimum 1 day'),
   features: z.string().max(2000).optional().or(z.literal('')),
+  rich_description: z.string().max(50000).optional().or(z.literal('')),
   display_order: z.number().int().min(0).optional().or(z.nan()),
   is_active: z.boolean(),
   publish_status: z.enum(['draft', 'published']),
@@ -100,7 +102,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       name: '', description: '', subject_id: '', package_type_id: '',
       price: 0, original_price: null, is_on_sale: false,
       sale_price: null, sale_discount_percent: null, sale_end_date: '',
-      duration_days: 365, features: '', display_order: 0, is_active: true,
+      duration_days: 365, features: '', rich_description: '', display_order: 0, is_active: true,
       publish_status: 'draft' as const,
       tiers: [],
     },
@@ -158,6 +160,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           sale_end_date: pkg.sale_end_date ? pkg.sale_end_date.split('T')[0] : '',
           duration_days: pkg.duration_days,
           features: pkg.features || '',
+          rich_description: pkg.rich_description || '',
           display_order: pkg.display_order,
           is_active: pkg.is_active,
           publish_status: pkg.publish_status || 'draft',
@@ -168,7 +171,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           name: '', description: '', subject_id: defaultSubjectId || '', package_type_id: '',
           price: 0, original_price: null, is_on_sale: false,
           sale_price: null, sale_discount_percent: null, sale_end_date: '',
-          duration_days: 365, features: '', display_order: 0, is_active: true,
+          duration_days: 365, features: '', rich_description: '', display_order: 0, is_active: true,
           publish_status: 'draft' as const,
           tiers: [],
         })
@@ -178,16 +181,37 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
 
   const handleFormSubmit = async (data: PackageFormValues) => {
     try {
+      // Auto-generate plain description from rich_description if description is too short
+      let description = data.description
+      if (data.rich_description && (!description || description.length < 10)) {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = data.rich_description
+        const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim()
+        description = plainText.substring(0, 2000) || description
+      }
+
+      // Auto-generate features from rich_description bullet points for backward compat with old app versions
+      let features = data.features
+      if (data.rich_description && !features) {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = data.rich_description
+        const listItems = tempDiv.querySelectorAll('li')
+        if (listItems.length > 0) {
+          features = Array.from(listItems).map(li => (li.textContent || '').trim()).filter(Boolean).join('\n')
+        }
+      }
+
       const formData: PackageFormData = {
         name: data.name,
-        description: data.description,
+        description,
         subject_id: data.subject_id,
         package_type_id: data.package_type_id,
         price: data.price,
         original_price: data.original_price || undefined,
         is_on_sale: data.is_on_sale,
         duration_days: data.duration_days,
-        features: data.features || undefined,
+        features: features || undefined,
+        rich_description: data.rich_description || undefined,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
         publish_status: data.publish_status,
@@ -274,7 +298,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[780px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Package' : 'Edit Package'}</DialogTitle>
           <DialogDescription>
@@ -294,8 +318,8 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
-              <Textarea id="description" placeholder="Package description..." rows={3} disabled={isSubmitting} {...register('description')} />
+              <Label htmlFor="description">Short Description <span className="text-red-500">*</span></Label>
+              <Textarea id="description" placeholder="Brief plain-text description (used as fallback for older app versions)..." rows={2} disabled={isSubmitting} {...register('description')} />
               {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
             </div>
 
@@ -395,9 +419,27 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="features">Features</Label>
+              <Label>Package Description (Rich Text)</Label>
+              <Controller
+                name="rich_description"
+                control={control}
+                render={({ field }) => (
+                  <RichTextEditor
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    disabled={isSubmitting}
+                    placeholder="Add headings, bullet points, and formatted content describing what's included..."
+                  />
+                )}
+              />
+              <p className="text-xs text-muted-foreground">Use headings, lists, and formatting to describe the package. This replaces the old tick-mark feature list in new app versions.</p>
+              {errors.rich_description && <p className="text-sm text-red-500">{errors.rich_description.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="features">Features (for older app versions)</Label>
               <Textarea id="features" placeholder="One feature per line..." rows={3} disabled={isSubmitting} {...register('features')} />
-              <p className="text-xs text-muted-foreground">Enter features separated by commas or new lines</p>
+              <p className="text-xs text-muted-foreground">Plain text fallback — shown as a tick-mark list on older app versions. Auto-filled from rich text bullet points if left empty.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
