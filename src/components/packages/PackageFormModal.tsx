@@ -211,7 +211,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
         is_on_sale: data.is_on_sale,
         duration_days: data.duration_days,
         features: features || undefined,
-        rich_description: data.rich_description || undefined,
+        rich_description: data.rich_description ? btoa(unescape(encodeURIComponent(data.rich_description))) : undefined,
         display_order: data.display_order || undefined,
         is_active: data.is_active,
         publish_status: data.publish_status,
