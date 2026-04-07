@@ -3,6 +3,13 @@ import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
+export interface LinkedBookRef {
+  _id: string
+  title: string
+  author?: string
+  ebook_file_format?: 'pdf' | 'epub' | null
+}
+
 export interface Document {
   _id: string
   series_id: (PopulatedRef & { package_id?: string }) | null
@@ -20,6 +27,8 @@ export interface Document {
   display_order: number
   download_count: number
   publish_status: PublishStatus
+  /** When set, this document mirrors title/description/cover/file from a Book. */
+  source_book_id: LinkedBookRef | string | null
   createdAt: string
   updatedAt: string
 }
@@ -33,6 +42,15 @@ export interface DocumentFormData {
   display_order?: number
   thumbnail_url?: string
   thumbnail_s3_key?: string
+  publish_status?: PublishStatus
+}
+
+/** Payload for creating a Document linked to an existing Book's eBook. */
+export interface LinkedDocumentCreateData {
+  source_book_id: string
+  series_id?: string
+  subject_id?: string
+  is_free?: boolean
   publish_status?: PublishStatus
 }
 
@@ -125,6 +143,20 @@ class DocumentsService {
   }
 
   /**
+   * Create a Document linked to an existing Book's eBook file. No upload —
+   * the backend mirrors title/description/cover/file from the Book and
+   * keeps them in sync as the Book is updated.
+   */
+  async createLinked(data: LinkedDocumentCreateData): Promise<ApiResponse<{ document_id: string; file_url: string; file_size_mb: number; source_book_id: string }>> {
+    return apiService.post(`${this.basePath}/confirm-upload`, {
+      source_book_id: data.source_book_id,
+      series_id: data.series_id || undefined,
+      subject_id: data.subject_id || undefined,
+      is_free: data.is_free,
+    })
+  }
+
+  /**
    * Get presigned URL for document thumbnail upload
    */
   async getThumbnailUploadUrl(mimeType: string): Promise<ApiResponse<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>> {
@@ -132,6 +164,47 @@ class DocumentsService {
       `${this.basePath}/thumbnail-upload-url`,
       { mimeType },
     )
+  }
+
+  /**
+   * Replace an existing document's underlying file via presigned S3 URL (3-step):
+   * 1. Get presigned upload URL (documents.update permission)
+   * 2. PUT new file directly to S3
+   * 3. Confirm replacement with backend — old S3 object deleted, document record updated
+   */
+  async replaceFile(
+    documentId: string,
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<ApiResponse<{ document_id: string; file_url: string; file_size_mb: number; file_format: string }>> {
+    const mimeType = file.type || 'application/pdf'
+
+    // Step 1: presigned URL
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
+      `${this.basePath}/file-replace-upload-url`,
+      { mimeType },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key } = urlRes.data
+
+    // Step 2: upload to S3
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      },
+    })
+
+    // Step 3: confirm replacement
+    return apiService.post(`${this.basePath}/${documentId}/file-replace`, {
+      s3Key,
+      fileSize: file.size,
+      mimeType,
+    })
   }
 
   /**

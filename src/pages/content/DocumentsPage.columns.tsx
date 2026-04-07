@@ -8,7 +8,7 @@ import { ColumnDef } from '@/components/common/DataTable'
 import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { Document } from '@/services/documents.service'
 import type { PopulatedRef } from '@/types/api.types'
-import { MoreVertical, Pencil, Archive, FileText, Download, Globe, GlobeLock } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, FileText, Download, Globe, GlobeLock, Link2 } from 'lucide-react'
 
 const formatBadge: Record<string, string> = {
   pdf: 'bg-red-500/10 text-red-600 border-red-200',
@@ -39,19 +39,33 @@ export function useDocumentsColumns({
     {
       id: 'document',
       header: 'Document',
-      cell: (doc) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-            <FileText className="h-4 w-4 text-muted-foreground" />
+      cell: (doc) => {
+        const linkedBook = doc.source_book_id && typeof doc.source_book_id === 'object' ? doc.source_book_id : null
+        return (
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium truncate">{doc.title}</p>
+                {linkedBook && (
+                  <span
+                    title={`Linked to eBook: ${linkedBook.title}`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] border border-blue-200 shrink-0"
+                  >
+                    <Link2 className="h-2.5 w-2.5" />
+                    Linked
+                  </span>
+                )}
+              </div>
+              <p className="max-w-[200px] truncate text-xs text-muted-foreground">
+                {linkedBook ? `from eBook: ${linkedBook.title}` : doc.description || '—'}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{doc.title}</p>
-            <p className="max-w-[200px] truncate text-xs text-muted-foreground">
-              {doc.description || '—'}
-            </p>
-          </div>
-        </div>
-      ),
+        )
+      },
     },
     {
       id: 'subject',

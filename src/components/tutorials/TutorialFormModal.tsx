@@ -386,6 +386,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
                 { id: 'theory', label: 'Theory' },
                 { id: 'practical', label: 'Practical' },
                 { id: 'notes', label: 'Notes' },
+                { id: 'ebook-store', label: 'E-Book Store' },
               ].map((screen) => (
                 <label key={screen.id} className="flex items-center gap-2 cursor-pointer">
                   <Checkbox

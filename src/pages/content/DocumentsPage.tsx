@@ -7,6 +7,7 @@ import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal'
+import { ErrorModal } from '@/components/common/ErrorModal'
 import { Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { documentsService, Document, DocumentFormData } from '@/services/documents.service'
@@ -37,6 +38,13 @@ export function DocumentsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
+  // Error modal — every catchable failure in this page surfaces here so the
+  // admin sees the precise reason instead of a transient toast.
+  const [errorModal, setErrorModal] = useState<{ open: boolean; title?: string; message: string }>({
+    open: false,
+    message: '',
+  })
+  const showError = (message: string, title?: string) => setErrorModal({ open: true, title, message })
 
   // Fetch series for filter dropdown
   useEffect(() => {
@@ -114,46 +122,129 @@ export function DocumentsPage() {
     setArchiveModalOpen(true)
   }
 
-  const handleFormSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
+  const handleFormSubmit = async (
+    data: DocumentFormData,
+    file?: File,
+    onProgress?: (percent: number) => void,
+    linkedBookId?: string,
+  ) => {
+    // Track whether a precise error has already been surfaced via showError()
+    // inside this invocation. The catch block consults this LOCAL flag instead
+    // of `errorModal.open`, because that React state is captured in the closure
+    // and won't reflect synchronous setState calls before the catch fires.
+    let surfacedSpecificError = false
+    const surfaceError = (message: string, title?: string) => {
+      surfacedSpecificError = true
+      showError(message, title)
+    }
+
     try {
-      if (modalMode === 'create' && file) {
-        const response = await documentsService.upload(data, file, onProgress)
-        if (response.success) {
-          toast.success('Document uploaded successfully')
+      // ── CREATE ──
+      if (modalMode === 'create') {
+        if (linkedBookId) {
+          // Linked-mode create: no file upload, mirror from Book.
+          const response = await documentsService.createLinked({
+            source_book_id: linkedBookId,
+            series_id: data.series_id,
+            subject_id: data.subject_id,
+            is_free: data.is_free,
+            publish_status: data.publish_status,
+          })
+          if (!response.success) {
+            const msg = response.message || 'Failed to link eBook as document'
+            surfaceError(msg, 'Could not link eBook')
+            throw new Error(msg)
+          }
+          toast.success('eBook linked as document successfully')
           fetchDocuments()
-        } else {
-          toast.error(response.message || 'Failed to upload document')
-          throw new Error(response.message || 'Failed to upload document')
+          return
         }
-      } else if (selectedDocument) {
-        const response = await documentsService.update(selectedDocument._id, data)
-        if (response.success) {
-          toast.success('Document updated successfully')
-          fetchDocuments()
-        } else {
-          toast.error(response.message || 'Failed to update document')
-          throw new Error(response.message || 'Failed to update document')
+        if (!file) {
+          // Should be caught by modal validation, but defend anyway.
+          const msg = 'A document file is required to create a standalone document.'
+          surfaceError(msg, 'Missing file')
+          throw new Error(msg)
+        }
+        const response = await documentsService.upload(data, file, onProgress)
+        if (!response.success) {
+          const msg = response.message || 'Failed to upload document'
+          surfaceError(msg, 'Upload failed')
+          throw new Error(msg)
+        }
+        toast.success('Document uploaded successfully')
+        fetchDocuments()
+        return
+      }
+
+      // ── EDIT ──
+      if (!selectedDocument) return
+
+      // For linked documents, strip every mirrored field defensively. The
+      // backend also rejects them, but we surface a friendlier error if
+      // somehow they leak through.
+      const isLinkedDoc = !!selectedDocument.source_book_id
+      const safeData: Partial<DocumentFormData> = isLinkedDoc
+        ? {
+            series_id: data.series_id,
+            subject_id: data.subject_id,
+            is_free: data.is_free,
+            publish_status: data.publish_status,
+            display_order: data.display_order,
+          }
+        : data
+
+      const response = await documentsService.update(selectedDocument._id, safeData)
+      if (!response.success) {
+        const msg = response.message || 'Failed to update document'
+        surfaceError(msg, 'Update failed')
+        throw new Error(msg)
+      }
+
+      // File replace is only valid for standalone documents.
+      if (file) {
+        if (isLinkedDoc) {
+          const msg = 'This document is linked to an eBook. Replace the file on the source Book — the change will propagate automatically.'
+          surfaceError(msg, 'Cannot replace file')
+          throw new Error(msg)
+        }
+        const replaceRes = await documentsService.replaceFile(selectedDocument._id, file, onProgress)
+        if (!replaceRes.success) {
+          const msg = replaceRes.message || 'Failed to replace document file'
+          surfaceError(msg, 'File replacement failed')
+          throw new Error(msg)
         }
       }
+
+      toast.success(file ? 'Document updated and file replaced' : 'Document updated successfully')
+      fetchDocuments()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save document')
+      // For unknown (network, axios, unexpected) failures, surface the raw
+      // error. Skip if a more precise error was already surfaced above.
+      if (!surfacedSpecificError) {
+        showError(error?.message || 'Failed to save document', 'Something went wrong')
+      }
       throw error
     }
   }
 
   const handleArchiveConfirm = async () => {
     if (!selectedDocument) return
+    let surfacedSpecificError = false
     try {
       const response = await documentsService.archive(selectedDocument._id)
       if (response.success) {
         toast.success('Document archived successfully')
         fetchDocuments()
       } else {
-        toast.error(response.message || 'Failed to archive document')
-        throw new Error(response.message || 'Failed to archive document')
+        const msg = response.message || 'Failed to archive document'
+        surfacedSpecificError = true
+        showError(msg, 'Archive failed')
+        throw new Error(msg)
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to archive document')
+      if (!surfacedSpecificError) {
+        showError(error?.message || 'Failed to archive document', 'Archive failed')
+      }
       throw error
     }
   }
@@ -300,6 +391,13 @@ export function DocumentsPage() {
           onSuccess={fetchDocuments}
         />
       )}
+
+      <ErrorModal
+        open={errorModal.open}
+        title={errorModal.title}
+        message={errorModal.message}
+        onClose={() => setErrorModal({ open: false, message: '' })}
+      />
     </div>
   )
 }
