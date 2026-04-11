@@ -107,11 +107,11 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
   }, [open])
 
   // Fetch books when link-mode is engaged (or when editing a linked doc, for context).
-  // We pull a generous page (500) and warn the admin if even more exist, so a
-  // larger catalog never silently hides eligible eBooks from the picker.
+  // The admin books endpoint accepts limit up to 5000, which covers any realistic
+  // catalog. We pull in one shot and warn if even more exist.
   useEffect(() => {
     if (!open || (!linkMode && !existingLinkedBook)) return
-    const PICKER_LIMIT = 500
+    const PICKER_LIMIT = 5000
     setBooksLoading(true)
     setBooksError(null)
     setBooksTruncated(false)
@@ -391,7 +391,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
               </p>
               {booksTruncated && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 dark:bg-amber-950/30 dark:border-amber-900/50">
-                  Showing the first 500 books. If you can't find the eBook you want, narrow the catalog or contact support.
+                  Showing the first 5000 books. If you can't find the eBook you want, contact support.
                 </p>
               )}
             </div>

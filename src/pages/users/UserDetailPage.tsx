@@ -451,18 +451,21 @@ export function UserDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {user.subject_selections.map((s, i) => (
-                <Badge
-                  key={i}
-                  variant={s.is_primary ? 'default' : 'secondary'}
-                  className="text-xs py-1 px-3"
-                >
-                  {typeof s.subject_id === 'object' ? s.subject_id.name : s.subject_id}
-                  {s.is_primary && (
-                    <span className="ml-1.5 text-[10px] opacity-75">Primary</span>
-                  )}
-                </Badge>
-              ))}
+              {user.subject_selections.map((s, i) => {
+                if (!s.subject_id) return null
+                return (
+                  <Badge
+                    key={i}
+                    variant={s.is_primary ? 'default' : 'secondary'}
+                    className="text-xs py-1 px-3"
+                  >
+                    {typeof s.subject_id === 'object' && s.subject_id ? s.subject_id.name : String(s.subject_id)}
+                    {s.is_primary && (
+                      <span className="ml-1.5 text-[10px] opacity-75">Primary</span>
+                    )}
+                  </Badge>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -501,9 +504,9 @@ export function UserDetailPage() {
                   {user.purchases.map((purchase) => (
                     <TableRow key={purchase._id}>
                       <TableCell className="font-medium text-sm">
-                        {typeof purchase.package_id === 'object'
+                        {typeof purchase.package_id === 'object' && purchase.package_id
                           ? purchase.package_id.name
-                          : purchase.package_id}
+                          : String(purchase.package_id || 'Unknown')}
                       </TableCell>
                       <TableCell className="text-sm">
                         {purchase.currency} {purchase.amount_paid}
@@ -584,7 +587,7 @@ export function UserDetailPage() {
                   {user.ebook_purchases.map((ep) => (
                     <TableRow key={ep._id}>
                       <TableCell className="font-medium text-sm">
-                        {typeof ep.book_id === 'object' ? ep.book_id.title : ep.book_id}
+                        {typeof ep.book_id === 'object' && ep.book_id ? ep.book_id.title : String(ep.book_id || 'Unknown')}
                         {ep.is_admin_granted && (
                           <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
                         )}
@@ -665,7 +668,7 @@ export function UserDetailPage() {
                   {user.session_purchases.map((sp) => (
                     <TableRow key={sp._id}>
                       <TableCell className="font-medium text-sm">
-                        {typeof sp.session_id === 'object' ? sp.session_id.title : sp.session_id}
+                        {typeof sp.session_id === 'object' && sp.session_id ? sp.session_id.title : String(sp.session_id || 'Unknown')}
                         {sp.is_admin_granted && (
                           <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
                         )}
@@ -934,7 +937,7 @@ export function UserDetailPage() {
             <AlertDialogDescription>
               This will revoke access to{' '}
               <span className="font-medium text-foreground">
-                {typeof revokeTarget?.package_id === 'object' ? revokeTarget.package_id.name : 'this package'}
+                {typeof revokeTarget?.package_id === 'object' && revokeTarget?.package_id ? revokeTarget.package_id.name : 'this package'}
               </span>{' '}
               for {user?.name || user?.phone_number}. The user will see an "access revoked" message.
             </AlertDialogDescription>
@@ -975,7 +978,7 @@ export function UserDetailPage() {
             <AlertDialogDescription>
               This will revoke access to{' '}
               <span className="font-medium text-foreground">
-                {typeof revokeEbookTarget?.book_id === 'object' ? revokeEbookTarget.book_id.title : 'this ebook'}
+                {typeof revokeEbookTarget?.book_id === 'object' && revokeEbookTarget?.book_id ? revokeEbookTarget.book_id.title : 'this ebook'}
               </span>{' '}
               for {user?.name || user?.phone_number}.
             </AlertDialogDescription>
@@ -1016,7 +1019,7 @@ export function UserDetailPage() {
             <AlertDialogDescription>
               This will revoke access to{' '}
               <span className="font-medium text-foreground">
-                {typeof revokeSessionTarget?.session_id === 'object' ? revokeSessionTarget.session_id.title : 'this session'}
+                {typeof revokeSessionTarget?.session_id === 'object' && revokeSessionTarget?.session_id ? revokeSessionTarget.session_id.title : 'this session'}
               </span>{' '}
               for {user?.name || user?.phone_number}. The enrollment will also be cancelled.
             </AlertDialogDescription>
