@@ -753,9 +753,9 @@ export function UserDetailPage() {
                         {order.order_number}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {order.items.map((item) => (
-                          <div key={item.book_id} className="truncate">
-                            {item.title} x{item.quantity}
+                        {(order.items || []).filter(Boolean).map((item, idx) => (
+                          <div key={item.book_id || idx} className="truncate">
+                            {item.title || 'Unknown'} x{item.quantity}
                           </div>
                         ))}
                       </TableCell>
