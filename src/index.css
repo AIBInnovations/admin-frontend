@@ -70,13 +70,14 @@ body {
   gap: inherit;
 }
 
-/* Fix: padding-bottom on a scrollable flex container is not included
-   in the scroll area by browsers. An empty ::after spacer forces the
-   browser to account for the container's bottom padding. */
+/* Bottom padding is set to 0 on the dialog container because browsers
+   eat padding-bottom in scrollable flex containers. This ::after acts
+   as the bottom spacer instead — always visible, always scrolled to. */
 [role="dialog"]::after,
 [role="alertdialog"]::after {
   content: '';
-  flex: 0 0 auto;
+  display: block;
+  flex: 0 0 1.5rem; /* matches the original p-6 = 24px = 1.5rem */
 }
 
 /* Prevent images / video previews from blowing out the modal width */
