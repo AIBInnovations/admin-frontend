@@ -107,36 +107,31 @@ body {
 }
 
 /* ── Combobox / Select trigger marquee ────────────────────────────────
-   When the selected value is too long for the trigger button, the text
-   truncates normally. On hover the text slides left to reveal the rest,
-   then slides back — a "marquee" loop.
+   When the selected value overflows the trigger button, the text
+   scrolls left automatically in a continuous loop so the full value
+   is always readable without interaction.
    ──────────────────────────────────────────────────────────────────── */
 
-/* Make combobox triggers size-containable so cqi units work */
+/* Make combobox triggers a scroll-clip container with cqi support */
 [role="dialog"] [role="combobox"],
 [role="alertdialog"] [role="combobox"] {
   container-type: inline-size;
   overflow: hidden;
 }
 
-/* The text span inside the combobox trigger */
+/* The text span: always marquee, no ellipsis clipping */
 [role="dialog"] [role="combobox"] > .truncate,
 [role="alertdialog"] [role="combobox"] > .truncate {
   display: inline-block;
   white-space: nowrap;
   min-width: 0;
-}
-
-/* On hover: swap ellipsis for scrolling marquee */
-[role="dialog"] [role="combobox"]:hover > .truncate,
-[role="alertdialog"] [role="combobox"]:hover > .truncate {
   overflow: visible;
   text-overflow: clip;
-  animation: marquee-slide 4s ease-in-out infinite;
+  animation: marquee-slide 6s linear infinite;
 }
 
 @keyframes marquee-slide {
-  0%, 15%  { transform: translateX(0); }
-  45%, 55% { transform: translateX(calc(-100% + 100cqi - 2rem)); }
-  85%, 100% { transform: translateX(0); }
+  0%, 20%  { transform: translateX(0); }
+  50%, 70% { transform: translateX(calc(-100% + 100cqi - 2rem)); }
+  100%     { transform: translateX(0); }
 }
