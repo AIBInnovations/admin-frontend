@@ -124,7 +124,7 @@ export function UserFormModal({ open, onClose, onSubmit, user, mode }: UserFormM
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Add New User' : 'Edit User'}</DialogTitle>
           <DialogDescription>

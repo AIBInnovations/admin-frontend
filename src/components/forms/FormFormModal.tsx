@@ -273,7 +273,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
   return (
     <>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isUploading && onClose()}>
-        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>{mode === 'create' ? 'Create Form' : 'Edit Form'}</DialogTitle>
             <DialogDescription>
@@ -621,7 +621,7 @@ export function FormFormModal({ open, onClose, onSubmit, form, mode }: FormFormM
 
       {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[900px]">
           <DialogHeader>
             <DialogTitle>Preview</DialogTitle>
             <DialogDescription>

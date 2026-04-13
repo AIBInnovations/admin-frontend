@@ -234,7 +234,7 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Add Book' : 'Edit Book'}</DialogTitle>
           <DialogDescription>

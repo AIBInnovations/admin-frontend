@@ -271,7 +271,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Schedule Live Session' : 'Edit Live Session'}</DialogTitle>
           <DialogDescription>

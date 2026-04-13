@@ -102,7 +102,7 @@ export function PackageTypeFormModal({ open, onClose, onSubmit, packageType, mod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Package Type' : 'Edit Package Type'}</DialogTitle>
           <DialogDescription>

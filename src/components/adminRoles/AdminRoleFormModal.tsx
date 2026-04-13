@@ -99,7 +99,7 @@ export function AdminRoleFormModal({ open, onClose, onSubmit, role, mode }: Admi
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Create Role' : 'Edit Role'}</DialogTitle>
           <DialogDescription>

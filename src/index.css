@@ -53,3 +53,46 @@ body {
   font-feature-settings: 'rlig' 1, 'calt' 1;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
+
+/* ── Dialog / Modal scroll & layout fixes ─────────────────────────────
+   Ensures all modals (Dialog + AlertDialog) handle long content and
+   oversized media/file-names without clipping or horizontal scroll.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Forms inside dialogs must participate in the flex-col layout so the
+   footer can stay at the bottom while the body scrolls. */
+[role="dialog"] > form,
+[role="alertdialog"] > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: inherit;
+}
+
+/* Prevent images / video previews from blowing out the modal width */
+[role="dialog"] img,
+[role="dialog"] video,
+[role="alertdialog"] img,
+[role="alertdialog"] video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Constrain any absolutely-sized or intrinsically-wide children */
+[role="dialog"] pre,
+[role="dialog"] code,
+[role="alertdialog"] pre,
+[role="alertdialog"] code {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* File-info cards and long text: ensure word-break inside dialogs */
+[role="dialog"] p,
+[role="dialog"] span,
+[role="alertdialog"] p,
+[role="alertdialog"] span {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}

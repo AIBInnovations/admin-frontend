@@ -106,7 +106,7 @@ export function ImageCropper({
         `}</style>
       )}
       <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !isCropping) onClose() }}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>

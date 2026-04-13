@@ -220,7 +220,7 @@ export function TutorialFormModal({ open, onClose, onSubmit, tutorial, mode }: T
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Add Tutorial' : 'Edit Tutorial'}</DialogTitle>
           <DialogDescription>

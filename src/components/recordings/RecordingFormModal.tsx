@@ -129,7 +129,7 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Upload Recording' : 'Edit Recording'}</DialogTitle>
           <DialogDescription>

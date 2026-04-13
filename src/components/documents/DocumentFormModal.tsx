@@ -258,7 +258,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Upload Document' : 'Edit Document'}</DialogTitle>
           <DialogDescription>

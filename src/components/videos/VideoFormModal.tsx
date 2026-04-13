@@ -174,7 +174,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Upload Video' : 'Edit Video'}</DialogTitle>
           <DialogDescription>
