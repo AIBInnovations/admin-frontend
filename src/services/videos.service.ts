@@ -307,6 +307,38 @@ class VideosService {
   }
 
   /**
+   * Upload file for an existing upcoming video.
+   * Reuses the same S3 upload logic, then calls the upload-file endpoint
+   * instead of confirm-upload.
+   */
+  async uploadFileForExisting(
+    videoId: string,
+    videoFile: File,
+    onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
+  ): Promise<ApiResponse<{ video_id: string }>> {
+    const mimeType = videoFile.type || 'video/mp4'
+    let s3Key: string
+
+    if (videoFile.size <= this.MULTIPART_THRESHOLD) {
+      s3Key = await this.uploadSinglePart(videoFile, mimeType, onProgress, onPhaseChange)
+    } else {
+      s3Key = await this.uploadMultipart(videoFile, mimeType, onProgress, onPhaseChange)
+    }
+
+    onPhaseChange?.('confirming')
+    try {
+      return await apiService.post<{ video_id: string }>(
+        `${this.basePath}/${videoId}/upload-file`,
+        { s3Key, fileSize: videoFile.size, mimeType },
+        { timeout: this.UPLOAD_API_TIMEOUT },
+      )
+    } catch (error: any) {
+      throw new Error(`Upload failed while saving record: ${error.message}`)
+    }
+  }
+
+  /**
    * Update video metadata (JSON)
    */
   async update(videoId: string, data: Partial<VideoFormData>): Promise<ApiResponse<Video>> {

@@ -151,10 +151,23 @@ export function VideosPage() {
           throw new Error(response.message || 'Failed to upload video')
         }
       } else if (selectedVideo) {
+        // Upload file for upcoming video if a file was provided
+        if (file && selectedVideo.processing_status === 'upcoming') {
+          const uploadResponse = await videosService.uploadFileForExisting(
+            selectedVideo._id, file, onProgress, onPhaseChange
+          )
+          if (uploadResponse.success) {
+            toast.success('Video file uploaded — processing will begin shortly')
+          } else {
+            toast.error(uploadResponse.message || 'Failed to upload video file')
+            throw new Error(uploadResponse.message || 'Failed to upload video file')
+          }
+        }
+        // Update metadata
         const response = await videosService.update(selectedVideo._id, data)
         if (response.success) {
           videoId = selectedVideo._id
-          toast.success('Video updated successfully')
+          if (!file) toast.success('Video updated successfully')
         } else {
           toast.error(response.message || 'Failed to update video')
           throw new Error(response.message || 'Failed to update video')
@@ -211,6 +224,7 @@ export function VideosPage() {
         { label: 'Ready', value: 'ready' },
         { label: 'Processing', value: 'processing' },
         { label: 'Uploading', value: 'uploading' },
+        { label: 'Upcoming', value: 'upcoming' },
         { label: 'Failed', value: 'failed' },
       ],
       placeholder: 'Filter by status',

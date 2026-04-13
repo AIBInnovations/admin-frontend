@@ -183,8 +183,8 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
-          {/* Video File (create only) */}
-          {mode === 'create' && (
+          {/* Video File (create, or edit when upcoming) */}
+          {(mode === 'create' || (mode === 'edit' && video?.processing_status === 'upcoming')) && (
             <div className="space-y-2">
               <Label>Video File <span className="text-red-500">*</span></Label>
               {!videoFile ? (
@@ -538,9 +538,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting || (mode === 'create' && !videoFile)}>
               {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? `Uploading...${uploadProgress != null ? ` ${uploadProgress}%` : ''}` : 'Updating...'}</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' || videoFile ? `Uploading...${uploadProgress != null ? ` ${uploadProgress}%` : ''}` : 'Updating...'}</>
               ) : (
-                <>{mode === 'create' ? 'Upload Video' : 'Update Video'}</>
+                <>{mode === 'create' ? 'Upload Video' : videoFile ? 'Upload & Update Video' : 'Update Video'}</>
               )}
             </Button>
           </DialogFooter>
