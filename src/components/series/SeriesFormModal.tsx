@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Series, SeriesFormData, seriesService } from '@/services/series.service'
 import { Package, packagesService } from '@/services/packages.service'
 import { ImageUploadWithCrop } from '@/components/common/ImageUploadWithCrop'
@@ -182,9 +183,9 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
                       disabled={isSubmitting || (mode === 'create' && !!defaultPackageId)}
                       className="w-full justify-between font-normal h-9"
                     >
-                      <span className="truncate">
+                      <MarqueeText>
                         {field.value ? packages.find(p => p._id === field.value)?.name || 'Select package' : 'Select package'}
-                      </span>
+                      </MarqueeText>
                       <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>

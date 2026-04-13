@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Upload, X, FileVideo, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Recording, RecordingFormData } from '@/services/recordings.service'
 import { LiveSession, liveSessionsService } from '@/services/liveSessions.service'
 
@@ -226,11 +227,11 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
                         className="w-full justify-between font-normal"
                         disabled={isSubmitting}
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {selectedSession
                             ? `${selectedSession.title}${selectedSession.scheduled_start_time ? ` (${new Date(selectedSession.scheduled_start_time).toLocaleDateString()})` : ''}`
                             : field.value ? 'Select session' : 'No session'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

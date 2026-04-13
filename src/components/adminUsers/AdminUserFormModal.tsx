@@ -8,6 +8,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Check, ChevronsUpDown } from 'lucide-react'
@@ -142,7 +143,7 @@ export function AdminUserFormModal({ open, onClose, onSubmit, adminUser, mode }:
                           className="w-full justify-between font-normal"
                           disabled={isSubmitting}
                         >
-                          <span className="truncate">{selectedRole ? selectedRole.name : 'Select role'}</span>
+                          <MarqueeText>{selectedRole ? selectedRole.name : 'Select role'}</MarqueeText>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>

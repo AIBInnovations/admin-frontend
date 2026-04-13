@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Plus, Trash2, Check, ChevronsUpDown, ImageIcon, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Package, PackageFormData, packagesService } from '@/services/packages.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
@@ -336,9 +337,9 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                           disabled={isSubmitting || (mode === 'create' && !!defaultSubjectId)}
                           className="w-full justify-between font-normal h-9"
                         >
-                          <span className="truncate">
+                          <MarqueeText>
                             {field.value ? subjects.find(s => s._id === field.value)?.name || 'Select subject' : 'Select subject'}
-                          </span>
+                          </MarqueeText>
                           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -382,9 +383,9 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                           disabled={isSubmitting}
                           className="w-full justify-between font-normal h-9"
                         >
-                          <span className="truncate">
+                          <MarqueeText>
                             {field.value ? packageTypes.find(t => t._id === field.value)?.name || 'Select type' : 'Select type'}
-                          </span>
+                          </MarqueeText>
                           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>

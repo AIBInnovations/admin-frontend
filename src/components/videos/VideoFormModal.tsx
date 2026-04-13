@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Video, VideoFormData } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { VideoTag, videoTagsService } from '@/services/videoTags.service'
@@ -250,14 +251,14 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                         disabled={isSubmitting || (mode === 'create' && !!defaultModuleId)}
                         className="w-full justify-between font-normal h-9"
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {field.value
                             ? (() => {
                                 const m = modules.find(m => m._id === field.value)
                                 return m ? `${m.name}${typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}` : 'Select module'
                               })()
                             : 'Select module'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -312,9 +313,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                         disabled={isSubmitting}
                         className="w-full justify-between font-normal h-9"
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {field.value ? faculty.find(f => f._id === field.value)?.name || 'Select faculty' : 'None'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

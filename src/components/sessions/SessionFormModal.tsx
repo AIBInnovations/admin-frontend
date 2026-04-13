@@ -21,6 +21,7 @@ import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
 import { Loader2, Check, ChevronsUpDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { subjectsService, Subject } from '@/services/subjects.service'
 import { packagesService, Package } from '@/services/packages.service'
 import { apiService } from '@/services/api.service'
@@ -351,7 +352,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         variant="outline" role="combobox" aria-expanded={subjectPopoverOpen}
                         className="w-full justify-between font-normal" disabled={isSubmitting || isUploading}
                       >
-                        <span className="truncate">{selectedSubject ? selectedSubject.name : 'Select subject'}</span>
+                        <MarqueeText>{selectedSubject ? selectedSubject.name : 'Select subject'}</MarqueeText>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -387,7 +388,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         variant="outline" role="combobox" aria-expanded={facultyPopoverOpen}
                         className="w-full justify-between font-normal" disabled={isSubmitting || isUploading}
                       >
-                        <span className="truncate">{selectedFaculty ? selectedFaculty.name : 'No faculty'}</span>
+                        <MarqueeText>{selectedFaculty ? selectedFaculty.name : 'No faculty'}</MarqueeText>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

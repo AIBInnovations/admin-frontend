@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Upload, Check, ChevronsUpDown, FileText, X, Link2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Document, DocumentFormData, documentsService } from '@/services/documents.service'
 import { Series, seriesService } from '@/services/series.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
@@ -326,13 +327,13 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                     className="w-full justify-between font-normal"
                     disabled={isSubmitting || booksLoading}
                   >
-                    <span className="truncate">
+                    <MarqueeText>
                       {booksLoading
                         ? 'Loading books...'
                         : selectedBookId
                           ? books.find((b) => b._id === selectedBookId)?.title ?? 'Select an eBook...'
                           : 'Select an eBook...'}
-                    </span>
+                    </MarqueeText>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -446,11 +447,11 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                   className="w-full justify-between font-normal"
                   disabled={isSubmitting}
                 >
-                  <span className="truncate">
+                  <MarqueeText>
                     {selectedSubjectId
                       ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
                       : 'Select subject...'}
-                  </span>
+                  </MarqueeText>
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -501,11 +502,11 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                         className="w-full justify-between font-normal"
                         disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {selectedSeries
                             ? `${selectedSeries.name}${typeof selectedSeries.package_id === 'object' ? ` (${selectedSeries.package_id.name})` : ''}`
                             : 'Select series...'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

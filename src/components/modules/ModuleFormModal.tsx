@@ -8,6 +8,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover'
@@ -149,9 +150,9 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
                       disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
                       className="w-full justify-between font-normal h-9"
                     >
-                      <span className="truncate">
+                      <MarqueeText>
                         {field.value ? seriesList.find(s => s._id === field.value)?.name || 'Select series' : 'Select series'}
-                      </span>
+                      </MarqueeText>
                       <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>

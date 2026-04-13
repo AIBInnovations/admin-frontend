@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Loader2, Upload, FileText, X, ChevronsUpDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { Book, BookFormData, booksService } from '@/services/books.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
@@ -444,11 +445,11 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                   className="w-full justify-between font-normal"
                   disabled={isSubmitting || isThumbnailUploading}
                 >
-                  <span className="truncate">
+                  <MarqueeText>
                     {selectedSubjectId
                       ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
                       : 'Select subject...'}
-                  </span>
+                  </MarqueeText>
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>

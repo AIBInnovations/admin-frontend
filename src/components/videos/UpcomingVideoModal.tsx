@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Clock, Check, ChevronsUpDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarqueeText } from '@/components/common/MarqueeText'
 import { UpcomingVideoFormData } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { apiService } from '@/services/api.service'
@@ -155,14 +156,14 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                         disabled={isSubmitting || !!defaultModuleId}
                         className="w-full justify-between font-normal h-9"
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {field.value
                             ? (() => {
                                 const m = modules.find(m => m._id === field.value)
                                 return m ? `${m.name}${typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}` : 'Select module'
                               })()
                             : 'Select module'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -206,9 +207,9 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                         disabled={isSubmitting}
                         className="w-full justify-between font-normal h-9"
                       >
-                        <span className="truncate">
+                        <MarqueeText>
                           {field.value ? faculty.find(f => f._id === field.value)?.name || 'Select faculty' : 'None'}
-                        </span>
+                        </MarqueeText>
                         <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

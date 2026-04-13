@@ -106,32 +106,12 @@ body {
   word-break: break-word;
 }
 
-/* ── Combobox / Select trigger marquee ────────────────────────────────
-   When the selected value overflows the trigger button, the text
-   scrolls left automatically in a continuous loop so the full value
-   is always readable without interaction.
+/* ── MarqueeText keyframes ────────────────────────────────────────────
+   Used by the <MarqueeText> component for combobox / select triggers.
+   Scrolls left to --marquee-distance, pauses, then scrolls back.
    ──────────────────────────────────────────────────────────────────── */
-
-/* Make combobox triggers a scroll-clip container with cqi support */
-[role="dialog"] [role="combobox"],
-[role="alertdialog"] [role="combobox"] {
-  container-type: inline-size;
-  overflow: hidden;
-}
-
-/* The text span: always marquee, no ellipsis clipping */
-[role="dialog"] [role="combobox"] > .truncate,
-[role="alertdialog"] [role="combobox"] > .truncate {
-  display: inline-block;
-  white-space: nowrap;
-  min-width: 0;
-  overflow: visible;
-  text-overflow: clip;
-  animation: marquee-slide 6s linear infinite;
-}
-
-@keyframes marquee-slide {
-  0%, 20%  { transform: translateX(0); }
-  50%, 70% { transform: translateX(calc(-100% + 100cqi - 2rem)); }
-  100%     { transform: translateX(0); }
+@keyframes marquee-text {
+  0%, 15%  { transform: translateX(0); }
+  45%, 55% { transform: translateX(var(--marquee-distance)); }
+  85%, 100% { transform: translateX(0); }
 }
