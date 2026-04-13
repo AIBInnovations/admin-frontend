@@ -70,6 +70,15 @@ body {
   gap: inherit;
 }
 
+/* Fix: padding-bottom on a scrollable flex container is not included
+   in the scroll area by browsers. An empty ::after spacer forces the
+   browser to account for the container's bottom padding. */
+[role="dialog"]::after,
+[role="alertdialog"]::after {
+  content: '';
+  flex: 0 0 auto;
+}
+
 /* Prevent images / video previews from blowing out the modal width */
 [role="dialog"] img,
 [role="dialog"] video,
@@ -95,4 +104,39 @@ body {
 [role="alertdialog"] span {
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+/* ── Combobox / Select trigger marquee ────────────────────────────────
+   When the selected value is too long for the trigger button, the text
+   truncates normally. On hover the text slides left to reveal the rest,
+   then slides back — a "marquee" loop.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Make combobox triggers size-containable so cqi units work */
+[role="dialog"] [role="combobox"],
+[role="alertdialog"] [role="combobox"] {
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+/* The text span inside the combobox trigger */
+[role="dialog"] [role="combobox"] > .truncate,
+[role="alertdialog"] [role="combobox"] > .truncate {
+  display: inline-block;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* On hover: swap ellipsis for scrolling marquee */
+[role="dialog"] [role="combobox"]:hover > .truncate,
+[role="alertdialog"] [role="combobox"]:hover > .truncate {
+  overflow: visible;
+  text-overflow: clip;
+  animation: marquee-slide 4s ease-in-out infinite;
+}
+
+@keyframes marquee-slide {
+  0%, 15%  { transform: translateX(0); }
+  45%, 55% { transform: translateX(calc(-100% + 100cqi - 2rem)); }
+  85%, 100% { transform: translateX(0); }
 }

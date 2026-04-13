@@ -351,7 +351,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         variant="outline" role="combobox" aria-expanded={subjectPopoverOpen}
                         className="w-full justify-between font-normal" disabled={isSubmitting || isUploading}
                       >
-                        {selectedSubject ? selectedSubject.name : 'Select subject'}
+                        <span className="truncate">{selectedSubject ? selectedSubject.name : 'Select subject'}</span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -387,7 +387,7 @@ export function SessionFormModal({ open, onClose, onSubmit, session, mode }: Ses
                         variant="outline" role="combobox" aria-expanded={facultyPopoverOpen}
                         className="w-full justify-between font-normal" disabled={isSubmitting || isUploading}
                       >
-                        {selectedFaculty ? selectedFaculty.name : 'No faculty'}
+                        <span className="truncate">{selectedFaculty ? selectedFaculty.name : 'No faculty'}</span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

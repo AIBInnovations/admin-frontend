@@ -444,9 +444,11 @@ export function BookFormModal({ open, onClose, onSubmit, book, mode }: BookFormM
                   className="w-full justify-between font-normal"
                   disabled={isSubmitting || isThumbnailUploading}
                 >
-                  {selectedSubjectId
-                    ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
-                    : 'Select subject...'}
+                  <span className="truncate">
+                    {selectedSubjectId
+                      ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
+                      : 'Select subject...'}
+                  </span>
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>

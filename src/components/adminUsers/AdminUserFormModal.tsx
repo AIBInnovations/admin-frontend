@@ -142,7 +142,7 @@ export function AdminUserFormModal({ open, onClose, onSubmit, adminUser, mode }:
                           className="w-full justify-between font-normal"
                           disabled={isSubmitting}
                         >
-                          {selectedRole ? selectedRole.name : 'Select role'}
+                          <span className="truncate">{selectedRole ? selectedRole.name : 'Select role'}</span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>

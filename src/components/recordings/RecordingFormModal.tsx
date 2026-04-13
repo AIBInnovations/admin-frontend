@@ -226,9 +226,11 @@ export function RecordingFormModal({ open, onClose, onSubmit, recording, mode }:
                         className="w-full justify-between font-normal"
                         disabled={isSubmitting}
                       >
-                        {selectedSession
-                          ? `${selectedSession.title}${selectedSession.scheduled_start_time ? ` (${new Date(selectedSession.scheduled_start_time).toLocaleDateString()})` : ''}`
-                          : field.value ? 'Select session' : 'No session'}
+                        <span className="truncate">
+                          {selectedSession
+                            ? `${selectedSession.title}${selectedSession.scheduled_start_time ? ` (${new Date(selectedSession.scheduled_start_time).toLocaleDateString()})` : ''}`
+                            : field.value ? 'Select session' : 'No session'}
+                        </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>

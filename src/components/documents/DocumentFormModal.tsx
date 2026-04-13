@@ -326,11 +326,13 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                     className="w-full justify-between font-normal"
                     disabled={isSubmitting || booksLoading}
                   >
-                    {booksLoading
-                      ? 'Loading books...'
-                      : selectedBookId
-                        ? books.find((b) => b._id === selectedBookId)?.title ?? 'Select an eBook...'
-                        : 'Select an eBook...'}
+                    <span className="truncate">
+                      {booksLoading
+                        ? 'Loading books...'
+                        : selectedBookId
+                          ? books.find((b) => b._id === selectedBookId)?.title ?? 'Select an eBook...'
+                          : 'Select an eBook...'}
+                    </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -444,9 +446,11 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                   className="w-full justify-between font-normal"
                   disabled={isSubmitting}
                 >
-                  {selectedSubjectId
-                    ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
-                    : 'Select subject...'}
+                  <span className="truncate">
+                    {selectedSubjectId
+                      ? subjects.find((s) => s._id === selectedSubjectId)?.name ?? 'Select subject...'
+                      : 'Select subject...'}
+                  </span>
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -497,9 +501,11 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                         className="w-full justify-between font-normal"
                         disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
                       >
-                        {selectedSeries
-                          ? `${selectedSeries.name}${typeof selectedSeries.package_id === 'object' ? ` (${selectedSeries.package_id.name})` : ''}`
-                          : 'Select series...'}
+                        <span className="truncate">
+                          {selectedSeries
+                            ? `${selectedSeries.name}${typeof selectedSeries.package_id === 'object' ? ` (${selectedSeries.package_id.name})` : ''}`
+                            : 'Select series...'}
+                        </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
