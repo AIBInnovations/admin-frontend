@@ -5,7 +5,7 @@ import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone, Mail, MessageSquare } from 'lucide-react'
+import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone, Mail, MessageSquare, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   notificationsService,
@@ -16,6 +16,7 @@ import { useNotificationsColumns } from './NotificationsPage.columns'
 import { SendNotificationTab } from './SendNotificationTab'
 import { SendEmailTab } from './SendEmailTab'
 import { SendSmsTab } from './SendSmsTab'
+import { ScheduledNotificationsTab } from './ScheduledNotificationsTab'
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -183,6 +184,10 @@ export function NotificationsPage() {
             <MessageSquare className="h-4 w-4" />
             Send SMS
           </TabsTrigger>
+          <TabsTrigger value="scheduled" className="gap-2">
+            <CalendarClock className="h-4 w-4" />
+            Scheduled
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <Bell className="h-4 w-4" />
             History
@@ -199,6 +204,10 @@ export function NotificationsPage() {
 
         <TabsContent value="sms">
           <SendSmsTab />
+        </TabsContent>
+
+        <TabsContent value="scheduled">
+          <ScheduledNotificationsTab />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">

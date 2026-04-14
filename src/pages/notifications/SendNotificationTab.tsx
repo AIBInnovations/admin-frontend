@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2, Package, Layers, MousePointerClick, Video } from 'lucide-react'
+import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2, Package, Layers, MousePointerClick, Video, Clock, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { notificationsService } from '@/services/notifications.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
@@ -41,6 +41,10 @@ export function SendNotificationTab() {
   const [selectedNavPackageId, setSelectedNavPackageId] = useState('')
   const [selectedBookId, setSelectedBookId] = useState('')
   const [selectedSessionId, setSelectedSessionId] = useState('')
+
+  // Scheduling state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')  // datetime-local string
 
   // Click action data
   const [navPackages, setNavPackages] = useState<PackageType[]>([])
@@ -324,6 +328,8 @@ export function SendNotificationTab() {
     setUserSearch('')
     setUserResults([])
     setSessionId('')
+    setScheduleEnabled(false)
+    setScheduledAt('')
     removeImage()
   }
 
@@ -341,6 +347,12 @@ export function SendNotificationTab() {
     if ((clickAction === 'theory_package' || clickAction === 'practical_package') && !selectedNavPackageId) return false
     if (clickAction === 'ebook' && !selectedBookId) return false
     if (clickAction === 'live_session' && !selectedSessionId) return false
+    // Schedule validation
+    if (scheduleEnabled) {
+      if (!scheduledAt) return false
+      const when = new Date(scheduledAt)
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
+    }
     return true
   }
 
@@ -385,6 +397,44 @@ export function SendNotificationTab() {
         ...(finalImageUrl && { image_url: finalImageUrl }),
       }
 
+      // ── Scheduled notification path ───────────────────────────────────
+      if (scheduleEnabled) {
+        // Resolve target_type + target_id/user_ids for the scheduled doc
+        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
+        let scheduleTargetId: string | undefined
+        let scheduleUserIds: string[] | undefined
+        if (target === 'all') {
+          scheduleTargetType = 'all'
+        } else if (target === 'subject') {
+          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
+          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
+          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
+        } else if (target === 'session') {
+          scheduleTargetType = 'session'
+          scheduleTargetId = sessionId
+        } else {
+          scheduleTargetType = 'users'
+          scheduleUserIds = selectedUsers.map((u) => u._id)
+        }
+
+        const schedRes = await notificationsService.scheduleNotification({
+          channel: 'push',
+          target_type: scheduleTargetType,
+          ...(scheduleTargetId && { target_id: scheduleTargetId }),
+          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          ...payload,
+        })
+        if (schedRes.success) {
+          toast.success(`Notification scheduled for ${new Date(scheduledAt).toLocaleString()}`)
+          resetForm()
+        } else {
+          toast.error(schedRes.message || 'Failed to schedule notification')
+        }
+        return
+      }
+
+      // ── Immediate send path ───────────────────────────────────────────
       let response
       if (target === 'all') {
         response = await notificationsService.sendToAll(payload)
@@ -890,6 +940,38 @@ export function SendNotificationTab() {
             </div>
           </div>
 
+          {/* Schedule */}
+          <div className="space-y-3 border-t pt-6">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={scheduleEnabled}
+                onChange={(e) => setScheduleEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Schedule for later</span>
+              </div>
+            </label>
+            {scheduleEnabled && (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor="schedule-at">Send at <span className="text-red-500">*</span></Label>
+                <Input
+                  id="schedule-at"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Notification will be queued and sent automatically at this time. Uses your device's local time zone.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Send Button */}
           <div className="flex items-center justify-between border-t pt-6">
             <p className="text-sm text-muted-foreground">
@@ -913,7 +995,12 @@ export function SendNotificationTab() {
               {sending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {uploadingImage ? 'Uploading image...' : 'Sending...'}
+                  {uploadingImage ? 'Uploading image...' : (scheduleEnabled ? 'Scheduling...' : 'Sending...')}
+                </>
+              ) : scheduleEnabled ? (
+                <>
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  Schedule Notification
                 </>
               ) : (
                 <>

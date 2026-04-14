@@ -225,6 +225,76 @@ class NotificationsService {
   async sendSmsToSession(data: { session_id: string; message: string }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-sms-session`, data)
   }
+
+  // ── Scheduled Notifications ──
+
+  async scheduleNotification(data: ScheduleNotificationPayload): Promise<ApiResponse<{ scheduled_notification: ScheduledNotification }>> {
+    return apiService.post(`${this.basePath}/schedule`, data)
+  }
+
+  async listScheduledNotifications(params: { status?: string; channel?: string; page?: number; limit?: number } = {}): Promise<ApiResponse<ListResponse<ScheduledNotification>>> {
+    const query = this.buildQuery(params as Record<string, unknown>)
+    return apiService.get<ListResponse<ScheduledNotification>>(`${this.basePath}/scheduled${query}`)
+  }
+
+  async cancelScheduledNotification(id: string): Promise<ApiResponse<{ scheduled_notification: ScheduledNotification }>> {
+    return apiService.delete(`${this.basePath}/scheduled/${id}`)
+  }
+}
+
+// ── Scheduled Notification types ──
+
+export type ScheduledChannel = 'push' | 'email' | 'sms'
+export type ScheduledTargetType = 'all' | 'subject' | 'users' | 'package' | 'series' | 'session'
+export type ScheduledStatus = 'pending' | 'sent' | 'failed' | 'cancelled'
+
+export interface ScheduleNotificationPayload {
+  channel: ScheduledChannel
+  target_type: ScheduledTargetType
+  target_id?: string
+  user_ids?: string[]
+  scheduled_at: string  // ISO
+
+  // Push
+  title?: string
+  message?: string
+  click_url?: string
+  link_type?: 'internal' | 'external' | 'none'
+  external_url?: string
+  internal_route?: string
+  internal_params?: Record<string, string>
+  image_url?: string
+
+  // Email
+  email_subject?: string
+  email_header?: string
+  email_body?: string
+  email_footer?: string
+  email_attachments?: EmailAttachment[]
+
+  // SMS
+  sms_message?: string
+}
+
+export interface ScheduledNotification {
+  _id: string
+  channel: ScheduledChannel
+  target_type: ScheduledTargetType
+  target_id: string | null
+  user_ids: string[]
+  scheduled_at: string
+  status: ScheduledStatus
+  failure_reason: string | null
+  sent_at: string | null
+  result: { sent: number; failed: number; total: number } | null
+  title: string | null
+  message: string | null
+  email_subject: string | null
+  sms_message: string | null
+  image_url: string | null
+  created_by: { _id: string; name: string; email: string } | null
+  createdAt: string
+  updatedAt: string
 }
 
 export const notificationsService = new NotificationsService()

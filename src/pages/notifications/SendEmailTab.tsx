@@ -95,6 +95,10 @@ export function SendEmailTab() {
   // Send state
   const [sending, setSending] = useState(false)
 
+  // Schedule state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
+
   // ── Subject loading ──────────────────────────────────────────────────────
   useEffect(() => {
     if (target === 'subject' && subjects.length === 0) {
@@ -271,6 +275,11 @@ export function SendEmailTab() {
     }
     if (target === 'specific' && selectedUsers.length === 0) return false
     if (target === 'session' && !sessionId) return false
+    if (scheduleEnabled) {
+      if (!scheduledAt) return false
+      const when = new Date(scheduledAt)
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
+    }
     return true
   }
 
@@ -320,6 +329,47 @@ export function SendEmailTab() {
         ...(header.trim() && { header: header.trim() }),
         ...(footer.trim() && { footer: footer.trim() }),
         ...(uploadedAttachments.length > 0 && { attachments: uploadedAttachments }),
+      }
+
+      // ── Scheduled path ────────────────────────────────────────────────
+      if (scheduleEnabled) {
+        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
+        let scheduleTargetId: string | undefined
+        let scheduleUserIds: string[] | undefined
+        if (target === 'all') {
+          scheduleTargetType = 'all'
+        } else if (target === 'subject') {
+          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
+          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
+          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
+        } else if (target === 'session') {
+          scheduleTargetType = 'session'
+          scheduleTargetId = sessionId
+        } else {
+          scheduleTargetType = 'users'
+          scheduleUserIds = selectedUsers.map((u) => u._id)
+        }
+
+        const schedRes = await notificationsService.scheduleNotification({
+          channel: 'email',
+          target_type: scheduleTargetType,
+          ...(scheduleTargetId && { target_id: scheduleTargetId }),
+          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          email_subject: payload.subject,
+          email_body: payload.body,
+          email_header: payload.header,
+          email_footer: payload.footer,
+          email_attachments: payload.attachments,
+        })
+        if (schedRes.success) {
+          toast.success(`Email scheduled for ${new Date(scheduledAt).toLocaleString()}`)
+          resetForm()
+        } else {
+          toast.error(schedRes.message || 'Failed to schedule email')
+        }
+        setSending(false)
+        return
       }
 
       let response
@@ -411,6 +461,8 @@ export function SendEmailTab() {
     setUserSearch('')
     setUserResults([])
     setSessionId('')
+    setScheduleEnabled(false)
+    setScheduledAt('')
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -805,6 +857,35 @@ export function SendEmailTab() {
             </div>
           </div>
 
+          {/* ── Schedule ── */}
+          <div className="space-y-3 border-t pt-6">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={scheduleEnabled}
+                onChange={(e) => setScheduleEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <span className="text-sm font-medium">Schedule for later</span>
+            </label>
+            {scheduleEnabled && (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor="email-schedule-at">Send at <span className="text-red-500">*</span></Label>
+                <Input
+                  id="email-schedule-at"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Email will be queued and sent automatically at this time.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* ── Actions ── */}
           <div className="flex items-center justify-between border-t pt-6">
             <p className="text-sm text-muted-foreground">
@@ -838,12 +919,12 @@ export function SendEmailTab() {
                 {sending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending…
+                    {scheduleEnabled ? 'Scheduling…' : 'Sending…'}
                   </>
                 ) : (
                   <>
                     <Send className="mr-2 h-4 w-4" />
-                    Send Email
+                    {scheduleEnabled ? 'Schedule Email' : 'Send Email'}
                   </>
                 )}
               </Button>

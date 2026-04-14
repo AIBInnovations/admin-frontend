@@ -68,6 +68,10 @@ export function SendSmsTab() {
   // Send state
   const [sending, setSending] = useState(false)
 
+  // Schedule state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
+
   const smsInfo = getSmsInfo(message)
 
   // ── Subject loading ──────────────────────────────────────────────────────
@@ -178,6 +182,11 @@ export function SendSmsTab() {
     }
     if (target === 'specific' && selectedUsers.length === 0) return false
     if (target === 'session' && !sessionId) return false
+    if (scheduleEnabled) {
+      if (!scheduledAt) return false
+      const when = new Date(scheduledAt)
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
+    }
     return true
   }
 
@@ -187,6 +196,43 @@ export function SendSmsTab() {
     setSending(true)
 
     try {
+      // ── Scheduled path ────────────────────────────────────────────────
+      if (scheduleEnabled) {
+        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
+        let scheduleTargetId: string | undefined
+        let scheduleUserIds: string[] | undefined
+        if (target === 'all') {
+          scheduleTargetType = 'all'
+        } else if (target === 'subject') {
+          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
+          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
+          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
+        } else if (target === 'session') {
+          scheduleTargetType = 'session'
+          scheduleTargetId = sessionId
+        } else {
+          scheduleTargetType = 'users'
+          scheduleUserIds = selectedUsers.map((u) => u._id)
+        }
+
+        const schedRes = await notificationsService.scheduleNotification({
+          channel: 'sms',
+          target_type: scheduleTargetType,
+          ...(scheduleTargetId && { target_id: scheduleTargetId }),
+          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          sms_message: message.trim(),
+        })
+        if (schedRes.success) {
+          toast.success(`SMS scheduled for ${new Date(scheduledAt).toLocaleString()}`)
+          resetForm()
+        } else {
+          toast.error(schedRes.message || 'Failed to schedule SMS')
+        }
+        setSending(false)
+        return
+      }
+
       let response
       if (target === 'all') {
         response = await notificationsService.sendSmsToAll({ message: message.trim() })
@@ -233,6 +279,8 @@ export function SendSmsTab() {
     setPackages([])
     setSeries([])
     setSessionId('')
+    setScheduleEnabled(false)
+    setScheduledAt('')
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -537,6 +585,33 @@ export function SendSmsTab() {
             </p>
           </div>
 
+          {/* ── Schedule ── */}
+          <div className="space-y-3 border-t pt-6">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={scheduleEnabled}
+                onChange={(e) => setScheduleEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <span className="text-sm font-medium">Schedule for later</span>
+            </label>
+            {scheduleEnabled && (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor="sms-schedule-at">Send at <span className="text-red-500">*</span></Label>
+                <Input
+                  id="sms-schedule-at"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">SMS will be queued and sent automatically at this time.</p>
+              </div>
+            )}
+          </div>
+
           {/* ── Actions ── */}
           <div className="flex items-center justify-between border-t pt-6">
             <p className="text-sm text-muted-foreground">
@@ -557,12 +632,12 @@ export function SendSmsTab() {
               {sending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
+                  {scheduleEnabled ? 'Scheduling…' : 'Sending…'}
                 </>
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Send SMS
+                  {scheduleEnabled ? 'Schedule SMS' : 'Send SMS'}
                 </>
               )}
             </Button>
