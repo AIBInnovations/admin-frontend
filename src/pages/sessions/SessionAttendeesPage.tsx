@@ -11,9 +11,16 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Users, ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Users, ArrowLeft, Ban, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { liveSessionsService, LiveSession, Enrollee } from '@/services/liveSessions.service'
+import { usersService } from '@/services/users.service'
 
 export function SessionAttendeesPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -25,6 +32,9 @@ export function SessionAttendeesPage() {
   const [loadingEnrollees, setLoadingEnrollees] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [stats, setStats] = useState<{ confirmed: number; waitlisted: number; cancelled: number }>({ confirmed: 0, waitlisted: 0, cancelled: 0 })
+  const [revokeTarget, setRevokeTarget] = useState<Enrollee | null>(null)
+  const [revokeReason, setRevokeReason] = useState('')
+  const [revoking, setRevoking] = useState(false)
 
   useEffect(() => {
     if (!sessionId) return
@@ -65,6 +75,30 @@ export function SessionAttendeesPage() {
   }, [sessionId, statusFilter])
 
   useEffect(() => { fetchEnrollees() }, [fetchEnrollees])
+
+  const handleRevokeAccess = async () => {
+    if (!revokeTarget || !revokeTarget.user_id?._id || !revokeTarget.purchase_id?._id) return
+    try {
+      setRevoking(true)
+      const response = await usersService.revokeSessionAccess(
+        revokeTarget.user_id._id,
+        revokeTarget.purchase_id._id,
+        revokeReason || undefined,
+      )
+      if (response.success) {
+        toast.success('Session access revoked successfully')
+        fetchEnrollees()
+      } else {
+        toast.error(response.message || 'Failed to revoke access')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to revoke access')
+    } finally {
+      setRevoking(false)
+      setRevokeTarget(null)
+      setRevokeReason('')
+    }
+  }
 
   const totalCount = stats.confirmed + stats.waitlisted + stats.cancelled
 
@@ -176,7 +210,8 @@ export function SessionAttendeesPage() {
                     <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Paid</TableHead>
-                    <TableHead className="hidden sm:table-cell pr-6">Enrolled</TableHead>
+                    <TableHead className="hidden sm:table-cell">Enrolled</TableHead>
+                    <TableHead className="pr-6 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -221,12 +256,27 @@ export function SessionAttendeesPage() {
                             ? `₹${enrollee.purchase_id.amount_paid?.toLocaleString('en-IN')}`
                             : '—'}
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground pr-6">
+                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                           {new Date(enrollee.enrolled_at).toLocaleDateString('en-IN', {
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',
                           })}
+                        </TableCell>
+                        <TableCell className="pr-6 text-right">
+                          {enrollee.purchase_id?._id && enrollee.enrollment_status !== 'cancelled' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setRevokeTarget(enrollee)}
+                            >
+                              <Ban className="mr-1 h-3 w-3" />
+                              Revoke
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -237,6 +287,58 @@ export function SessionAttendeesPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={!!revokeTarget}
+        onOpenChange={(open) => {
+          if (!open && !revoking) {
+            setRevokeTarget(null)
+            setRevokeReason('')
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Session Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke access to{' '}
+              <span className="font-medium text-foreground">{session.title}</span>{' '}
+              for{' '}
+              <span className="font-medium text-foreground">
+                {revokeTarget?.user_id?.name || revokeTarget?.user_id?.phone_number || 'this user'}
+              </span>
+              . The enrollment will be cancelled and the user will lose access immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="revoke-reason">Reason (optional)</Label>
+            <Input
+              id="revoke-reason"
+              placeholder="e.g., Refund issued, Policy violation, etc."
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              disabled={revoking}
+              maxLength={500}
+            />
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeAccess}
+              disabled={revoking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {revoking ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
+              ) : (
+                'Revoke Access'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

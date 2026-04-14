@@ -88,7 +88,7 @@ export interface Enrollee {
   enrollment_status: 'confirmed' | 'waitlisted' | 'cancelled'
   has_guaranteed_seat: boolean
   enrolled_at: string
-  purchase_id: { amount_paid: number; purchased_at: string } | null
+  purchase_id: { _id: string; amount_paid: number; purchased_at: string } | null
 }
 
 export interface EnrolleesResponse {
