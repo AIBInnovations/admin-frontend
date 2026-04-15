@@ -109,7 +109,7 @@ function SubjectExportCard() {
   useEffect(() => {
     setLoadingList(true)
     subjectsService
-      .getSubjects({ limit: 200, sort_by: 'name', sort_order: 'asc' })
+      .getSubjects({ limit: 1000, sort_by: 'name', sort_order: 'asc' })
       .then((res) => {
         if (res.success && res.data) setSubjects(res.data.entities || [])
       })
@@ -169,7 +169,7 @@ function SessionExportCard() {
   useEffect(() => {
     setLoadingList(true)
     liveSessionsService
-      .getAll({ limit: 200 })
+      .getAll({ limit: 1000 })
       .then((res) => {
         if (res.success && res.data) setSessions(res.data.entities || [])
       })
@@ -236,21 +236,21 @@ function PackageExportCard() {
     setLoadingList(true)
     const loader = (() => {
       if (pickerType === 'package') {
-        return packagesService.getAll({ limit: 200 }).then((res) => {
+        return packagesService.getAll({ limit: 1000 }).then((res) => {
           if (res.success && res.data) setPackages(res.data.entities || [])
         })
       }
       if (pickerType === 'series') {
-        return seriesService.getAll({ limit: 200 }).then((res) => {
+        return seriesService.getAll({ limit: 1000 }).then((res) => {
           if (res.success && res.data) setSeries(res.data.entities || [])
         })
       }
       if (pickerType === 'module') {
-        return modulesService.getAll({ limit: 200 }).then((res) => {
+        return modulesService.getAll({ limit: 1000 }).then((res) => {
           if (res.success && res.data) setModules(res.data.entities || [])
         })
       }
-      return documentsService.getAll({ limit: 200 }).then((res) => {
+      return documentsService.getAll({ limit: 1000 }).then((res) => {
         if (res.success && res.data) setDocuments(res.data.entities || [])
       })
     })()
@@ -353,7 +353,7 @@ function EbookExportCard() {
   useEffect(() => {
     setLoadingList(true)
     booksService
-      .getAll({ limit: 200 })
+      .getAll({ limit: 1000 })
       .then((res) => {
         if (res.success && res.data) {
           setBooks((res.data.entities || []).filter((b) => b.ebook))
