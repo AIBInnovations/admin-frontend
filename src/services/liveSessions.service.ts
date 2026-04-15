@@ -88,7 +88,13 @@ export interface Enrollee {
   enrollment_status: 'confirmed' | 'waitlisted' | 'cancelled'
   has_guaranteed_seat: boolean
   enrolled_at: string
-  purchase_id: { _id: string; amount_paid: number; purchased_at: string } | null
+  purchase_id: {
+    _id: string
+    amount_paid: number
+    purchased_at: string
+    is_revoked: boolean
+    is_admin_granted: boolean
+  } | null
 }
 
 export interface EnrolleesResponse {
@@ -239,6 +245,14 @@ class LiveSessionsService {
 
   async hideBanner(sessionId: string): Promise<ApiResponse<{ banner: any }>> {
     return apiService.post(`${this.basePath}/${sessionId}/hide-banner`)
+  }
+
+  async revokeEnrollment(
+    sessionId: string,
+    enrollmentId: string,
+    reason?: string,
+  ): Promise<ApiResponse<{ enrollment_id: string; session_id: string; message: string }>> {
+    return apiService.put(`admin/session-enrollments/${sessionId}/enrollees/${enrollmentId}/revoke`, { reason })
   }
 
   async convertToPackage(
