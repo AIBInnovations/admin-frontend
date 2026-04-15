@@ -46,6 +46,7 @@ import { ArchivesPage } from '@/pages/content/ArchivesPage'
 import { FormsPage } from '@/pages/content/FormsPage'
 import { FormSubmissionsPage } from '@/pages/content/FormSubmissionsPage'
 import { TutorialsPage } from '@/pages/content/TutorialsPage'
+import { ExportsPage } from '@/pages/exports/ExportsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
 
@@ -115,6 +116,9 @@ function App() {
 
               {/* Notifications */}
               <Route path="/notifications" element={<NotificationsPage />} />
+
+              {/* Exports */}
+              <Route path="/exports" element={<ExportsPage />} />
 
               {/* Settings */}
               <Route path="/settings/admin-users" element={<AdminUsersPage />} />

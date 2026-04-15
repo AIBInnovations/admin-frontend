@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Wrench,
   Archive,
+  Download,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -99,6 +100,7 @@ const navigation: NavItem[] = [
     ],
   },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Exports', href: '/exports', icon: Download },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   {
     name: 'Settings',

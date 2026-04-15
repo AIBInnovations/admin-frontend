@@ -296,6 +296,69 @@ class ApiService {
   getAxiosInstance(): AxiosInstance {
     return this.api;
   }
+
+  /**
+   * Download a binary response (e.g. XLSX) and trigger a browser save.
+   * Falls back to parsing the blob as JSON if the server returns an error payload.
+   */
+  async downloadBlob(
+    url: string,
+    params?: Record<string, string | undefined>,
+    fallbackFilename = 'download',
+  ): Promise<{ filename: string }> {
+    try {
+      const response = await this.api.get(url, {
+        params,
+        responseType: 'blob',
+      })
+
+      const blob = response.data as Blob
+      const disposition = response.headers['content-disposition'] as string | undefined
+      const filename = parseFilenameFromDisposition(disposition) ?? fallbackFilename
+
+      triggerBrowserDownload(blob, filename)
+      return { filename }
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+        const text = await error.response.data.text()
+        let parsed: ApiResponse | null = null
+        try {
+          parsed = JSON.parse(text) as ApiResponse
+        } catch {
+          parsed = null
+        }
+        if (parsed) {
+          const message = parsed.message || parsed.error || `Request failed with status ${error.response.status}`
+          const err = new Error(message)
+          ;(err as any).status = error.response.status
+          ;(err as any).serverMessage = parsed.message || parsed.error
+          throw err
+        }
+      }
+      throw this.handleError(error)
+    }
+  }
+}
+
+const parseFilenameFromDisposition = (disposition?: string): string | null => {
+  if (!disposition) return null
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  if (utf8Match) {
+    try { return decodeURIComponent(utf8Match[1]) } catch { /* noop */ }
+  }
+  const match = /filename="?([^"]+)"?/i.exec(disposition)
+  return match ? match[1] : null
+}
+
+const triggerBrowserDownload = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 // Export singleton instance
