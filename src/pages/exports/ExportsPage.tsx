@@ -10,12 +10,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
-  Download, BookOpen, CalendarDays, Package as PackageIcon, BookText, Check, ChevronsUpDown, Loader2,
+  Download, BookOpen, CalendarDays, Package as PackageIcon, BookText,
+  Check, ChevronsUpDown, Loader2, Eye, X, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { exportsService } from '@/services/exports.service'
+import { exportsService, ExportPreviewData, PreviewColumn } from '@/services/exports.service'
 import { subjectsService, Subject } from '@/services/subjects.service'
 import { liveSessionsService, LiveSession } from '@/services/liveSessions.service'
 import { packagesService, Package } from '@/services/packages.service'
@@ -23,8 +25,19 @@ import { seriesService, Series } from '@/services/series.service'
 import { modulesService, Module as ModuleType } from '@/services/modules.service'
 import { documentsService, Document as DocumentType } from '@/services/documents.service'
 import { booksService, Book } from '@/services/books.service'
+import { DataTable } from '@/components/common/DataTable/DataTable'
+import type { ColumnDef } from '@/components/common/DataTable/types'
 
 type PackagePickerType = 'package' | 'series' | 'module' | 'document'
+
+type ViewData = {
+  loading: boolean
+  title: string
+  label: string
+  rows: Record<string, unknown>[]
+  columns: PreviewColumn[]
+  count: number
+} | null
 
 const handleError = (error: unknown, fallback: string) => {
   const message = error instanceof Error ? error.message : fallback
@@ -32,6 +45,23 @@ const handleError = (error: unknown, fallback: string) => {
 }
 
 export function ExportsPage() {
+  const [viewData, setViewData] = useState<ViewData>(null)
+
+  const handleView = async (
+    title: string,
+    label: string,
+    fetcher: () => Promise<ExportPreviewData>,
+  ) => {
+    setViewData({ loading: true, title, label, rows: [], columns: [], count: 0 })
+    try {
+      const data = await fetcher()
+      setViewData({ loading: false, title, label, ...data })
+    } catch (err) {
+      setViewData(null)
+      handleError(err, 'Failed to load preview')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -44,14 +74,20 @@ export function ExportsPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <SubjectExportCard />
-        <SessionExportCard />
-        <PackageExportCard />
-        <EbookExportCard />
+        <SubjectExportCard onView={handleView} />
+        <SessionExportCard onView={handleView} />
+        <PackageExportCard onView={handleView} />
+        <EbookExportCard onView={handleView} />
       </div>
+
+      {viewData && (
+        <ExportTableSection viewData={viewData} onClose={() => setViewData(null)} />
+      )}
     </div>
   )
 }
+
+/* -------- Shared card wrapper -------- */
 
 function ExportCard({
   icon: Icon,
@@ -78,33 +114,115 @@ function ExportCard({
   )
 }
 
-function DownloadButton({
-  onClick,
-  loading,
+/* -------- Action buttons (View + Download) -------- */
+
+function ExportActions({
+  onView,
+  onDownload,
+  viewing,
+  downloading,
   disabled,
 }: {
-  onClick: () => void
-  loading: boolean
+  onView: () => void
+  onDownload: () => void
+  viewing: boolean
+  downloading: boolean
   disabled: boolean
 }) {
   return (
-    <Button onClick={onClick} disabled={disabled || loading} className="w-full sm:w-auto">
-      {loading ? (
-        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
-      ) : (
-        <><Download className="mr-2 h-4 w-4" />Download XLSX</>
-      )}
-    </Button>
+    <div className="flex flex-wrap gap-2">
+      <Button
+        variant="outline"
+        onClick={onView}
+        disabled={disabled || viewing}
+      >
+        {viewing ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
+        ) : (
+          <><Eye className="mr-2 h-4 w-4" />View</>
+        )}
+      </Button>
+      <Button onClick={onDownload} disabled={disabled || downloading}>
+        {downloading ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
+        ) : (
+          <><Download className="mr-2 h-4 w-4" />Download XLSX</>
+        )}
+      </Button>
+    </div>
+  )
+}
+
+/* -------- Table preview section -------- */
+
+function ExportTableSection({
+  viewData,
+  onClose,
+}: {
+  viewData: NonNullable<ViewData>
+  onClose: () => void
+}) {
+  const columns: ColumnDef<Record<string, unknown>>[] = viewData.columns.map((col) => ({
+    id: col.key,
+    header: col.header,
+    cell: (row) => {
+      const val = row[col.key]
+      return val !== undefined && val !== null && val !== '' ? String(val) : (
+        <span className="text-muted-foreground">—</span>
+      )
+    },
+  }))
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold">
+            {viewData.title}
+            {viewData.label && (
+              <span className="font-normal text-muted-foreground"> — {viewData.label}</span>
+            )}
+          </h2>
+          {!viewData.loading && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              {viewData.count} {viewData.count === 1 ? 'user' : 'users'}
+            </Badge>
+          )}
+        </div>
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
+        <DataTable
+          data={viewData.rows}
+          columns={columns}
+          isLoading={viewData.loading}
+          skeletonCount={8}
+          emptyState={{
+            icon: Users,
+            title: 'No users found',
+            description: 'No users match this filter.',
+          }}
+        />
+      </div>
+    </div>
   )
 }
 
 /* -------- Subject export -------- */
 
-function SubjectExportCard() {
+function SubjectExportCard({
+  onView,
+}: {
+  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
+}) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loadingList, setLoadingList] = useState(false)
   const [subjectId, setSubjectId] = useState<string>('')
   const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
 
   useEffect(() => {
     setLoadingList(true)
@@ -117,6 +235,8 @@ function SubjectExportCard() {
       .finally(() => setLoadingList(false))
   }, [])
 
+  const selectedSubject = subjects.find((s) => s._id === subjectId)
+
   const handleDownload = async () => {
     if (!subjectId) return
     try {
@@ -128,6 +248,17 @@ function SubjectExportCard() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  const handleView = async () => {
+    if (!subjectId) return
+    setViewing(true)
+    await onView(
+      'Users by Primary Subject',
+      selectedSubject?.name ?? '',
+      () => exportsService.previewUsersBySubject(subjectId),
+    )
+    setViewing(false)
   }
 
   return (
@@ -153,18 +284,29 @@ function SubjectExportCard() {
           </SelectContent>
         </Select>
       </div>
-      <DownloadButton onClick={handleDownload} loading={downloading} disabled={!subjectId} />
+      <ExportActions
+        onView={handleView}
+        onDownload={handleDownload}
+        viewing={viewing}
+        downloading={downloading}
+        disabled={!subjectId}
+      />
     </ExportCard>
   )
 }
 
 /* -------- Session export -------- */
 
-function SessionExportCard() {
+function SessionExportCard({
+  onView,
+}: {
+  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
+}) {
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [loadingList, setLoadingList] = useState(false)
   const [sessionId, setSessionId] = useState<string>('')
   const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
 
   useEffect(() => {
     setLoadingList(true)
@@ -177,6 +319,8 @@ function SessionExportCard() {
       .finally(() => setLoadingList(false))
   }, [])
 
+  const selectedSession = sessions.find((s) => s._id === sessionId)
+
   const handleDownload = async () => {
     if (!sessionId) return
     try {
@@ -188,6 +332,17 @@ function SessionExportCard() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  const handleView = async () => {
+    if (!sessionId) return
+    setViewing(true)
+    await onView(
+      'Users by Live Session',
+      selectedSession?.title ?? '',
+      () => exportsService.previewUsersBySession(sessionId),
+    )
+    setViewing(false)
   }
 
   return (
@@ -213,17 +368,28 @@ function SessionExportCard() {
           emptyText="No sessions found"
         />
       </div>
-      <DownloadButton onClick={handleDownload} loading={downloading} disabled={!sessionId} />
+      <ExportActions
+        onView={handleView}
+        onDownload={handleDownload}
+        viewing={viewing}
+        downloading={downloading}
+        disabled={!sessionId}
+      />
     </ExportCard>
   )
 }
 
 /* -------- Package export (with Package / Series / Module / Document sub-picker) -------- */
 
-function PackageExportCard() {
+function PackageExportCard({
+  onView,
+}: {
+  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
+}) {
   const [pickerType, setPickerType] = useState<PackagePickerType>('package')
   const [entityId, setEntityId] = useState<string>('')
   const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
 
   const [packages, setPackages] = useState<Package[]>([])
   const [series, setSeries] = useState<Series[]>([])
@@ -288,6 +454,8 @@ function PackageExportCard() {
     }))
   })()
 
+  const selectedLabel = options.find((o) => o.value === entityId)?.label ?? ''
+
   const handleDownload = async () => {
     if (!entityId) return
     try {
@@ -304,6 +472,22 @@ function PackageExportCard() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  const handleView = async () => {
+    if (!entityId) return
+    setViewing(true)
+    await onView(
+      'Users by Package Access',
+      selectedLabel,
+      () => exportsService.previewUsersByPackage({
+        ...(pickerType === 'package' && { package_id: entityId }),
+        ...(pickerType === 'series' && { series_id: entityId }),
+        ...(pickerType === 'module' && { module_id: entityId }),
+        ...(pickerType === 'document' && { document_id: entityId }),
+      }),
+    )
+    setViewing(false)
   }
 
   return (
@@ -337,18 +521,29 @@ function PackageExportCard() {
           emptyText={`No ${pickerType}s found`}
         />
       </div>
-      <DownloadButton onClick={handleDownload} loading={downloading} disabled={!entityId} />
+      <ExportActions
+        onView={handleView}
+        onDownload={handleDownload}
+        viewing={viewing}
+        downloading={downloading}
+        disabled={!entityId}
+      />
     </ExportCard>
   )
 }
 
 /* -------- eBook export -------- */
 
-function EbookExportCard() {
+function EbookExportCard({
+  onView,
+}: {
+  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
+}) {
   const [books, setBooks] = useState<Book[]>([])
   const [loadingList, setLoadingList] = useState(false)
   const [bookId, setBookId] = useState<string>('')
   const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
 
   useEffect(() => {
     setLoadingList(true)
@@ -363,6 +558,8 @@ function EbookExportCard() {
       .finally(() => setLoadingList(false))
   }, [])
 
+  const selectedBook = books.find((b) => b._id === bookId)
+
   const handleDownload = async () => {
     if (!bookId) return
     try {
@@ -374,6 +571,17 @@ function EbookExportCard() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  const handleView = async () => {
+    if (!bookId) return
+    setViewing(true)
+    await onView(
+      'Users by eBook Access',
+      selectedBook?.title ?? '',
+      () => exportsService.previewUsersByEbook(bookId),
+    )
+    setViewing(false)
   }
 
   return (
@@ -393,7 +601,13 @@ function EbookExportCard() {
           emptyText="No eBooks found"
         />
       </div>
-      <DownloadButton onClick={handleDownload} loading={downloading} disabled={!bookId} />
+      <ExportActions
+        onView={handleView}
+        onDownload={handleDownload}
+        viewing={viewing}
+        downloading={downloading}
+        disabled={!bookId}
+      />
     </ExportCard>
   )
 }

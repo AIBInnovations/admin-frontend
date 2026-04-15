@@ -9,6 +9,14 @@ type PackageExportParams = {
   document_id?: string
 }
 
+export type PreviewColumn = { header: string; key: string }
+
+export type ExportPreviewData = {
+  rows: Record<string, unknown>[]
+  columns: PreviewColumn[]
+  count: number
+}
+
 class ExportsService {
   async usersBySubject(subjectId: string) {
     return apiService.downloadBlob(
@@ -40,6 +48,38 @@ class ExportsService {
       { book_id: bookId },
       'users_by_ebook.xlsx',
     )
+  }
+
+  async previewUsersBySubject(subjectId: string): Promise<ExportPreviewData> {
+    const res = await apiService.get<ExportPreviewData>(
+      `${BASE_PATH}/users-by-subject`,
+      { params: { subject_id: subjectId, format: 'json' } },
+    )
+    return res.data!
+  }
+
+  async previewUsersBySession(sessionId: string): Promise<ExportPreviewData> {
+    const res = await apiService.get<ExportPreviewData>(
+      `${BASE_PATH}/users-by-session`,
+      { params: { session_id: sessionId, format: 'json' } },
+    )
+    return res.data!
+  }
+
+  async previewUsersByPackage(params: PackageExportParams): Promise<ExportPreviewData> {
+    const res = await apiService.get<ExportPreviewData>(
+      `${BASE_PATH}/users-by-package`,
+      { params: { ...params, format: 'json' } },
+    )
+    return res.data!
+  }
+
+  async previewUsersByEbook(bookId: string): Promise<ExportPreviewData> {
+    const res = await apiService.get<ExportPreviewData>(
+      `${BASE_PATH}/users-by-ebook`,
+      { params: { book_id: bookId, format: 'json' } },
+    )
+    return res.data!
   }
 }
 
