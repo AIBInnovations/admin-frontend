@@ -156,7 +156,7 @@ export function UsersPage() {
       <SearchWithFilters
         value={search}
         onChange={setSearch}
-        placeholder="Search by name, email, or phone..."
+        placeholder="Search by name, email, phone, or student ID..."
         filters={filters}
         activeFilters={{ status: statusFilter }}
         onFiltersChange={(f) => {

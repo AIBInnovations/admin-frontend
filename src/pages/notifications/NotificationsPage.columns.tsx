@@ -7,7 +7,7 @@ import {
 import { ColumnDef } from '@/components/common/DataTable'
 import { Notification } from '@/services/notifications.service'
 import {
-  MoreVertical, Trash2, Bell, Mail, MessageSquare, Smartphone,
+  MoreVertical, Trash2, Bell, Mail, MessageSquare, Smartphone, Eye,
 } from 'lucide-react'
 
 const typeConfig: Record<string, { label: string; className: string; icon: typeof Bell }> = {
@@ -33,10 +33,12 @@ const deliveryColors: Record<string, string> = {
 
 interface NotificationsColumnsProps {
   onDelete: (notif: Notification) => void
+  onView: (notif: Notification) => void
 }
 
 export function useNotificationsColumns({
   onDelete,
+  onView,
 }: NotificationsColumnsProps): ColumnDef<Notification>[] {
   return [
     {
@@ -146,14 +148,18 @@ export function useNotificationsColumns({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onView(notif)}>
+              <Eye className="mr-2 h-4 w-4" />View Details
+            </DropdownMenuItem>
             {notif.click_url && (
               <>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => window.open(notif.click_url!, '_blank')}>
                   Open Link
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
               </>
             )}
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-red-600" onClick={() => onDelete(notif)}>
               <Trash2 className="mr-2 h-4 w-4" />Delete
             </DropdownMenuItem>

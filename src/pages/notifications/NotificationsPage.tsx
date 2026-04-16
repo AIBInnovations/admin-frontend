@@ -13,6 +13,7 @@ import {
   NotificationStats,
 } from '@/services/notifications.service'
 import { useNotificationsColumns } from './NotificationsPage.columns'
+import { NotificationDetailModal } from './NotificationDetailModal'
 import { SendNotificationTab } from './SendNotificationTab'
 import { SendEmailTab } from './SendEmailTab'
 import { SendSmsTab } from './SendSmsTab'
@@ -33,6 +34,10 @@ export function NotificationsPage() {
   // Delete modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+
+  // View modal
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [viewNotification, setViewNotification] = useState<Notification | null>(null)
 
   // Fetch stats
   useEffect(() => {
@@ -77,6 +82,11 @@ export function NotificationsPage() {
   }, [typeFilter, statusFilter, deliveryFilter])
 
   // Handlers
+  const handleViewClick = (notif: Notification) => {
+    setViewNotification(notif)
+    setViewModalOpen(true)
+  }
+
   const handleDeleteClick = (notif: Notification) => {
     setSelectedNotification(notif)
     setDeleteModalOpen(true)
@@ -157,7 +167,7 @@ export function NotificationsPage() {
       )
     : notifications
 
-  const columns = useNotificationsColumns({ onDelete: handleDeleteClick })
+  const columns = useNotificationsColumns({ onDelete: handleDeleteClick, onView: handleViewClick })
 
   return (
     <div className="space-y-6">
@@ -300,6 +310,12 @@ export function NotificationsPage() {
             onConfirm={handleDeleteConfirm}
             title="Delete Notification"
             itemName={selectedNotification?.title}
+          />
+
+          <NotificationDetailModal
+            open={viewModalOpen}
+            onClose={() => setViewModalOpen(false)}
+            notification={viewNotification}
           />
         </TabsContent>
       </Tabs>
