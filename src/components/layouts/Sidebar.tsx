@@ -116,15 +116,29 @@ const navigation: NavItem[] = [
 interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
+  onClose: () => void
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, onClose }: SidebarProps) {
   return (
     <TooltipProvider delayDuration={0}>
+      {/* Mobile backdrop overlay */}
+      <div
+        className={cn(
+          'fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 lg:hidden',
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={onClose}
+      />
       <aside
         className={cn(
-          'relative flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out',
-          isOpen ? 'w-64' : 'w-[68px]'
+          'flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out',
+          // Mobile: fixed overlay, always full-width, slide in/out
+          'fixed inset-y-0 left-0 z-50 w-64',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          // Desktop: relative (part of flex flow), no translate, width toggles
+          'lg:relative lg:z-auto lg:translate-x-0',
+          isOpen ? 'lg:w-64' : 'lg:w-[68px]'
         )}
       >
         {/* Logo */}

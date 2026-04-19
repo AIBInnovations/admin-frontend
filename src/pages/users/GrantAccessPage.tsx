@@ -323,7 +323,7 @@ export function GrantAccessPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{user.name || 'Unnamed User'}</p>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       {user.phone_number && (
                         <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{user.phone_number}</span>
                       )}
@@ -345,25 +345,27 @@ export function GrantAccessPage() {
 
           {/* Selected User Card */}
           {selectedUser && (
-            <div className="flex items-center gap-4 rounded-lg border border-primary bg-primary/5 p-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <UserIcon className="h-6 w-6" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">{selectedUser.name || 'Unnamed User'}</p>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  {selectedUser.phone_number && <span>{selectedUser.phone_number}</span>}
-                  {selectedUser.email && <span>{selectedUser.email}</span>}
-                  {selectedUser.student_id && <span>ID: {selectedUser.student_id}</span>}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-lg border border-primary bg-primary/5 p-4">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <UserIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{selectedUser.name || 'Unnamed User'}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+                    {selectedUser.phone_number && <span>{selectedUser.phone_number}</span>}
+                    {selectedUser.email && <span className="truncate">{selectedUser.email}</span>}
+                    {selectedUser.student_id && <span>ID: {selectedUser.student_id}</span>}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-13 sm:ml-0">
                 <Badge variant={selectedUser.is_active ? 'default' : 'destructive'}>
                   {selectedUser.is_active ? 'Active' : 'Blocked'}
                 </Badge>
                 <button
                   onClick={() => navigate(`/users/${selectedUser._id}`)}
-                  className="text-xs text-primary hover:underline"
+                  className="text-xs text-primary hover:underline whitespace-nowrap"
                 >
                   View Profile
                 </button>
@@ -384,18 +386,18 @@ export function GrantAccessPage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="package">
-              <TabsList className="w-full justify-start">
-                <TabsTrigger value="package" className="gap-2">
+              <TabsList className="w-full justify-start overflow-x-auto">
+                <TabsTrigger value="package" className="gap-1.5 sm:gap-2">
                   <Package className="h-4 w-4" />
                   Package
                 </TabsTrigger>
-                <TabsTrigger value="ebook" className="gap-2">
+                <TabsTrigger value="ebook" className="gap-1.5 sm:gap-2">
                   <BookOpen className="h-4 w-4" />
                   Ebook
                 </TabsTrigger>
-                <TabsTrigger value="session" className="gap-2">
+                <TabsTrigger value="session" className="gap-1.5 sm:gap-2">
                   <Calendar className="h-4 w-4" />
-                  Live Session
+                  <span className="hidden sm:inline">Live </span>Session
                 </TabsTrigger>
               </TabsList>
 

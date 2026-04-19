@@ -320,22 +320,22 @@ export function UserDetailPage() {
           { label: user.name || user.phone_number },
         ]}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowGrantModal(true)}>
-              <Gift className="mr-2 h-4 w-4" />
-              Grant Package
+              <Gift className="mr-1.5 h-4 w-4" />
+              <span className="hidden sm:inline">Grant </span>Package
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowGrantEbookModal(true)}>
-              <Gift className="mr-2 h-4 w-4" />
-              Grant Ebook
+              <Gift className="mr-1.5 h-4 w-4" />
+              <span className="hidden sm:inline">Grant </span>Ebook
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowGrantSessionModal(true)}>
-              <Gift className="mr-2 h-4 w-4" />
-              Grant Session
+              <Gift className="mr-1.5 h-4 w-4" />
+              <span className="hidden sm:inline">Grant </span>Session
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Profile
+              <Edit className="mr-1.5 h-4 w-4" />
+              Edit
             </Button>
             <Button
               variant={user.is_active ? 'destructive' : 'default'}
@@ -344,13 +344,13 @@ export function UserDetailPage() {
               disabled={blocking}
             >
               {blocking ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : user.is_active ? (
-                <ShieldBan className="mr-2 h-4 w-4" />
+                <ShieldBan className="mr-1.5 h-4 w-4" />
               ) : (
-                <ShieldCheck className="mr-2 h-4 w-4" />
+                <ShieldCheck className="mr-1.5 h-4 w-4" />
               )}
-              {user.is_active ? 'Block User' : 'Unblock User'}
+              {user.is_active ? 'Block' : 'Unblock'}
             </Button>
           </div>
         }
@@ -411,7 +411,7 @@ export function UserDetailPage() {
                     />
                   </div>
                 </div>
-                <div className="flex gap-4 text-xs text-muted-foreground">
+                <div className="flex flex-col sm:flex-row gap-1 sm:gap-4 text-xs text-muted-foreground">
                   <span>Joined {formatDate(user.createdAt)}</span>
                   <span>Last login {formatDate(user.last_login)}</span>
                 </div>
@@ -426,7 +426,7 @@ export function UserDetailPage() {
             <CardTitle className="text-base">Personal Information</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
               <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Date of Birth" value={formatDate(user.date_of_birth)} />
               <InfoRow label="Gender" value={user.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : '—'} />
               <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Address" value={user.address || '—'} />
@@ -487,7 +487,7 @@ export function UserDetailPage() {
               No package purchases
             </div>
           ) : (
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -571,7 +571,7 @@ export function UserDetailPage() {
               No ebook purchases
             </div>
           ) : (
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -652,7 +652,7 @@ export function UserDetailPage() {
               No session purchases
             </div>
           ) : (
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -733,7 +733,7 @@ export function UserDetailPage() {
               No book orders
             </div>
           ) : (
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -808,7 +808,7 @@ export function UserDetailPage() {
               No device sessions
             </div>
           ) : (
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -858,7 +858,7 @@ export function UserDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Dark Mode</p>
                 <Badge variant={user.preferences.dark_mode_enabled ? 'default' : 'outline'} className="mt-1 text-[10px]">
