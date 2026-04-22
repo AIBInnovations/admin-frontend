@@ -55,7 +55,10 @@ export interface LinkedDocumentCreateData {
 }
 
 export interface DocumentsListParams extends BaseListParams {
+  /** MongoID, or the literal 'null' sentinel meaning "where series_id IS NULL". */
   series_id?: string
+  /** MongoID, or the literal 'null' sentinel meaning "where subject_id IS NULL". */
+  subject_id?: string
   file_format?: string
   is_free?: boolean | null
   publish_status?: string | null

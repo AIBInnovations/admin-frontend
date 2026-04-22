@@ -98,15 +98,23 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
           setData({ subjects: cachedSubjects, libraryDocuments: cachedLib })
         }
 
-        const [subjectsRes, libRes] = await Promise.all([
+        // allSettled — a 4xx on orphan docs must not blank out the subjects
+        // list (and vice versa). Each sub-fetch is independent.
+        const [subjectsRes, libRes] = await Promise.allSettled([
           subjectsService.getSubjects({ page: 1, limit: 200, sort_by: 'display_order', sort_order: 'asc' }),
-          documentsService.getAll({ subject_id: 'null', series_id: 'null', limit: 200 } as Parameters<typeof documentsService.getAll>[0]),
+          documentsService.getAll({ subject_id: 'null', series_id: 'null', limit: 200 }),
         ])
 
         if (fetchId !== fetchIdRef.current) return
 
-        const subjects = subjectsRes.success && subjectsRes.data ? subjectsRes.data.entities : cachedSubjects
-        const libraryDocuments = libRes.success && libRes.data ? libRes.data.entities : cachedLib
+        const subjects =
+          subjectsRes.status === 'fulfilled' && subjectsRes.value.success && subjectsRes.value.data
+            ? subjectsRes.value.data.entities
+            : cachedSubjects
+        const libraryDocuments =
+          libRes.status === 'fulfilled' && libRes.value.success && libRes.value.data
+            ? libRes.value.data.entities
+            : cachedLib
 
         if (subjects) cache.set('root.subjects', subjects)
         if (libraryDocuments) cache.set('root.library', libraryDocuments)
@@ -154,7 +162,7 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
           })
         }
 
-        const [pkgRes, docRes] = await Promise.all([
+        const [pkgRes, docRes] = await Promise.allSettled([
           packagesService.getAll({
             subject_id: stableFocus.subjectId,
             page: 1,
@@ -164,12 +172,18 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
             subject_id: stableFocus.subjectId,
             series_id: 'null',
             limit: 200,
-          } as Parameters<typeof documentsService.getAll>[0]),
+          }),
         ])
         if (fetchId !== fetchIdRef.current) return
 
-        const packages = pkgRes.success && pkgRes.data ? pkgRes.data.entities : cachedPkgs
-        const subjectDocuments = docRes.success && docRes.data ? docRes.data.entities : cachedDocs
+        const packages =
+          pkgRes.status === 'fulfilled' && pkgRes.value.success && pkgRes.value.data
+            ? pkgRes.value.data.entities
+            : cachedPkgs
+        const subjectDocuments =
+          docRes.status === 'fulfilled' && docRes.value.success && docRes.value.data
+            ? docRes.value.data.entities
+            : cachedDocs
 
         if (packages) cache.set(pkgCacheKey, packages)
         if (subjectDocuments) cache.set(docCacheKey, subjectDocuments)
