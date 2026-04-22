@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
@@ -14,23 +17,28 @@ export function InvoicesPage() {
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { inputValue: searchQuery, setInputValue: setSearchQuery, debouncedSearch } = useServerSearch('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch invoices
   const fetchInvoices = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await invoicesService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         payment_status: statusFilter !== 'all' ? statusFilter : undefined,
         purchase_type: typeFilter !== 'all' ? typeFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setInvoices(response.data.entities || [])
@@ -38,15 +46,14 @@ export function InvoicesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load invoices')
-        setInvoices([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load invoices')
-      setInvoices([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, typeFilter])
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
 
@@ -59,10 +66,7 @@ export function InvoicesPage() {
     setSearchParams(params)
   }, [statusFilter, typeFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [statusFilter, typeFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, typeFilter])
 
   // Handlers
   const handleDownload = async (invoice: Invoice) => {
@@ -95,34 +99,6 @@ export function InvoicesPage() {
       toast.error(error.message || 'Failed to regenerate invoice')
     }
   }
-
-  // Client-side search filter
-  const filteredInvoices = invoices.filter((invoice) => {
-    if (!searchQuery.trim()) return true
-
-    const query = searchQuery.toLowerCase()
-
-    // Search by invoice number
-    if (invoice.invoice_number?.toLowerCase().includes(query)) {
-      return true
-    }
-
-    // Search by user email or phone
-    if (invoice.user?.email?.toLowerCase().includes(query)) {
-      return true
-    }
-
-    if (invoice.user?.phone?.toLowerCase().includes(query)) {
-      return true
-    }
-
-    // Search by user name
-    if (invoice.user?.name?.toLowerCase().includes(query)) {
-      return true
-    }
-
-    return false
-  })
 
   // Filters
   const filters: FilterConfig[] = [
@@ -187,7 +163,7 @@ export function InvoicesPage() {
       />
 
       <DataTable
-        data={filteredInvoices}
+        data={invoices}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -198,10 +174,10 @@ export function InvoicesPage() {
         }}
         emptyState={{
           icon: FileText,
-          title: searchQuery || statusFilter !== 'all' || typeFilter !== 'all'
-            ? 'No invoices found matching your search and filters'
+          title: debouncedSearch || statusFilter !== 'all' || typeFilter !== 'all'
+            ? 'No invoices found matching your filters'
             : 'No invoices yet',
-          description: statusFilter === 'all' && typeFilter === 'all' && !searchQuery
+          description: !debouncedSearch && statusFilter === 'all' && typeFilter === 'all'
             ? 'Invoices are generated automatically when payments are completed'
             : undefined,
         }}

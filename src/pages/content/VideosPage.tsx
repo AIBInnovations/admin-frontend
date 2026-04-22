@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -17,7 +20,7 @@ export function VideosPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // State
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [videos, setVideos] = useState<Video[]>([])
   const [loading, setLoading] = useState(true)
   const [moduleFilter, setModuleFilter] = useState(searchParams.get('module') || 'all')
@@ -51,18 +54,23 @@ export function VideosPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch videos
   const fetchVideos = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await videosService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         module_id: moduleFilter !== 'all' ? moduleFilter : undefined,
         processing_status: statusFilter !== 'all' ? statusFilter : undefined,
         is_free: accessFilter === 'all' ? null : accessFilter === 'free',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setVideos(response.data.entities || [])
@@ -70,15 +78,14 @@ export function VideosPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load videos')
-        setVideos([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load videos')
-      setVideos([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, moduleFilter, statusFilter, accessFilter, publishFilter])
+  }, [currentPage, debouncedSearch, moduleFilter, statusFilter, accessFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchVideos() }, [fetchVideos])
 
@@ -93,10 +100,7 @@ export function VideosPage() {
     setSearchParams(params)
   }, [moduleFilter, statusFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [moduleFilter, statusFilter, accessFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, moduleFilter, statusFilter, accessFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -138,7 +142,13 @@ export function VideosPage() {
     }
   }
 
-  const handleFormSubmit = async (data: VideoFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void) => {
+  const handleFormSubmit = async (
+    data: VideoFormData,
+    file?: File,
+    onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
+    releaseMode?: 'immediate' | 'scheduled',
+  ) => {
     try {
       let videoId: string | undefined
       if (modalMode === 'create' && file) {
@@ -154,17 +164,37 @@ export function VideosPage() {
         // Upload file for upcoming video if a file was provided
         if (file && selectedVideo.processing_status === 'upcoming') {
           const uploadResponse = await videosService.uploadFileForExisting(
-            selectedVideo._id, file, onProgress, onPhaseChange
+            selectedVideo._id,
+            file,
+            {
+              onProgress,
+              onPhaseChange,
+              release_mode: releaseMode,
+              scheduled_release_at: data.scheduled_release_at ?? undefined,
+            },
           )
           if (uploadResponse.success) {
-            toast.success('Video file uploaded — processing will begin shortly')
+            toast.success(
+              releaseMode === 'scheduled'
+                ? 'Video file uploaded — will release on the scheduled date'
+                : 'Video file uploaded — processing will begin shortly',
+            )
           } else {
             toast.error(uploadResponse.message || 'Failed to upload video file')
             throw new Error(uploadResponse.message || 'Failed to upload video file')
           }
         }
-        // Update metadata
-        const response = await videosService.update(selectedVideo._id, data)
+        // Update metadata. Strip scheduled_release_at when we just uploaded a
+        // file — the upload endpoint already wrote the authoritative value and
+        // overwriting here would race with it.
+        const updatePayload: Partial<VideoFormData> = file
+          ? (() => {
+              const { scheduled_release_at: _unused, ...rest } = data
+              void _unused
+              return rest
+            })()
+          : data
+        const response = await videosService.update(selectedVideo._id, updatePayload)
         if (response.success) {
           videoId = selectedVideo._id
           if (!file) toast.success('Video updated successfully')
@@ -256,20 +286,13 @@ export function VideosPage() {
     },
   ]
 
-  // Client-side search filter
-  const filteredVideos = search
-    ? videos.filter((video) =>
-        video.title.toLowerCase().includes(search.toLowerCase())
-      )
-    : videos
-
   const columns = useVideosColumns({
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
     onPublishAction: handlePublishAction,
   })
 
-  const hasFilters = search || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
+  const hasFilters = debouncedSearch || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -299,7 +322,7 @@ export function VideosPage() {
       />
 
       <DataTable
-        data={filteredVideos}
+        data={videos}
         columns={columns}
         isLoading={loading}
         pagination={{

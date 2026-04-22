@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -21,7 +24,7 @@ export function SessionsPage() {
   // State
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -38,16 +41,21 @@ export function SessionsPage() {
   const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await liveSessionsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setSessions(response.data.entities || [])
@@ -55,22 +63,16 @@ export function SessionsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load sessions')
-        setSessions([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load sessions')
-      setSessions([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, publishFilter])
+  }, [currentPage, debouncedSearch, statusFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchSessions() }, [fetchSessions])
-
-  // Client-side filter
-  const filteredSessions = search
-    ? sessions.filter((s) => s.title.toLowerCase().includes(search.toLowerCase()))
-    : sessions
 
   // URL params sync
   useEffect(() => {
@@ -82,10 +84,7 @@ export function SessionsPage() {
     setSearchParams(params)
   }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, statusFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -250,7 +249,7 @@ export function SessionsPage() {
       />
 
       <DataTable
-        data={filteredSessions}
+        data={sessions}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -261,13 +260,13 @@ export function SessionsPage() {
         }}
         emptyState={{
           icon: Video,
-          title: filteredSessions.length === 0 && (search || statusFilter !== 'all' || publishFilter !== 'all')
+          title: debouncedSearch || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No sessions found matching your filters'
             : 'No live sessions yet',
-          description: filteredSessions.length === 0 && !search && statusFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by scheduling your first live session'
             : undefined,
-          action: filteredSessions.length === 0 && !search && statusFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Schedule your first session
             </Button>

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -18,7 +21,7 @@ export function VideoTagsPage() {
   // State
   const [tags, setTags] = useState<VideoTag[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
@@ -35,18 +38,20 @@ export function VideoTagsPage() {
   // Collect unique categories from loaded tags for filter
   const categories = Array.from(new Set(tags.map((t) => t.category).filter(Boolean))) as string[]
 
-  // Client-side search filter
-  const filteredTags = search ? tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase())) : tags
+  const { nextFetchId, isStale } = useLatestFetch()
 
   // Fetch tags
   const fetchTags = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await videoTagsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         category: categoryFilter !== 'all' ? categoryFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setTags(response.data.entities || [])
@@ -54,15 +59,14 @@ export function VideoTagsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load video tags')
-        setTags([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load video tags')
-      setTags([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, categoryFilter])
+  }, [currentPage, debouncedSearch, categoryFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchTags() }, [fetchTags])
 
@@ -74,10 +78,7 @@ export function VideoTagsPage() {
     setSearchParams(params)
   }, [categoryFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [categoryFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, categoryFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -203,7 +204,7 @@ export function VideoTagsPage() {
       />
 
       <DataTable
-        data={filteredTags}
+        data={tags}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -214,9 +215,9 @@ export function VideoTagsPage() {
         }}
         emptyState={{
           icon: Tags,
-          title: search || hasFilters ? 'No tags found matching your criteria' : 'No tags yet',
-          description: !search && !hasFilters ? 'Get started by creating your first tag' : undefined,
-          action: !search && !hasFilters ? (
+          title: debouncedSearch || hasFilters ? 'No tags found matching your criteria' : 'No tags yet',
+          description: !debouncedSearch && !hasFilters ? 'Get started by creating your first tag' : undefined,
+          action: !debouncedSearch && !hasFilters ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first tag
             </Button>

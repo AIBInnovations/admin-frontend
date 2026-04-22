@@ -49,7 +49,10 @@ export interface VideoFormData {
   transcript_url?: string
   tag_ids?: string[]
   publish_status?: PublishStatus
+  scheduled_release_at?: string | null
 }
+
+export type ReleaseMode = 'immediate' | 'scheduled'
 
 export interface UpcomingVideoFormData {
   title: string
@@ -310,13 +313,24 @@ class VideosService {
    * Upload file for an existing upcoming video.
    * Reuses the same S3 upload logic, then calls the upload-file endpoint
    * instead of confirm-upload.
+   *
+   * release_mode:
+   *   'immediate' (default) — clears scheduled_release_at so the video goes
+   *     live as soon as processing completes.
+   *   'scheduled' — preserves scheduled_release_at; the video stays hidden
+   *     from students until that date even after processing completes.
    */
   async uploadFileForExisting(
     videoId: string,
     videoFile: File,
-    onProgress?: (percent: number) => void,
-    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
+    opts: {
+      onProgress?: (percent: number) => void
+      onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void
+      release_mode?: ReleaseMode
+      scheduled_release_at?: string | null
+    } = {},
   ): Promise<ApiResponse<{ video_id: string }>> {
+    const { onProgress, onPhaseChange, release_mode, scheduled_release_at } = opts
     const mimeType = videoFile.type || 'video/mp4'
     let s3Key: string
 
@@ -330,7 +344,15 @@ class VideosService {
     try {
       return await apiService.post<{ video_id: string }>(
         `${this.basePath}/${videoId}/upload-file`,
-        { s3Key, fileSize: videoFile.size, mimeType },
+        {
+          s3Key,
+          fileSize: videoFile.size,
+          mimeType,
+          release_mode: release_mode || 'immediate',
+          ...(release_mode === 'scheduled' && scheduled_release_at
+            ? { scheduled_release_at }
+            : {}),
+        },
         { timeout: this.UPLOAD_API_TIMEOUT },
       )
     } catch (error: any) {

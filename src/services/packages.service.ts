@@ -49,11 +49,17 @@ export interface PackageDetailVideo {
   display_order: number
   view_count: number
   processing_status: 'uploading' | 'processing' | 'ready' | 'failed' | 'upcoming'
+  processing_error?: string | null
   thumbnail_url: string
   is_active: boolean
   module_id: string
   faculty_id: { _id: string; name: string } | null
   scheduled_release_at?: string | null
+  subtitle_url?: string | null
+  transcript_url?: string | null
+  publish_status?: 'draft' | 'published'
+  file_size_mb?: number
+  video_url?: string
   createdAt: string
 }
 
@@ -65,6 +71,7 @@ export interface PackageDetailModule {
   lesson_count: number
   estimated_duration_minutes: number
   is_active: boolean
+  publish_status?: 'draft' | 'published'
   series_id: string
   videos: PackageDetailVideo[]
   video_count: number
@@ -93,6 +100,7 @@ export interface PackageDetailSeries {
   description: string
   display_order: number
   is_active: boolean
+  publish_status?: 'draft' | 'published'
   package_id: string
   modules: PackageDetailModule[]
   module_count: number

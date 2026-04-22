@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
@@ -23,7 +26,7 @@ export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<NotificationStats | null>(null)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [deliveryFilter, setDeliveryFilter] = useState('all')
@@ -46,17 +49,22 @@ export function NotificationsPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await notificationsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         notification_type: typeFilter !== 'all' ? typeFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         delivery_status: deliveryFilter !== 'all' ? deliveryFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setNotifications(response.data.entities || [])
@@ -64,22 +72,18 @@ export function NotificationsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load notifications')
-        setNotifications([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load notifications')
-      setNotifications([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, typeFilter, statusFilter, deliveryFilter])
+  }, [currentPage, debouncedSearch, typeFilter, statusFilter, deliveryFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchNotifications() }, [fetchNotifications])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [typeFilter, statusFilter, deliveryFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, typeFilter, statusFilter, deliveryFilter])
 
   // Handlers
   const handleViewClick = (notif: Notification) => {
@@ -158,14 +162,6 @@ export function NotificationsPage() {
       defaultValue: 'all',
     },
   ]
-
-  // Client-side search filter
-  const filteredNotifications = search
-    ? notifications.filter((n) =>
-        n.title.toLowerCase().includes(search.toLowerCase()) ||
-        n.message.toLowerCase().includes(search.toLowerCase())
-      )
-    : notifications
 
   const columns = useNotificationsColumns({ onDelete: handleDeleteClick, onView: handleViewClick })
 
@@ -283,7 +279,7 @@ export function NotificationsPage() {
           />
 
           <DataTable
-            data={filteredNotifications}
+            data={notifications}
             columns={columns}
             isLoading={loading}
             pagination={{
@@ -294,10 +290,10 @@ export function NotificationsPage() {
             }}
             emptyState={{
               icon: Bell,
-              title: search || typeFilter !== 'all' || statusFilter !== 'all' || deliveryFilter !== 'all'
+              title: debouncedSearch || typeFilter !== 'all' || statusFilter !== 'all' || deliveryFilter !== 'all'
                 ? 'No notifications found matching your filters'
                 : 'No notifications yet',
-              description: !search && typeFilter === 'all' && statusFilter === 'all' && deliveryFilter === 'all'
+              description: !debouncedSearch && typeFilter === 'all' && statusFilter === 'all' && deliveryFilter === 'all'
                 ? 'Notifications will appear here when they are sent to users'
                 : undefined,
             }}

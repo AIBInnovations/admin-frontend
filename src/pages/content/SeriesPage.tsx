@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -18,7 +21,7 @@ export function SeriesPage() {
   // State
   const [seriesList, setSeriesList] = useState<Series[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [packageFilter, setPackageFilter] = useState(searchParams.get('package') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
@@ -45,17 +48,22 @@ export function SeriesPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch series
   const fetchSeries = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await seriesService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         package_id: packageFilter !== 'all' ? packageFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setSeriesList(response.data.entities || [])
@@ -63,15 +71,14 @@ export function SeriesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load series')
-        setSeriesList([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load series')
-      setSeriesList([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, packageFilter, activeFilter, publishFilter])
+  }, [currentPage, debouncedSearch, packageFilter, activeFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchSeries() }, [fetchSeries])
 
@@ -85,10 +92,7 @@ export function SeriesPage() {
     setSearchParams(params)
   }, [packageFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page on filter change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [packageFilter, activeFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, packageFilter, activeFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -194,9 +198,6 @@ export function SeriesPage() {
     onPublishAction: handlePublishAction,
   })
 
-  // Client-side filtering
-  const filteredSeries = search ? seriesList.filter((s) => s.name.toLowerCase().includes(search.toLowerCase())) : seriesList
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -224,7 +225,7 @@ export function SeriesPage() {
       />
 
       <DataTable
-        data={filteredSeries}
+        data={seriesList}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -235,13 +236,13 @@ export function SeriesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: search || packageFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || packageFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all'
             ? 'No series found matching your filters'
             : 'No series yet',
-          description: search === '' && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first series'
             : undefined,
-          action: search === '' && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first series
             </Button>

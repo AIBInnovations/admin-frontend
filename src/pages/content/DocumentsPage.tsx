@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -19,7 +22,7 @@ export function DocumentsPage() {
 
   // State
   const [documents, setDocuments] = useState<Document[]>([])
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [loading, setLoading] = useState(true)
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [formatFilter, setFormatFilter] = useState(searchParams.get('format') || 'all')
@@ -53,18 +56,23 @@ export function DocumentsPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch documents
   const fetchDocuments = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await documentsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
         file_format: formatFilter !== 'all' ? formatFilter : undefined,
         is_free: accessFilter === 'all' ? null : accessFilter === 'free',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setDocuments(response.data.entities || [])
@@ -72,15 +80,14 @@ export function DocumentsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load documents')
-        setDocuments([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load documents')
-      setDocuments([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, seriesFilter, formatFilter, accessFilter, publishFilter])
+  }, [currentPage, debouncedSearch, seriesFilter, formatFilter, accessFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchDocuments() }, [fetchDocuments])
 
@@ -95,10 +102,7 @@ export function DocumentsPage() {
     setSearchParams(params)
   }, [seriesFilter, formatFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [seriesFilter, formatFilter, accessFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, seriesFilter, formatFilter, accessFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -311,9 +315,7 @@ export function DocumentsPage() {
     onPublishAction: handlePublishAction,
   })
 
-  const filteredDocuments = search ? documents.filter((d) => d.title.toLowerCase().includes(search.toLowerCase())) : documents
-
-  const hasFilters = search !== '' || seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
+  const hasFilters = debouncedSearch !== '' || seriesFilter !== 'all' || formatFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
 
   return (
     <div className="space-y-6">
@@ -343,7 +345,7 @@ export function DocumentsPage() {
       />
 
       <DataTable
-        data={filteredDocuments}
+        data={documents}
         columns={columns}
         isLoading={loading}
         pagination={{

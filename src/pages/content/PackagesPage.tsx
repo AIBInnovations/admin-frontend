@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -20,7 +23,7 @@ export function PackagesPage() {
   // State
   const [packages, setPackages] = useState<Package[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [saleFilter, setSaleFilter] = useState(searchParams.get('sale') || 'all')
@@ -48,18 +51,23 @@ export function PackagesPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch packages
   const fetchPackages = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await packagesService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         is_on_sale: saleFilter === 'all' ? null : saleFilter === 'on_sale',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setPackages(response.data.entities || [])
@@ -67,15 +75,14 @@ export function PackagesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load packages')
-        setPackages([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load packages')
-      setPackages([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, subjectFilter, activeFilter, saleFilter, publishFilter])
+  }, [currentPage, debouncedSearch, subjectFilter, activeFilter, saleFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchPackages() }, [fetchPackages])
 
@@ -90,17 +97,7 @@ export function PackagesPage() {
     setSearchParams(params)
   }, [subjectFilter, activeFilter, saleFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [subjectFilter, activeFilter, saleFilter, publishFilter])
-
-  // Client-side search filter
-  const filteredPackages = search
-    ? packages.filter((pkg) =>
-        pkg.name.toLowerCase().includes(search.toLowerCase())
-      )
-    : packages
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, subjectFilter, activeFilter, saleFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -258,7 +255,7 @@ export function PackagesPage() {
       />
 
       <DataTable
-        data={filteredPackages}
+        data={packages}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -269,13 +266,13 @@ export function PackagesPage() {
         }}
         emptyState={{
           icon: PackageIcon,
-          title: search || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all' || publishFilter !== 'all'
             ? 'No packages found matching your filters'
             : 'No packages yet',
-          description: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first package'
             : undefined,
-          action: !search && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first package
             </Button>

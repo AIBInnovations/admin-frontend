@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -17,7 +20,7 @@ export function BooksPage() {
   // State
   const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [availabilityFilter, setAvailabilityFilter] = useState(searchParams.get('availability') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -30,30 +33,36 @@ export function BooksPage() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch books
   const fetchBooks = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await booksService.getAll({
-        page: 1,
-        limit: 100,
+        page: currentPage,
+        limit: 20,
+        search: debouncedSearch || undefined,
         is_available: availabilityFilter === 'all' ? null : availabilityFilter === 'available',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setBooks(response.data.entities || [])
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load books')
-        setBooks([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load books')
-      setBooks([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [availabilityFilter, publishFilter])
+  }, [currentPage, debouncedSearch, availabilityFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchBooks() }, [fetchBooks])
 
@@ -67,20 +76,7 @@ export function BooksPage() {
     setSearchParams(params)
   }, [search, availabilityFilter, publishFilter, currentPage, setSearchParams])
 
-  // Client-side filter
-  const filteredBooks = search
-    ? books.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
-    : books
-
-  // Pagination for filtered results
-  const startIndex = (currentPage - 1) * 20
-  const paginatedBooks = filteredBooks.slice(startIndex, startIndex + 20)
-  const filteredTotalPages = Math.ceil(filteredBooks.length / 20)
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, availabilityFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, availabilityFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -194,24 +190,24 @@ export function BooksPage() {
       />
 
       <DataTable
-        data={paginatedBooks}
+        data={books}
         columns={columns}
         isLoading={loading}
         pagination={{
           currentPage,
-          totalPages: filteredTotalPages,
-          totalCount: filteredBooks.length,
+          totalPages,
+          totalCount,
           onPageChange: setCurrentPage,
         }}
         emptyState={{
           icon: BookOpen,
-          title: search || availabilityFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || availabilityFilter !== 'all' || publishFilter !== 'all'
             ? 'No books found matching your filters'
             : 'No books yet',
-          description: !search && availabilityFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && availabilityFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first book'
             : undefined,
-          action: !search && availabilityFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && availabilityFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first book
             </Button>

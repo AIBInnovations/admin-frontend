@@ -60,11 +60,9 @@ export function RecordingsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load recordings')
-        setRecordings([])
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to load recordings')
-      setRecordings([])
     } finally {
       setLoading(false)
     }

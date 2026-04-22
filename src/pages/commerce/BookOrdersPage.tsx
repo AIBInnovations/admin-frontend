@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
@@ -33,7 +36,7 @@ export function BookOrdersPage() {
   // State
   const [orders, setOrders] = useState<BookOrder[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
+  const { inputValue: searchQuery, setInputValue: setSearchQuery, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -47,16 +50,21 @@ export function BookOrdersPage() {
   const [courierName, setCourierName] = useState('')
   const [shippingSubmitting, setShippingSubmitting] = useState(false)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch orders
   const fetchOrders = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await bookOrdersService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         order_status: statusFilter !== 'all' ? statusFilter : undefined,
         payment_status: paymentFilter !== 'all' ? paymentFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setOrders(response.data.entities || [])
@@ -64,15 +72,14 @@ export function BookOrdersPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load book orders')
-        setOrders([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load book orders')
-      setOrders([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, paymentFilter])
+  }, [currentPage, debouncedSearch, statusFilter, paymentFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
@@ -86,10 +93,7 @@ export function BookOrdersPage() {
     setSearchParams(params)
   }, [searchQuery, statusFilter, paymentFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [statusFilter, paymentFilter, searchQuery])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, paymentFilter])
 
   // Handlers
   const handleViewDetails = (order: BookOrder) => {
@@ -161,26 +165,6 @@ export function BookOrdersPage() {
     onUpdateShipping: handleUpdateShipping,
   })
 
-  // Client-side search filter
-  const filteredOrders = orders.filter((order) => {
-    if (!searchQuery.trim()) return true
-
-    const query = searchQuery.toLowerCase()
-
-    // Search by book title
-    const matchesTitle = order.items.some(item =>
-      item.title.toLowerCase().includes(query)
-    )
-
-    // Search by user details (name, phone, email)
-    const matchesUser =
-      order.recipient_name.toLowerCase().includes(query) ||
-      order.shipping_phone.toLowerCase().includes(query) ||
-      (order.user_email && order.user_email.toLowerCase().includes(query))
-
-    return matchesTitle || matchesUser
-  })
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -206,7 +190,7 @@ export function BookOrdersPage() {
       />
 
       <DataTable
-        data={filteredOrders}
+        data={orders}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -217,12 +201,10 @@ export function BookOrdersPage() {
         }}
         emptyState={{
           icon: BookCopy,
-          title: searchQuery.trim() !== ''
-            ? 'No orders found matching your search'
-            : statusFilter !== 'all' || paymentFilter !== 'all'
-              ? 'No orders found matching your filters'
-              : 'No book orders yet',
-          description: searchQuery.trim() === '' && statusFilter === 'all' && paymentFilter === 'all'
+          title: debouncedSearch || statusFilter !== 'all' || paymentFilter !== 'all'
+            ? 'No orders found matching your filters'
+            : 'No book orders yet',
+          description: !debouncedSearch && statusFilter === 'all' && paymentFilter === 'all'
             ? 'Book orders will appear here when users purchase physical books'
             : undefined,
         }}

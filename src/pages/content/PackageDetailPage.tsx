@@ -12,7 +12,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Package, BookOpen, Calendar, Hash, Pencil, Plus, ChevronRight,
-  Layers, Film, Clock, Eye, IndianRupee, Tag, FileText, Download, BarChart3,
+  Layers, Film, Clock, Eye, IndianRupee, Tag, FileText, Download, BarChart3, CalendarClock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -27,7 +27,7 @@ import { SeriesFormData } from '@/services/series.service'
 import { seriesService } from '@/services/series.service'
 import { ModuleFormData } from '@/services/modules.service'
 import { modulesService } from '@/services/modules.service'
-import { VideoFormData, UpcomingVideoFormData, videosService } from '@/services/videos.service'
+import { VideoFormData, UpcomingVideoFormData, videosService, Video, ReleaseMode } from '@/services/videos.service'
 import { DocumentFormData, documentsService } from '@/services/documents.service'
 import { PackageFormModal } from '@/components/packages/PackageFormModal'
 import { SeriesFormModal } from '@/components/series/SeriesFormModal'
@@ -68,6 +68,8 @@ export function PackageDetailPage() {
   const [seriesModalOpen, setSeriesModalOpen] = useState(false)
   const [moduleModalOpen, setModuleModalOpen] = useState(false)
   const [videoModalOpen, setVideoModalOpen] = useState(false)
+  const [videoModalMode, setVideoModalMode] = useState<'create' | 'edit'>('create')
+  const [editingVideo, setEditingVideo] = useState<PackageDetailVideo | null>(null)
   const [upcomingVideoModalOpen, setUpcomingVideoModalOpen] = useState(false)
   const [documentModalOpen, setDocumentModalOpen] = useState(false)
   const [targetSeriesId, setTargetSeriesId] = useState<string>('')
@@ -204,23 +206,78 @@ export function PackageDetailPage() {
     }
   }
 
-  const handleVideoSubmit = async (data: VideoFormData, file?: File, onProgress?: (percent: number) => void) => {
-    if (!file) return
+  const handleVideoSubmit = async (
+    data: VideoFormData,
+    file?: File,
+    onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
+    releaseMode?: ReleaseMode,
+  ) => {
     try {
-      const response = await videosService.upload(data, file, onProgress)
-      if (response.success) {
-        const videoId = response.data?.video_id
-        if (videoId && data.tag_ids && data.tag_ids.length > 0) {
-          await videosService.assignTags(videoId, data.tag_ids).catch(() => {})
+      let videoId: string | undefined
+
+      if (videoModalMode === 'create') {
+        if (!file) return
+        const response = await videosService.upload(data, file, onProgress, onPhaseChange)
+        if (response.success) {
+          videoId = response.data?.video_id
+          toast.success('Video uploaded successfully')
+        } else {
+          toast.error(response.message || 'Failed to upload video')
+          throw new Error(response.message || 'Failed to upload video')
         }
-        toast.success('Video uploaded successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to upload video')
-        throw new Error(response.message || 'Failed to upload video')
+      } else if (editingVideo) {
+        // Edit mode. For an upcoming video with a newly attached file, push
+        // the file through the dedicated upload-file endpoint first; it owns
+        // the scheduled_release_at transition based on release_mode.
+        if (file && editingVideo.processing_status === 'upcoming') {
+          const uploadResponse = await videosService.uploadFileForExisting(
+            editingVideo._id,
+            file,
+            {
+              onProgress,
+              onPhaseChange,
+              release_mode: releaseMode,
+              scheduled_release_at: data.scheduled_release_at ?? undefined,
+            },
+          )
+          if (uploadResponse.success) {
+            toast.success(
+              releaseMode === 'scheduled'
+                ? 'Video file uploaded — will release on the scheduled date'
+                : 'Video file uploaded — processing will begin shortly',
+            )
+          } else {
+            toast.error(uploadResponse.message || 'Failed to upload video file')
+            throw new Error(uploadResponse.message || 'Failed to upload video file')
+          }
+        }
+        // Update metadata. When we just uploaded a file, the upload endpoint
+        // already wrote the authoritative scheduled_release_at — drop it from
+        // the metadata payload to avoid racing with that write.
+        const updatePayload: Partial<VideoFormData> = file
+          ? (() => {
+              const { scheduled_release_at: _unused, ...rest } = data
+              void _unused
+              return rest
+            })()
+          : data
+        const response = await videosService.update(editingVideo._id, updatePayload)
+        if (response.success) {
+          videoId = editingVideo._id
+          if (!file) toast.success('Video updated successfully')
+        } else {
+          toast.error(response.message || 'Failed to update video')
+          throw new Error(response.message || 'Failed to update video')
+        }
       }
+
+      if (videoId && data.tag_ids && data.tag_ids.length > 0) {
+        await videosService.assignTags(videoId, data.tag_ids).catch(() => {})
+      }
+      fetchPackage()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to upload video')
+      toast.error(error.message || 'Failed to save video')
       throw error
     }
   }
@@ -265,12 +322,21 @@ export function PackageDetailPage() {
 
   const openAddVideo = (moduleId: string) => {
     setTargetModuleId(moduleId)
+    setEditingVideo(null)
+    setVideoModalMode('create')
     setVideoModalOpen(true)
   }
 
   const openAddUpcoming = (moduleId: string) => {
     setTargetModuleId(moduleId)
     setUpcomingVideoModalOpen(true)
+  }
+
+  const openEditVideo = (video: PackageDetailVideo) => {
+    setEditingVideo(video)
+    setTargetModuleId(video.module_id)
+    setVideoModalMode('edit')
+    setVideoModalOpen(true)
   }
 
   const openAddDocument = (seriesId: string) => {
@@ -320,6 +386,7 @@ export function PackageDetailPage() {
               onAddModule={() => openAddModule(series._id)}
               onAddVideo={openAddVideo}
               onAddUpcoming={openAddUpcoming}
+              onEditVideo={openEditVideo}
             />
           ))}
         </div>
@@ -631,9 +698,13 @@ export function PackageDetailPage() {
 
       <VideoFormModal
         open={videoModalOpen}
-        onClose={() => setVideoModalOpen(false)}
+        onClose={() => {
+          setVideoModalOpen(false)
+          setEditingVideo(null)
+        }}
         onSubmit={handleVideoSubmit}
-        mode="create"
+        mode={videoModalMode}
+        video={editingVideo as unknown as Video | null}
         defaultModuleId={targetModuleId}
       />
 
@@ -666,9 +737,10 @@ interface SeriesBlockProps {
   onAddModule: () => void
   onAddVideo: (moduleId: string) => void
   onAddUpcoming: (moduleId: string) => void
+  onEditVideo: (video: PackageDetailVideo) => void
 }
 
-function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming }: SeriesBlockProps) {
+function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming, onEditVideo }: SeriesBlockProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <div className="rounded-lg border">
@@ -717,6 +789,7 @@ function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, on
                     onToggle={() => onToggleModule(mod._id)}
                     onAddVideo={() => onAddVideo(mod._id)}
                     onAddUpcoming={() => onAddUpcoming(mod._id)}
+                    onEditVideo={onEditVideo}
                   />
                 ))}
               </div>
@@ -736,9 +809,10 @@ interface ModuleBlockProps {
   onToggle: () => void
   onAddVideo: () => void
   onAddUpcoming: () => void
+  onEditVideo: (video: PackageDetailVideo) => void
 }
 
-function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming }: ModuleBlockProps) {
+function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming, onEditVideo }: ModuleBlockProps) {
   const totalDuration = mod.videos.reduce((sum, v) => sum + v.duration_seconds, 0)
 
   return (
@@ -797,10 +871,17 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming 
                     <TableHead className="w-16 text-xs">Access</TableHead>
                     <TableHead className="w-20 text-xs">Status</TableHead>
                     <TableHead className="w-16 text-xs text-right">Views</TableHead>
+                    <TableHead className="w-10 text-xs" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mod.videos.map((video) => (
+                  {mod.videos.map((video) => {
+                    const scheduledInFuture =
+                      !!video.scheduled_release_at &&
+                      new Date(video.scheduled_release_at) > new Date()
+                    const isScheduled =
+                      video.processing_status === 'ready' && scheduledInFuture
+                    return (
                     <TableRow key={video._id} className="hover:bg-muted/30">
                       <TableCell className="text-xs text-muted-foreground">
                         {video.display_order}
@@ -836,6 +917,11 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming 
                               <Clock className="h-2.5 w-2.5 mr-1" />
                               Upcoming
                             </Badge>
+                          ) : isScheduled ? (
+                            <Badge className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-200">
+                              <CalendarClock className="h-2.5 w-2.5 mr-1" />
+                              Scheduled
+                            </Badge>
                           ) : (
                             <Badge className={`text-[10px] ${
                               video.processing_status === 'ready'
@@ -862,8 +948,28 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming 
                           {video.view_count}
                         </span>
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onEditVideo(video)
+                          }}
+                          title={
+                            video.processing_status === 'upcoming'
+                              ? 'Edit upcoming — upload file or reschedule'
+                              : 'Edit video'
+                          }
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

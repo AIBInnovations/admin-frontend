@@ -41,11 +41,9 @@ export function PackageTypesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load package types')
-        setPackageTypes([])
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to load package types')
-      setPackageTypes([])
     } finally {
       setLoading(false)
     }

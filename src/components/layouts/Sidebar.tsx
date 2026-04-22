@@ -29,6 +29,7 @@ import {
   Wrench,
   Archive,
   Download,
+  Compass,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Explorer', href: '/content/explorer', icon: Compass, badge: 'Beta' },
   {
     name: 'Users',
     icon: Users,
@@ -350,7 +352,7 @@ function NavItemComponent({
       <span className="flex-1">{item.name}</span>
       {item.badge && (
         <Badge
-          className="ml-auto h-5 px-1.5 text-[10px] font-medium bg-primary text-primary-foreground border-0"
+          className="ml-auto h-5 px-1.5 text-[10px] font-medium bg-blue-500 text-white border-0"
         >
           {item.badge}
         </Badge>

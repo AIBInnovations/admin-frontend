@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -20,7 +23,7 @@ export function FormsPage() {
   // State
   const [forms, setForms] = useState<Form[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
@@ -38,11 +41,6 @@ export function FormsPage() {
   const [deleteWarning, setDeleteWarning] = useState<string | undefined>()
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
-  // Client-side search filter
-  const filteredForms = search
-    ? forms.filter((f) => f.title.toLowerCase().includes(search.toLowerCase()))
-    : forms
-
   // Load subjects for filter dropdown
   useEffect(() => {
     subjectsService.getSubjects({ page: 1, limit: 100 }).then((res) => {
@@ -52,17 +50,22 @@ export function FormsPage() {
     }).catch(() => { /* subjects filter will just be empty */ })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch forms
   const fetchForms = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await formsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         subject_id: subjectFilter === 'all' ? null : subjectFilter,
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setForms(response.data.entities || [])
@@ -70,15 +73,14 @@ export function FormsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load forms')
-        setForms([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load forms')
-      setForms([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, subjectFilter, publishFilter])
+  }, [currentPage, debouncedSearch, statusFilter, subjectFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchForms() }, [fetchForms])
 
@@ -93,10 +95,7 @@ export function FormsPage() {
     setSearchParams(params)
   }, [search, statusFilter, subjectFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, statusFilter, subjectFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, subjectFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -272,7 +271,7 @@ export function FormsPage() {
       />
 
       <DataTable
-        data={filteredForms}
+        data={forms}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -283,13 +282,13 @@ export function FormsPage() {
         }}
         emptyState={{
           icon: FileText,
-          title: search || statusFilter !== 'all' || subjectFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || statusFilter !== 'all' || subjectFilter !== 'all' || publishFilter !== 'all'
             ? 'No forms found matching your filters'
             : 'No forms yet',
-          description: !search && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first form'
             : undefined,
-          action: !search && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first form
             </Button>

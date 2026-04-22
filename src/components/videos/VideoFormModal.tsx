@@ -20,10 +20,10 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown } from 'lucide-react'
+import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarqueeText } from '@/components/common/MarqueeText'
-import { Video, VideoFormData } from '@/services/videos.service'
+import { Video, VideoFormData, ReleaseMode } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { VideoTag, videoTagsService } from '@/services/videoTags.service'
 import { apiService } from '@/services/api.service'
@@ -43,6 +43,13 @@ const videoSchema = z.object({
   publish_status: z.enum(['draft', 'published']),
   subtitle_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   transcript_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
+  // Datetime-local value ('YYYY-MM-DDTHH:mm'). Empty string means no schedule.
+  scheduled_release_at: z
+    .string()
+    .regex(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})?$/, 'Invalid date format')
+    .optional()
+    .or(z.literal('')),
+  release_mode: z.enum(['immediate', 'scheduled']),
 })
 
 type VideoFormValues = z.infer<typeof videoSchema>
@@ -52,10 +59,26 @@ export type UploadPhase = 'uploading' | 'completing' | 'confirming'
 interface VideoFormModalProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: VideoFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: UploadPhase) => void) => Promise<void>
+  onSubmit: (
+    data: VideoFormData,
+    file?: File,
+    onProgress?: (percent: number) => void,
+    onPhaseChange?: (phase: UploadPhase) => void,
+    releaseMode?: ReleaseMode,
+  ) => Promise<void>
   video?: Video | null
   mode: 'create' | 'edit'
   defaultModuleId?: string
+}
+
+// Convert ISO string to datetime-local value ('YYYY-MM-DDTHH:mm') in the
+// admin's local timezone — same semantics as UpcomingVideoModal.
+function isoToLocalInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultModuleId }: VideoFormModalProps) {
@@ -80,10 +103,16 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
       title: '', description: '', module_id: '', faculty_id: '',
       display_order: 0, is_free: false, publish_status: 'draft' as const,
       subtitle_url: '', transcript_url: '',
+      scheduled_release_at: '', release_mode: 'immediate',
     },
   })
 
   const isFree = watch('is_free')
+  const releaseMode = watch('release_mode')
+  const scheduledValue = watch('scheduled_release_at')
+
+  const isUpcomingEdit = mode === 'edit' && video?.processing_status === 'upcoming'
+  const showReleaseControls = isUpcomingEdit && !!videoFile
 
   // Fetch dropdown data
   useEffect(() => {
@@ -118,12 +147,22 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
           publish_status: video.publish_status || 'draft',
           subtitle_url: video.subtitle_url || '',
           transcript_url: video.transcript_url || '',
+          scheduled_release_at: isoToLocalInput(video.scheduled_release_at),
+          // Default release_mode: honor a future scheduled date; otherwise
+          // release immediately (no point in "keep scheduled" when the date
+          // has already passed).
+          release_mode:
+            video.scheduled_release_at &&
+            new Date(video.scheduled_release_at) > new Date()
+              ? 'scheduled'
+              : 'immediate',
         })
       } else {
         reset({
           title: '', description: '', module_id: defaultModuleId || '', faculty_id: '',
           display_order: 0, is_free: false, publish_status: 'draft' as const,
           subtitle_url: '', transcript_url: '',
+          scheduled_release_at: '', release_mode: 'immediate',
         })
       }
     }
@@ -142,6 +181,27 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
     setUploadError(null)
 
     try {
+      // Build the scheduled date payload. The field only has meaning for
+      // upcoming videos; for any other edit/create path we omit it so the
+      // backend doesn't overwrite an existing value.
+      //   - Upcoming + no file: metadata edit. Send whatever is in the field
+      //     (ISO string, or null to clear the schedule).
+      //   - Upcoming + file + immediate: scheduled_release_at will be cleared
+      //     server-side regardless; we still send null for consistency.
+      //   - Upcoming + file + scheduled: we send the (possibly edited) date
+      //     so the backend writes the new value on upload.
+      let scheduledIso: string | null | undefined = undefined
+      if (isUpcomingEdit) {
+        if (videoFile && data.release_mode === 'immediate') {
+          scheduledIso = null
+        } else if (data.scheduled_release_at) {
+          const parsed = new Date(data.scheduled_release_at)
+          scheduledIso = isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+        } else {
+          scheduledIso = null
+        }
+      }
+
       const formData: VideoFormData = {
         title: data.title,
         description: data.description,
@@ -153,12 +213,17 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         subtitle_url: data.subtitle_url || undefined,
         transcript_url: data.transcript_url || undefined,
         tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        ...(scheduledIso !== undefined ? { scheduled_release_at: scheduledIso } : {}),
       }
+      const releaseModeForUpload: ReleaseMode | undefined =
+        isUpcomingEdit && videoFile ? data.release_mode : undefined
+
       await onSubmit(
         formData,
         videoFile || undefined,
         (pct) => setUploadProgress(pct),
         (phase) => setUploadPhase(phase),
+        releaseModeForUpload,
       )
       setUploadProgress(null)
       setUploadPhase(null)
@@ -177,17 +242,30 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[720px]">
         <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'Upload Video' : 'Edit Video'}</DialogTitle>
+          <DialogTitle>
+            {mode === 'create'
+              ? 'Upload Video'
+              : isUpcomingEdit
+                ? 'Edit Upcoming Video'
+                : 'Edit Video'}
+          </DialogTitle>
           <DialogDescription>
-            {mode === 'create' ? 'Upload a new video to a module.' : 'Update the video details below.'}
+            {mode === 'create'
+              ? 'Upload a new video to a module.'
+              : isUpcomingEdit
+                ? 'Edit the announcement, upload the actual file when ready, and choose how it should be released.'
+                : 'Update the video details below.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
           {/* Video File (create, or edit when upcoming) */}
-          {(mode === 'create' || (mode === 'edit' && video?.processing_status === 'upcoming')) && (
+          {(mode === 'create' || isUpcomingEdit) && (
             <div className="space-y-2">
-              <Label>Video File <span className="text-red-500">*</span></Label>
+              <Label>
+                Video File {mode === 'create' && <span className="text-red-500">*</span>}
+                {isUpcomingEdit && <span className="text-xs font-normal text-muted-foreground ml-2">(optional — leave empty to edit metadata only)</span>}
+              </Label>
               {!videoFile ? (
                 <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-6 text-sm hover:bg-muted/50 hover:border-primary/30 transition-colors">
                   <Upload className="h-8 w-8 text-muted-foreground" />
@@ -220,6 +298,96 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                   </Button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Release timing (upcoming edit only) */}
+          {isUpcomingEdit && (
+            <div className="space-y-3 rounded-lg border border-orange-200 bg-orange-50/50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-orange-600" />
+                <Label className="text-sm font-medium">Release Timing</Label>
+              </div>
+
+              {showReleaseControls && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">When the file finishes processing…</Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors',
+                        releaseMode === 'immediate'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted/50',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        value="immediate"
+                        className="mt-0.5"
+                        checked={releaseMode === 'immediate'}
+                        onChange={() => setValue('release_mode', 'immediate')}
+                        disabled={isSubmitting}
+                      />
+                      <div className="flex-1 space-y-0.5">
+                        <p className="text-sm font-medium">Release immediately</p>
+                        <p className="text-xs text-muted-foreground">
+                          Video becomes visible to users as soon as processing completes. The scheduled date will be cleared.
+                        </p>
+                      </div>
+                    </label>
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors',
+                        releaseMode === 'scheduled'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted/50',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        value="scheduled"
+                        className="mt-0.5"
+                        checked={releaseMode === 'scheduled'}
+                        onChange={() => setValue('release_mode', 'scheduled')}
+                        disabled={isSubmitting}
+                      />
+                      <div className="flex-1 space-y-0.5">
+                        <p className="text-sm font-medium">Keep scheduled release</p>
+                        <p className="text-xs text-muted-foreground">
+                          Process now, but keep the video hidden from users until the scheduled date below.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Scheduled date input — always visible for upcoming edits,
+                  but only meaningful when no file is uploaded OR release mode
+                  is 'scheduled'. Disabled when 'immediate' is chosen to make
+                  the relationship clear. */}
+              <div className="space-y-2">
+                <Label htmlFor="scheduled_release_at" className="text-xs">
+                  Release Date {!videoFile && <span className="text-red-500">*</span>}
+                </Label>
+                <Input
+                  id="scheduled_release_at"
+                  type="datetime-local"
+                  disabled={isSubmitting || (showReleaseControls && releaseMode === 'immediate')}
+                  {...register('scheduled_release_at')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {showReleaseControls && releaseMode === 'immediate'
+                    ? 'Scheduled date is ignored when releasing immediately.'
+                    : scheduledValue && new Date(scheduledValue) < new Date()
+                      ? 'This date is in the past — the video will be visible as soon as it is ready.'
+                      : 'Users will see an "Upcoming" placeholder until this date arrives.'}
+                </p>
+                {errors.scheduled_release_at && (
+                  <p className="text-sm text-red-500">{errors.scheduled_release_at.message}</p>
+                )}
+              </div>
             </div>
           )}
 

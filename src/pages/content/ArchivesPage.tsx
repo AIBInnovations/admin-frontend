@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +48,7 @@ function getDaysRemaining(archivedAt: string): number {
 export function ArchivesPage() {
   const [items, setItems] = useState<ArchivedItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -55,14 +58,19 @@ export function ArchivesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ArchivedItem | null>(null)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   const fetchItems = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await archivesService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         type: typeFilter !== 'all' ? typeFilter as any : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setItems(response.data.entities || [])
@@ -70,19 +78,18 @@ export function ArchivesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load archives')
-        setItems([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load archives')
-      setItems([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, typeFilter])
+  }, [currentPage, debouncedSearch, typeFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
-  useEffect(() => { setCurrentPage(1) }, [typeFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, typeFilter])
 
   const handleRestore = async (item: ArchivedItem) => {
     try {
@@ -136,10 +143,6 @@ export function ArchivesPage() {
       defaultValue: 'all',
     },
   ]
-
-  const filteredItems = search
-    ? items.filter((item) => item.title.toLowerCase().includes(search.toLowerCase()))
-    : items
 
   const columns: ColumnDef<ArchivedItem>[] = [
     {
@@ -246,7 +249,7 @@ export function ArchivesPage() {
       />
 
       <DataTable
-        data={filteredItems}
+        data={items}
         columns={columns}
         isLoading={loading}
         pagination={{

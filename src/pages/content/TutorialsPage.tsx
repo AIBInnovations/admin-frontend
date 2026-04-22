@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -20,7 +23,7 @@ export function TutorialsPage() {
   // State
   const [tutorials, setTutorials] = useState<Tutorial[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -33,21 +36,21 @@ export function TutorialsPage() {
   const [selectedTutorial, setSelectedTutorial] = useState<Tutorial | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
-  // Client-side search filter
-  const filteredTutorials = search
-    ? tutorials.filter((t) => t.title.toLowerCase().includes(search.toLowerCase()))
-    : tutorials
+  const { nextFetchId, isStale } = useLatestFetch()
 
   // Fetch tutorials
   const fetchTutorials = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await tutorialsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setTutorials(response.data.entities || [])
@@ -55,15 +58,14 @@ export function TutorialsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load tutorials')
-        setTutorials([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load tutorials')
-      setTutorials([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, publishFilter])
+  }, [currentPage, debouncedSearch, statusFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchTutorials() }, [fetchTutorials])
 
@@ -77,10 +79,7 @@ export function TutorialsPage() {
     setSearchParams(params)
   }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, statusFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -203,7 +202,7 @@ export function TutorialsPage() {
       />
 
       <DataTable
-        data={filteredTutorials}
+        data={tutorials}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -214,13 +213,13 @@ export function TutorialsPage() {
         }}
         emptyState={{
           icon: GraduationCap,
-          title: search || statusFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No tutorials found matching your filters'
             : 'No tutorials yet',
-          description: !search && statusFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first free tutorial'
             : undefined,
-          action: !search && statusFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first tutorial
             </Button>

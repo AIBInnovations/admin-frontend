@@ -49,6 +49,7 @@ import { TutorialsPage } from '@/pages/content/TutorialsPage'
 import { ExportsPage } from '@/pages/exports/ExportsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { DeleteAccountPage } from '@/pages/DeleteAccountPage'
+import { ExplorerPage } from '@/pages/explorer/ExplorerPage'
 
 function App() {
   return (
@@ -119,6 +120,9 @@ function App() {
 
               {/* Exports */}
               <Route path="/exports" element={<ExportsPage />} />
+
+              {/* Explorer */}
+              <Route path="/content/explorer/*" element={<ExplorerPage />} />
 
               {/* Settings */}
               <Route path="/settings/admin-users" element={<AdminUsersPage />} />

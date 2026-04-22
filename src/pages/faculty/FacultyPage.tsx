@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -17,7 +20,7 @@ export function FacultyPage() {
 
   // State
   const [facultyList, setFacultyList] = useState<Faculty[]>([])
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -32,15 +35,20 @@ export function FacultyPage() {
   const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
   const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch faculty
   const fetchFaculty = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await facultyService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setFacultyList(response.data.entities || [])
@@ -48,15 +56,14 @@ export function FacultyPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load faculty')
-        setFacultyList([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load faculty')
-      setFacultyList([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter])
+  }, [currentPage, debouncedSearch, statusFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchFaculty() }, [fetchFaculty])
 
@@ -68,7 +75,7 @@ export function FacultyPage() {
     setSearchParams(params)
   }, [statusFilter, currentPage, setSearchParams])
 
-  useEffect(() => { setCurrentPage(1) }, [statusFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -175,11 +182,6 @@ export function FacultyPage() {
     }
   }
 
-  // Client-side filtering
-  const filteredFaculty = search
-    ? facultyList.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
-    : facultyList
-
   // Filters
   const filters: FilterConfig[] = [
     {
@@ -228,7 +230,7 @@ export function FacultyPage() {
       />
 
       <DataTable
-        data={filteredFaculty}
+        data={facultyList}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -239,9 +241,9 @@ export function FacultyPage() {
         }}
         emptyState={{
           icon: GraduationCap,
-          title: search || statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
-          description: !search && statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
-          action: !search && statusFilter === 'all' ? (
+          title: debouncedSearch || statusFilter !== 'all' ? 'No faculty found matching your filters' : 'No faculty yet',
+          description: !debouncedSearch && statusFilter === 'all' ? 'Get started by adding your first faculty member' : undefined,
+          action: !debouncedSearch && statusFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first faculty
             </Button>

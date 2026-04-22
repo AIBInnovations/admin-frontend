@@ -31,11 +31,9 @@ export function AdminRolesPage() {
         setRoles(response.data.entities || [])
       } else {
         toast.error(response.message || 'Failed to load roles')
-        setRoles([])
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to load roles')
-      setRoles([])
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -19,7 +22,7 @@ export function AdminUsersPage() {
   // State
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -43,16 +46,21 @@ export function AdminUsersPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch admin users
   const fetchAdminUsers = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await adminUsersService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         role_id: roleFilter !== 'all' ? roleFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setAdminUsers(response.data.entities || [])
@@ -60,15 +68,14 @@ export function AdminUsersPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load admin users')
-        setAdminUsers([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load admin users')
-      setAdminUsers([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, roleFilter])
+  }, [currentPage, debouncedSearch, statusFilter, roleFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchAdminUsers() }, [fetchAdminUsers])
 
@@ -81,16 +88,7 @@ export function AdminUsersPage() {
     setSearchParams(params)
   }, [statusFilter, roleFilter, currentPage, setSearchParams])
 
-  useEffect(() => { setCurrentPage(1) }, [statusFilter, roleFilter])
-
-  // Client-side filter
-  const filteredAdmins = search
-    ? adminUsers.filter(
-        (a) =>
-          a.name.toLowerCase().includes(search.toLowerCase()) ||
-          a.email.toLowerCase().includes(search.toLowerCase())
-      )
-    : adminUsers
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, roleFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -227,7 +225,7 @@ export function AdminUsersPage() {
     onResetPassword: handleResetPasswordClick,
   })
 
-  const hasFilters = statusFilter !== 'all' || roleFilter !== 'all' || search !== ''
+  const hasFilters = statusFilter !== 'all' || roleFilter !== 'all' || debouncedSearch !== ''
 
   return (
     <div className="space-y-6">
@@ -255,7 +253,7 @@ export function AdminUsersPage() {
       />
 
       <DataTable
-        data={filteredAdmins}
+        data={adminUsers}
         columns={columns}
         isLoading={loading}
         pagination={{

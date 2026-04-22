@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -18,7 +21,7 @@ export function BannersPage() {
   // State
   const [banners, setBanners] = useState<Banner[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
@@ -32,21 +35,21 @@ export function BannersPage() {
   const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
 
-  // Client-side search filter
-  const filteredBanners = search
-    ? banners.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
-    : banners
+  const { nextFetchId, isStale } = useLatestFetch()
 
   // Fetch banners
   const fetchBanners = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await bannersService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setBanners(response.data.entities || [])
@@ -54,15 +57,14 @@ export function BannersPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load banners')
-        setBanners([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load banners')
-      setBanners([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, publishFilter])
+  }, [currentPage, debouncedSearch, statusFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchBanners() }, [fetchBanners])
 
@@ -76,10 +78,7 @@ export function BannersPage() {
     setSearchParams(params)
   }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, statusFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -207,7 +206,7 @@ export function BannersPage() {
       />
 
       <DataTable
-        data={filteredBanners}
+        data={banners}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -218,13 +217,13 @@ export function BannersPage() {
         }}
         emptyState={{
           icon: Image,
-          title: search || statusFilter !== 'all' || publishFilter !== 'all'
+          title: debouncedSearch || statusFilter !== 'all' || publishFilter !== 'all'
             ? 'No banners found matching your filters'
             : 'No banners yet',
-          description: !search && statusFilter === 'all' && publishFilter === 'all'
+          description: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all'
             ? 'Get started by adding your first banner'
             : undefined,
-          action: !search && statusFilter === 'all' && publishFilter === 'all' ? (
+          action: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Add your first banner
             </Button>

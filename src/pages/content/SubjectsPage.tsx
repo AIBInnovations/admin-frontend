@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useServerSearch } from '@/hooks/useServerSearch';
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange';
+import { useLatestFetch } from '@/hooks/useLatestFetch';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/common/DataTable';
@@ -20,7 +23,7 @@ export function SubjectsPage() {
   // State
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const { inputValue: searchQuery, setInputValue: setSearchQuery, debouncedSearch } = useServerSearch(searchParams.get('search') || '');
   const [activeFilter, setActiveFilter] = useState<string>(searchParams.get('status') || 'all');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
   const [totalPages, setTotalPages] = useState(1);
@@ -34,17 +37,22 @@ export function SubjectsPage() {
   const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null);
   const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false);
 
+  const { nextFetchId, isStale } = useLatestFetch();
+
   // Fetch subjects
   const fetchSubjects = useCallback(async () => {
+    const fetchId = nextFetchId();
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await subjectsService.getSubjects({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         sort_by: 'display_order',
         sort_order: 'asc',
       });
+      if (isStale(fetchId)) return;
 
       if (response.success && response.data) {
         setSubjects(response.data.entities || []);
@@ -52,19 +60,20 @@ export function SubjectsPage() {
         setTotalCount(response.data.pagination?.total || 0);
       } else {
         toast.error(response.message || 'Failed to load subjects');
-        setSubjects([]);
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return;
       toast.error(error.message || 'Failed to load subjects');
-      setSubjects([]);
     } finally {
-      setLoading(false);
+      if (!isStale(fetchId)) setLoading(false);
     }
-  }, [currentPage, activeFilter]);
+  }, [currentPage, debouncedSearch, activeFilter, nextFetchId, isStale]);
 
   useEffect(() => {
     fetchSubjects();
   }, [fetchSubjects]);
+
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, activeFilter]);
 
   // Update URL params
   useEffect(() => {
@@ -188,13 +197,6 @@ export function SubjectsPage() {
     },
   ];
 
-  // Client-side search filter
-  const filteredSubjects = searchQuery
-    ? subjects.filter((subject) =>
-        subject.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : subjects;
-
   // Column definitions
   const columns = useSubjectsColumns({
     onNavigate: (subject) => navigate(`/content/subjects/${subject._id}`),
@@ -231,7 +233,7 @@ export function SubjectsPage() {
       />
 
       <DataTable
-        data={filteredSubjects}
+        data={subjects}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -243,15 +245,15 @@ export function SubjectsPage() {
         emptyState={{
           icon: BookOpen,
           title:
-            searchQuery || activeFilter !== 'all'
+            debouncedSearch || activeFilter !== 'all'
               ? 'No subjects found matching your filters'
               : 'No subjects yet',
           description:
-            !searchQuery && activeFilter === 'all'
+            !debouncedSearch && activeFilter === 'all'
               ? 'Get started by creating your first subject'
               : undefined,
           action:
-            !searchQuery && activeFilter === 'all' ? (
+            !debouncedSearch && activeFilter === 'all' ? (
               <Button onClick={handleCreate} variant="outline" size="sm">
                 <Plus className="mr-2 h-4 w-4" />
                 Create your first subject

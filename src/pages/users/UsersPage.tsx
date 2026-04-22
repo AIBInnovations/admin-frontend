@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
@@ -17,33 +20,27 @@ export function UsersPage() {
   // State
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [debouncedSearch, setDebouncedSearch] = useState(search)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
-  // Debounce search input — wait 400ms after typing stops before querying API
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(search)
-    }, 400)
-    return () => clearTimeout(debounceRef.current)
-  }, [search])
+  const { nextFetchId, isStale } = useLatestFetch()
 
   // Fetch users with server-side search
   const fetchUsers = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await usersService.getAll({
         page: currentPage,
         limit: 20,
         search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setUsers(response.data.entities || [])
@@ -51,15 +48,14 @@ export function UsersPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load users')
-        setUsers([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load users')
-      setUsers([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, debouncedSearch])
+  }, [currentPage, statusFilter, debouncedSearch, nextFetchId, isStale])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
@@ -72,10 +68,7 @@ export function UsersPage() {
     setSearchParams(params)
   }, [search, statusFilter, currentPage, setSearchParams])
 
-  // Reset page when search or status filter changes
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearch, statusFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter])
 
   // Handlers
   const handleBlockToggle = async (user: User) => {

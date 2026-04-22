@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
@@ -14,7 +17,7 @@ export function PaymentsPage() {
   // State
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { inputValue: searchQuery, setInputValue: setSearchQuery, debouncedSearch } = useServerSearch('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || 'all')
   const [gatewayFilter, setGatewayFilter] = useState(searchParams.get('gateway') || 'all')
@@ -22,17 +25,22 @@ export function PaymentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch transactions
   const fetchTransactions = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await paymentsService.getTransactions({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         payment_status: statusFilter !== 'all' ? statusFilter : undefined,
         purchase_type: typeFilter !== 'all' ? typeFilter : undefined,
         payment_gateway: gatewayFilter !== 'all' ? gatewayFilter : undefined,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setTransactions(response.data.entities || [])
@@ -40,15 +48,14 @@ export function PaymentsPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load transactions')
-        setTransactions([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load transactions')
-      setTransactions([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, typeFilter, gatewayFilter])
+  }, [currentPage, debouncedSearch, statusFilter, typeFilter, gatewayFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
 
@@ -62,29 +69,7 @@ export function PaymentsPage() {
     setSearchParams(params)
   }, [statusFilter, typeFilter, gatewayFilter, currentPage, setSearchParams])
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [statusFilter, typeFilter, gatewayFilter])
-
-  // Client-side search filter
-  const filteredPayments = transactions.filter((transaction) => {
-    const searchLower = searchQuery.toLowerCase().trim()
-
-    // If no search query, include all
-    if (!searchLower) return true
-
-    // Search by transaction_id
-    if (transaction.transaction_id.toLowerCase().includes(searchLower)) return true
-
-    // Search by user name
-    if (transaction.user?.name?.toLowerCase().includes(searchLower)) return true
-
-    // Search by user email
-    if (transaction.user?.email?.toLowerCase().includes(searchLower)) return true
-
-    return false
-  })
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, typeFilter, gatewayFilter])
 
   // Filters
   const filters: FilterConfig[] = [
@@ -159,7 +144,7 @@ export function PaymentsPage() {
       />
 
       <DataTable
-        data={filteredPayments}
+        data={transactions}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -170,12 +155,10 @@ export function PaymentsPage() {
         }}
         emptyState={{
           icon: IndianRupee,
-          title: searchQuery.trim()
-            ? 'No transactions found matching your search'
-            : statusFilter !== 'all' || typeFilter !== 'all' || gatewayFilter !== 'all'
+          title: debouncedSearch || statusFilter !== 'all' || typeFilter !== 'all' || gatewayFilter !== 'all'
             ? 'No transactions found matching your filters'
             : 'No transactions yet',
-          description: searchQuery === '' && statusFilter === 'all' && typeFilter === 'all' && gatewayFilter === 'all'
+          description: !debouncedSearch && statusFilter === 'all' && typeFilter === 'all' && gatewayFilter === 'all'
             ? 'Transactions will appear here when users make purchases'
             : undefined,
         }}

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -18,7 +21,7 @@ export function ModulesPage() {
   // State
   const [modules, setModules] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
@@ -45,17 +48,22 @@ export function ModulesPage() {
     })
   }, [])
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   // Fetch modules
   const fetchModules = useCallback(async () => {
+    const fetchId = nextFetchId()
+    setLoading(true)
     try {
-      setLoading(true)
       const response = await modulesService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
         is_active: activeFilter === 'all' ? null : activeFilter === 'active',
         publish_status: publishFilter === 'all' ? null : publishFilter,
       })
+      if (isStale(fetchId)) return
 
       if (response.success && response.data) {
         setModules(response.data.entities || [])
@@ -63,15 +71,14 @@ export function ModulesPage() {
         setTotalCount(response.data.pagination?.total || 0)
       } else {
         toast.error(response.message || 'Failed to load modules')
-        setModules([])
       }
     } catch (error: any) {
+      if (isStale(fetchId)) return
       toast.error(error.message || 'Failed to load modules')
-      setModules([])
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, seriesFilter, activeFilter, publishFilter])
+  }, [currentPage, debouncedSearch, seriesFilter, activeFilter, publishFilter, nextFetchId, isStale])
 
   useEffect(() => { fetchModules() }, [fetchModules])
 
@@ -85,10 +92,7 @@ export function ModulesPage() {
     setSearchParams(params)
   }, [seriesFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
-  // Reset page on filter change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [seriesFilter, activeFilter, publishFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, seriesFilter, activeFilter, publishFilter])
 
   // Handlers
   const handleCreate = () => {
@@ -209,11 +213,6 @@ export function ModulesPage() {
     onPublishAction: handlePublishAction,
   })
 
-  // Client-side filtering
-  const filteredModules = search
-    ? modules.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()))
-    : modules
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -241,7 +240,7 @@ export function ModulesPage() {
       />
 
       <DataTable
-        data={filteredModules}
+        data={modules}
         columns={columns}
         isLoading={loading}
         pagination={{
@@ -252,13 +251,13 @@ export function ModulesPage() {
         }}
         emptyState={{
           icon: Layers,
-          title: seriesFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all' || search
+          title: debouncedSearch || seriesFilter !== 'all' || activeFilter !== 'all' || publishFilter !== 'all'
             ? 'No modules found matching your filters'
             : 'No modules yet',
-          description: seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' && !search
+          description: !debouncedSearch && seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first module'
             : undefined,
-          action: seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' && !search ? (
+          action: !debouncedSearch && seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first module
             </Button>

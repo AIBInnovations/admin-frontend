@@ -109,17 +109,26 @@ export function SearchWithFilters({
     }
   };
 
+  const showHint = value.length > 0 && value.length < 3;
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
       {/* Search input */}
-      <div className="relative flex-1 sm:max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="h-9 pl-9"
-        />
+      <div className="flex-1 sm:max-w-sm">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="h-9 pl-9"
+          />
+        </div>
+        {showHint && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Type {3 - value.length} more character{3 - value.length !== 1 ? 's' : ''} to search
+          </p>
+        )}
       </div>
 
       {/* Filters */}
