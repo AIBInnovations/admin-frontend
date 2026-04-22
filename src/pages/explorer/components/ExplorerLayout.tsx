@@ -9,13 +9,11 @@ interface ExplorerLayoutProps {
 export function ExplorerLayout({ topBar, focusCard, children }: ExplorerLayoutProps) {
   return (
     <div className="min-h-full bg-slate-100 flex flex-col">
-      {topBar}
       <div className="flex-1 min-h-0 flex flex-col gap-3 p-3 sm:p-4 lg:p-5">
-        {focusCard && (
-          <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5">
-            {focusCard}
-          </div>
-        )}
+        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 overflow-hidden">
+          {topBar}
+          {focusCard && <div className="border-t border-slate-100">{focusCard}</div>}
+        </div>
         <div className="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 flex-1 min-h-0 overflow-hidden">
           {children}
         </div>

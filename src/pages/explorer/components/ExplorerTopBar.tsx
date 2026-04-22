@@ -38,7 +38,7 @@ export function ExplorerTopBar({
   })
 
   return (
-    <div className="sticky top-0 z-30 bg-slate-950">
+    <div className="bg-white">
       <div className="flex items-center gap-2 px-4 sm:px-5 h-12">
         {parentUrl && (
           <TooltipProvider delayDuration={300}>
@@ -47,7 +47,7 @@ export function ExplorerTopBar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                   onClick={() => navigate(parentUrl)}
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -76,7 +76,7 @@ export function ExplorerTopBar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                    className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                     onClick={onRefresh}
                     disabled={loading}
                   >
@@ -94,7 +94,7 @@ export function ExplorerTopBar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                   onClick={() => copyShareLink('Link')}
                 >
                   <Share2 className="w-4 h-4" />
@@ -110,7 +110,7 @@ export function ExplorerTopBar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                   onClick={() => setHelpOpen(true)}
                 >
                   <Keyboard className="w-4 h-4" />
