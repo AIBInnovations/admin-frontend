@@ -7,7 +7,7 @@ import {
 import { ColumnDef } from '@/components/common/DataTable'
 import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { Video } from '@/services/videos.service'
-import { MoreVertical, Pencil, Archive, Eye, Clock } from 'lucide-react'
+import { MoreVertical, Pencil, Archive, Eye, Clock, RotateCw } from 'lucide-react'
 
 function formatFileSize(mb: number): string {
   if (!mb) return '—'
@@ -27,12 +27,14 @@ interface VideosColumnsProps {
   onEdit: (video: Video) => void
   onArchive: (video: Video) => void
   onPublishAction: (video: Video, action: 'publish' | 'unpublish') => void
+  onRetryTranscoding: (video: Video) => void
 }
 
 export function useVideosColumns({
   onEdit,
   onArchive,
   onPublishAction,
+  onRetryTranscoding,
 }: VideosColumnsProps): ColumnDef<Video>[] {
   return [
     {
@@ -166,6 +168,17 @@ export function useVideosColumns({
             >
               {video.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
             </DropdownMenuItem>
+            {video.processing_status === 'failed' && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetryTranscoding(video);
+                }}
+                className="text-blue-600"
+              >
+                <RotateCw className="mr-2 h-4 w-4" />Retry transcoding
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onArchive(video)} className="text-amber-600">
               <Archive className="mr-2 h-4 w-4" />Archive

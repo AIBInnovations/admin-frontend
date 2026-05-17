@@ -1,20 +1,16 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Pencil, MoreHorizontal, RefreshCw, Video, Clock, Trash2, Eye, EyeOff } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Pencil, MoreHorizontal, RefreshCw, Video, Clock, Eye, EyeOff } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { ModuleFormDialog } from '../../forms/ModuleFormDialog'
-import { DeleteModuleDialog } from '../../dialogs/DeleteModuleDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { modulesService } from '@/services/modules.service'
-import { getParentUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import type { PackageDetailModule } from '@/services/packages.service'
 
 interface ModuleFocusProps {
   module: PackageDetailModule
-  focus?: ExplorerFocus
   onRefresh?: () => void
 }
 
@@ -25,10 +21,8 @@ function formatDuration(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
-export function ModuleFocus({ module, focus, onRefresh }: ModuleFocusProps) {
-  const navigate = useNavigate()
+export function ModuleFocus({ module, onRefresh }: ModuleFocusProps) {
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const isPublished = module.publish_status === 'published'
 
@@ -45,15 +39,6 @@ export function ModuleFocus({ module, focus, onRefresh }: ModuleFocusProps) {
     onSuccess: () => onRefresh?.(),
     successMessage: `Stats updated for "${module.name}"`,
   })
-
-  const handleDeleteSuccess = () => {
-    setDeleteOpen(false)
-    if (focus) {
-      const parentUrl = getParentUrl(focus)
-      if (parentUrl) navigate(parentUrl, { replace: true })
-    }
-    onRefresh?.()
-  }
 
   return (
     <>
@@ -137,13 +122,6 @@ export function ModuleFocus({ module, focus, onRefresh }: ModuleFocusProps) {
                   <RefreshCw className={`w-3.5 h-3.5 mr-2 ${recalcMutation.loading ? 'animate-spin' : ''}`} />
                   Recalculate stats
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete module
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -156,14 +134,6 @@ export function ModuleFocus({ module, focus, onRefresh }: ModuleFocusProps) {
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         seriesId={module.series_id}
         module={module}
-      />
-
-      <DeleteModuleDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={handleDeleteSuccess}
-        moduleId={module._id}
-        moduleName={module.name}
       />
 
       <PublishDialog

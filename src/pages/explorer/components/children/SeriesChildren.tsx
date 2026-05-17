@@ -19,7 +19,7 @@ import { modulesService } from '@/services/modules.service'
 import { documentsService } from '@/services/documents.service'
 import { publishService } from '@/services/publish.service'
 import { toast } from 'sonner'
-import type { PackageDetailModule, PackageDetailSeries } from '@/services/packages.service'
+import type { PackageDetailDocument, PackageDetailModule, PackageDetailSeries } from '@/services/packages.service'
 import type { ExplorerFocus } from '../../parseExplorerPath'
 
 interface SeriesChildrenProps {
@@ -35,15 +35,17 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
   const [docSearch, setDocSearch] = useState('')
   const [createModuleOpen, setCreateModuleOpen] = useState(false)
   const [localModules, setLocalModules] = useState<PackageDetailModule[]>([])
+  const [localDocuments, setLocalDocuments] = useState<PackageDetailDocument[]>([])
   const moduleSelection = useSelection()
   const docSelection = useSelection()
 
   const modules = series?.modules ?? []
-  useEffect(() => { setLocalModules([]) }, [series?._id])
+  useEffect(() => { setLocalModules([]); setLocalDocuments([]) }, [series?._id])
   const documents = series?.documents ?? []
   const seriesId = series?._id ?? (focus.level === 'series' ? focus.seriesId : '')
 
   const displayModules = localModules.length > 0 ? localModules : modules
+  const displayDocuments = localDocuments.length > 0 ? localDocuments : documents
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -59,11 +61,32 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
     setLocalModules(reordered)
 
     try {
-      await modulesService.update(active.id as string, { display_order: newIndex + 1 })
+      await modulesService.reorder(reordered.map((m) => m._id))
       toast.success('Order updated')
       onRefresh?.()
     } catch {
       setLocalModules(displayModules)
+      toast.error('Failed to reorder')
+    }
+  }
+
+  async function handleDocumentDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = displayDocuments.findIndex((d) => d._id === active.id)
+    const newIndex = displayDocuments.findIndex((d) => d._id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(displayDocuments, oldIndex, newIndex)
+    setLocalDocuments(reordered)
+
+    try {
+      await documentsService.reorder(reordered.map((d) => d._id))
+      toast.success('Order updated')
+      onRefresh?.()
+    } catch {
+      setLocalDocuments(displayDocuments)
       toast.error('Failed to reorder')
     }
   }
@@ -73,7 +96,7 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
   )
   const filteredModuleIds = filteredModules.map((m) => m._id)
 
-  const filteredDocs = documents.filter((d) =>
+  const filteredDocs = displayDocuments.filter((d) =>
     docSearch.length < 1 ? true : d.title.toLowerCase().includes(docSearch.toLowerCase()),
   )
   const filteredDocIds = filteredDocs.map((d) => d._id)
@@ -281,17 +304,26 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
             </div>
 
             {filteredDocs.length > 0 ? (
-              <div className="py-1.5">
-                {filteredDocs.map((d) => (
-                  <DocumentRow
-                    key={d._id}
-                    document={d}
-                    onRefresh={onRefresh}
-                    selected={docSelection.isSelected(d._id)}
-                    onSelect={docSelection.toggle}
-                  />
-                ))}
-              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDocumentDragEnd}>
+                <SortableContext items={filteredDocs.map((d) => d._id)} strategy={verticalListSortingStrategy}>
+                  <div className="py-1.5">
+                    {filteredDocs.map((d) => (
+                      <SortableItem key={d._id} id={d._id}>
+                        {({ dragHandleProps, isDragging }) => (
+                          <DocumentRow
+                            document={d}
+                            onRefresh={onRefresh}
+                            selected={docSelection.isSelected(d._id)}
+                            onSelect={docSelection.toggle}
+                            dragHandleProps={dragHandleProps}
+                            isDragging={isDragging}
+                          />
+                        )}
+                      </SortableItem>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             ) : (
               <ExplorerEmptyState
                 icon={FileText}

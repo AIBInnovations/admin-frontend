@@ -421,6 +421,26 @@ class VideosService {
   async getVideoTags(videoId: string): Promise<ApiResponse<any>> {
     return apiService.get(`${this.basePath}/${videoId}/tags`)
   }
+
+  /**
+   * Bulk reorder videos — sends full ordered list, rewrites display_order as 1..N
+   */
+  async reorder(orderedIds: string[]): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/reorder`, { ordered_ids: orderedIds })
+  }
+
+  /**
+   * Retry MediaConvert transcoding for a video stuck in 'failed' status.
+   * Reuses existing s3Key — no re-upload needed.
+   */
+  async retryTranscoding(
+    videoId: string,
+  ): Promise<ApiResponse<{ video_id: string; processing_status: string; mcJobId: string }>> {
+    return apiService.post<{ video_id: string; processing_status: string; mcJobId: string }>(
+      `${this.basePath}/${videoId}/retry-transcoding`,
+      {},
+    )
+  }
 }
 
 export const videosService = new VideosService()

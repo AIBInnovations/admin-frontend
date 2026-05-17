@@ -1,23 +1,19 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Pencil, Film, Image, Tag, MoreHorizontal, ListTree, Trash2, Eye, EyeOff } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Pencil, Film, Image, Tag, MoreHorizontal, ListTree, Eye, EyeOff } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { PublishBadge, SaleBadge } from '../../ui/StatusBadge'
 import { PackageFormDialog } from '../../forms/PackageFormDialog'
-import { DeletePackageDialog } from '../../dialogs/DeletePackageDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { packagesService } from '@/services/packages.service'
-import { getParentUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { toast } from 'sonner'
 import type { PackageDetail } from '@/services/packages.service'
 
 interface PackageFocusProps {
   pkg: PackageDetail
-  focus?: ExplorerFocus
   onRefresh?: () => void
 }
 
@@ -31,22 +27,11 @@ function getSubjectId(pkg: PackageDetail): string {
   return pkg.subject_id ?? ''
 }
 
-export function PackageFocus({ pkg, focus, onRefresh }: PackageFocusProps) {
-  const navigate = useNavigate()
+export function PackageFocus({ pkg, onRefresh }: PackageFocusProps) {
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const comingSoon = (action: string) => () => toast.info(`${action} — coming soon`)
   const isPublished = pkg.publish_status === 'published'
-
-  const handleDeleteSuccess = () => {
-    setDeleteOpen(false)
-    if (focus) {
-      const parentUrl = getParentUrl(focus)
-      if (parentUrl) navigate(parentUrl, { replace: true })
-    }
-    onRefresh?.()
-  }
 
   const toggleMutation = useExplorerMutation({
     name: 'Toggle active',
@@ -143,13 +128,6 @@ export function PackageFocus({ pkg, focus, onRefresh }: PackageFocusProps) {
                 <DropdownMenuItem onClick={comingSoon('Pricing tiers')}>
                   <Tag className="w-3.5 h-3.5 mr-2" /> Pricing tiers
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete package
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -162,14 +140,6 @@ export function PackageFocus({ pkg, focus, onRefresh }: PackageFocusProps) {
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         subjectId={getSubjectId(pkg)}
         pkg={pkg}
-      />
-
-      <DeletePackageDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={handleDeleteSuccess}
-        packageId={pkg._id}
-        packageName={pkg.name}
       />
 
       <PublishDialog

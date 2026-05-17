@@ -58,7 +58,7 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
     const reordered = arrayMove(displaySeries, oldIndex, newIndex)
     setLocalSeries(reordered)
     try {
-      await seriesService.update(active.id as string, { display_order: newIndex + 1 })
+      await seriesService.reorder(reordered.map((s) => s._id))
       toast.success('Order updated')
       onRefresh?.()
     } catch {

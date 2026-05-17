@@ -119,6 +119,20 @@ export function VideosPage() {
     setPublishModal({ entityId: video._id, action });
   }, []);
 
+  const handleRetryTranscoding = useCallback(async (video: Video) => {
+    try {
+      const response = await videosService.retryTranscoding(video._id)
+      if (response.success) {
+        toast.success('Transcoding retry started')
+        fetchVideos()
+      } else {
+        toast.error(response.message || 'Failed to retry transcoding')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to retry transcoding')
+    }
+  }, [fetchVideos])
+
   const handleArchiveClick = async (video: Video) => {
     setSelectedVideo(video)
     setArchiveModalOpen(true)
@@ -290,6 +304,7 @@ export function VideosPage() {
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
     onPublishAction: handlePublishAction,
+    onRetryTranscoding: handleRetryTranscoding,
   })
 
   const hasFilters = debouncedSearch || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'

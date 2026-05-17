@@ -298,9 +298,35 @@ export function PackageDetailPage() {
     }
   }
 
-  const handleDocumentSubmit = async (data: DocumentFormData, file?: File, onProgress?: (percent: number) => void) => {
-    if (!file) return
+  const handleDocumentSubmit = async (
+    data: DocumentFormData,
+    file?: File,
+    onProgress?: (percent: number) => void,
+    linkedBookId?: string,
+  ) => {
     try {
+      if (linkedBookId) {
+        const response = await documentsService.createLinked({
+          source_book_id: linkedBookId,
+          series_id: data.series_id,
+          subject_id: data.subject_id,
+          is_free: data.is_free,
+          publish_status: data.publish_status,
+        })
+        if (!response.success) {
+          const msg = response.message || 'Failed to link eBook as document'
+          toast.error(msg)
+          throw new Error(msg)
+        }
+        toast.success('eBook linked as document successfully')
+        fetchPackage()
+        return
+      }
+      if (!file) {
+        const msg = 'A document file is required to create a standalone document.'
+        toast.error(msg)
+        throw new Error(msg)
+      }
       const response = await documentsService.upload(data, file, onProgress)
       if (response.success) {
         toast.success('Document uploaded successfully')

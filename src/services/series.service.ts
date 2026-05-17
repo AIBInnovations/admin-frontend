@@ -75,6 +75,13 @@ class SeriesService extends BaseCrudService<Series, SeriesFormData, SeriesListPa
     }
     return response as unknown as ApiResponse<Series>
   }
+
+  /**
+   * Bulk reorder series — sends full ordered list, rewrites display_order as 1..N
+   */
+  async reorder(orderedIds: string[]): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/reorder`, { ordered_ids: orderedIds })
+  }
 }
 
 export const seriesService = new SeriesService()

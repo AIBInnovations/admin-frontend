@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
+import RichTextEditor from '@/components/common/RichTextEditor'
 import { useExplorerMutation } from '../hooks/useExplorerMutation'
 import { packagesService } from '@/services/packages.service'
 import { packageTypesService } from '@/services/packageTypes.service'
@@ -24,6 +25,40 @@ interface PackageFormDialogProps {
   onSuccess: () => void
   subjectId: string
   pkg?: Package | PackageDetail
+}
+
+const SHORT_DESC_MIN = 10
+const SHORT_DESC_MAX = 2000
+const RICH_DESC_MAX = 50_000
+
+/**
+ * Encode a rich-text HTML payload to base64, matching what the backend
+ * ingest expects. Replicates legacy PackageFormModal behaviour so the
+ * existing app can continue to render `rich_description` unchanged.
+ */
+function encodeRichDescription(html: string): string {
+  return btoa(unescape(encodeURIComponent(html)))
+}
+
+/** Derive plain short-description from HTML — used as fallback when the
+ *  admin leaves the short description too short. Matches legacy logic. */
+function htmlToPlainText(html: string): string {
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = html
+  return (tempDiv.textContent || tempDiv.innerText || '').trim()
+}
+
+/** Pull bullet-list items out of the HTML, one per line. Legacy auto-fills
+ *  the plain-text `features` field from these for older app versions. */
+function htmlBulletsToFeatures(html: string): string {
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = html
+  const lis = tempDiv.querySelectorAll('li')
+  if (lis.length === 0) return ''
+  return Array.from(lis)
+    .map((li) => (li.textContent || '').trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function PackageFormDialog({
@@ -41,6 +76,8 @@ export function PackageFormDialog({
   const [packageTypeId, setPackageTypeId] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [richDescription, setRichDescription] = useState('')
+  const [features, setFeatures] = useState('')
   const [price, setPrice] = useState('')
   const [originalPrice, setOriginalPrice] = useState('')
   const [durationDays, setDurationDays] = useState('')
@@ -68,6 +105,9 @@ export function PackageFormDialog({
       setPackageTypeId(typeId)
       setName(pkg.name)
       setDescription(pkg.description ?? '')
+      // Backend stores raw HTML — TipTap takes it as-is.
+      setRichDescription(pkg.rich_description ?? '')
+      setFeatures(pkg.features ?? '')
       setPrice(pkg.price?.toString() ?? '')
       setOriginalPrice(pkg.original_price?.toString() ?? '')
       setDurationDays(pkg.duration_days?.toString() ?? '')
@@ -77,6 +117,8 @@ export function PackageFormDialog({
       setPackageTypeId('')
       setName('')
       setDescription('')
+      setRichDescription('')
+      setFeatures('')
       setPrice('')
       setOriginalPrice('')
       setDurationDays('')
@@ -88,14 +130,33 @@ export function PackageFormDialog({
   const mutation = useExplorerMutation({
     name: isEdit ? 'Update package' : 'Create package',
     fn: () => {
+      // If the admin left the plain short-description too brief but filled
+      // rich text, derive the plain version from the rich HTML — matches
+      // legacy behaviour so older app versions still get a readable string.
+      let finalShortDesc = description.trim()
+      if (richDescription && finalShortDesc.length < SHORT_DESC_MIN) {
+        const plain = htmlToPlainText(richDescription)
+        if (plain.length >= SHORT_DESC_MIN) {
+          finalShortDesc = plain.slice(0, SHORT_DESC_MAX)
+        }
+      }
+
+      // Auto-fill features from bullet items if admin didn't provide any.
+      let finalFeatures = features.trim()
+      if (richDescription && !finalFeatures) {
+        finalFeatures = htmlBulletsToFeatures(richDescription)
+      }
+
       const data = {
         subject_id: subjectId,
         package_type_id: packageTypeId,
         name: name.trim(),
-        description: description.trim(),
+        description: finalShortDesc,
         price: Number(price),
         original_price: originalPrice ? Number(originalPrice) : null,
         duration_days: Number(durationDays),
+        features: finalFeatures || undefined,
+        rich_description: richDescription ? encodeRichDescription(richDescription) : undefined,
         is_active: isActive,
         display_order: displayOrder ? Number(displayOrder) : undefined,
       }
@@ -109,16 +170,24 @@ export function PackageFormDialog({
 
   const priceNum = price.trim() === '' ? NaN : Number(price)
   const durationNum = durationDays.trim() === '' ? NaN : Number(durationDays)
+  // Short description is satisfied by either an explicit ≥10-char entry,
+  // or a rich description from which a ≥10-char plain version can be derived.
+  const richPlainLength = richDescription ? htmlToPlainText(richDescription).length : 0
+  const shortDescOk =
+    description.trim().length >= SHORT_DESC_MIN ||
+    richPlainLength >= SHORT_DESC_MIN
   const valid =
     !!packageTypeId &&
-    name.trim().length > 0 &&
-    description.trim().length > 0 &&
+    name.trim().length >= 2 &&
+    shortDescOk &&
+    description.trim().length <= SHORT_DESC_MAX &&
+    richDescription.length <= RICH_DESC_MAX &&
     Number.isFinite(priceNum) && priceNum >= 0 &&
     Number.isFinite(durationNum) && durationNum > 0
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-160 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Package' : 'New Package'}</DialogTitle>
         </DialogHeader>
@@ -164,19 +233,52 @@ export function PackageFormDialog({
             />
           </div>
 
-          {/* Description */}
+          {/* Short description (legacy plain-text — backward compat) */}
           <div className="space-y-1.5">
             <Label htmlFor="p-desc">
-              Description <span className="text-destructive">*</span>
+              Short description <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="p-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="One or two sentences. Used as a fallback for older app versions."
+              rows={2}
+              className="resize-none"
+            />
+            <p className="text-xs text-muted-foreground">
+              Min {SHORT_DESC_MIN} chars. Auto-filled from the rich description below if left short.
+            </p>
+          </div>
+
+          {/* Rich description — TipTap */}
+          <div className="space-y-1.5">
+            <Label>Package description</Label>
+            <RichTextEditor
+              value={richDescription}
+              onChange={setRichDescription}
               placeholder="What's included in this package…"
+              disabled={mutation.loading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Formatting, headings, and bullet lists are preserved on device.
+            </p>
+          </div>
+
+          {/* Features (legacy plain-text, one per line) */}
+          <div className="space-y-1.5">
+            <Label htmlFor="p-features">Features (for older app versions)</Label>
+            <Textarea
+              id="p-features"
+              value={features}
+              onChange={(e) => setFeatures(e.target.value)}
+              placeholder="One feature per line."
               rows={3}
               className="resize-none"
             />
+            <p className="text-xs text-muted-foreground">
+              Auto-filled from bullet-list items in the rich description if left empty.
+            </p>
           </div>
 
           {/* Price row */}

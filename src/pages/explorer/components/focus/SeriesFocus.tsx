@@ -1,29 +1,23 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Pencil, MoreHorizontal, CalendarClock, Layers, FileText, Trash2, Eye, EyeOff } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Pencil, MoreHorizontal, CalendarClock, Layers, FileText, Eye, EyeOff } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { SeriesFormDialog } from '../../forms/SeriesFormDialog'
-import { DeleteSeriesDialog } from '../../dialogs/DeleteSeriesDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { seriesService } from '@/services/series.service'
-import { getParentUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { toast } from 'sonner'
 import type { PackageDetailSeries } from '@/services/packages.service'
 
 interface SeriesFocusProps {
   series: PackageDetailSeries
-  focus?: ExplorerFocus
   isTheory?: boolean
   onRefresh?: () => void
 }
 
-export function SeriesFocus({ series, focus, isTheory, onRefresh }: SeriesFocusProps) {
-  const navigate = useNavigate()
+export function SeriesFocus({ series, isTheory, onRefresh }: SeriesFocusProps) {
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const isPublished = series.publish_status === 'published'
 
@@ -33,15 +27,6 @@ export function SeriesFocus({ series, focus, isTheory, onRefresh }: SeriesFocusP
     onSuccess: () => onRefresh?.(),
     successMessage: series.is_active ? `"${series.name}" deactivated` : `"${series.name}" activated`,
   })
-
-  const handleDeleteSuccess = () => {
-    setDeleteOpen(false)
-    if (focus) {
-      const parentUrl = getParentUrl(focus)
-      if (parentUrl) navigate(parentUrl, { replace: true })
-    }
-    onRefresh?.()
-  }
 
   return (
     <>
@@ -121,13 +106,6 @@ export function SeriesFocus({ series, focus, isTheory, onRefresh }: SeriesFocusP
                 <DropdownMenuItem onClick={() => toast.info('Schedule document release — coming soon')}>
                   <CalendarClock className="w-3.5 h-3.5 mr-2" /> Schedule document release
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete series
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -140,14 +118,6 @@ export function SeriesFocus({ series, focus, isTheory, onRefresh }: SeriesFocusP
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         packageId={series.package_id}
         series={series}
-      />
-
-      <DeleteSeriesDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={handleDeleteSuccess}
-        seriesId={series._id}
-        seriesName={series.name}
       />
 
       <PublishDialog

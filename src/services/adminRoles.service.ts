@@ -61,9 +61,9 @@ class AdminRolesService {
    * Get single role by ID
    */
   async getById(roleId: string): Promise<ApiResponse<AdminRole>> {
-    const response = await apiService.get<{ admin_role: AdminRole }>(`${this.basePath}/${roleId}`)
+    const response = await apiService.get<{ role: AdminRole }>(`${this.basePath}/${roleId}`)
     if (response.success && response.data) {
-      return { ...response, data: this.parsePermissions(response.data.admin_role) }
+      return { ...response, data: this.parsePermissions(response.data.role) }
     }
     return response as ApiResponse<AdminRole>
   }
@@ -72,9 +72,9 @@ class AdminRolesService {
    * Create new role
    */
   async create(data: AdminRoleFormData): Promise<ApiResponse<AdminRole>> {
-    const response = await apiService.post<{ admin_role: AdminRole }>(this.basePath, data)
+    const response = await apiService.post<{ role: AdminRole }>(this.basePath, data)
     if (response.success && response.data) {
-      return { ...response, data: this.parsePermissions(response.data.admin_role) }
+      return { ...response, data: this.parsePermissions(response.data.role) }
     }
     return response as ApiResponse<AdminRole>
   }
@@ -83,9 +83,9 @@ class AdminRolesService {
    * Update role
    */
   async update(roleId: string, data: Partial<AdminRoleFormData>): Promise<ApiResponse<AdminRole>> {
-    const response = await apiService.put<{ admin_role: AdminRole }>(`${this.basePath}/${roleId}`, data)
+    const response = await apiService.put<{ role: AdminRole }>(`${this.basePath}/${roleId}`, data)
     if (response.success && response.data) {
-      return { ...response, data: this.parsePermissions(response.data.admin_role) }
+      return { ...response, data: this.parsePermissions(response.data.role) }
     }
     return response as ApiResponse<AdminRole>
   }

@@ -63,7 +63,7 @@ export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenPro
     setLocalVideos(reordered)
 
     try {
-      await videosService.update(active.id as string, { display_order: newIndex + 1 })
+      await videosService.reorder(reordered.map((v) => v._id))
       toast.success('Order updated')
       onRefresh?.()
     } catch {

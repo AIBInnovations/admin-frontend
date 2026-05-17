@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ChevronRight, MoreHorizontal, Pencil, Video, Clock, Copy, Trash2, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ChevronRight, MoreHorizontal, Pencil, Video, Clock, Copy, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { ActiveBadge, PublishBadge } from '../../ui/StatusBadge'
 import { ModuleFormDialog } from '../../forms/ModuleFormDialog'
-import { DeleteModuleDialog } from '../../dialogs/DeleteModuleDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
@@ -33,7 +32,6 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
   const navigate = useNavigate()
   const drillUrl = buildChildUrl(parentFocus, module._id)
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
@@ -117,13 +115,6 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
               <DropdownMenuItem onClick={() => setRawJsonOpen(true)}>
                 <Braces className="w-3.5 h-3.5 mr-2" /> View raw JSON
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -144,13 +135,6 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         seriesId={module.series_id}
         module={module}
-      />
-      <DeleteModuleDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={() => { setDeleteOpen(false); onRefresh?.() }}
-        moduleId={module._id}
-        moduleName={module.name}
       />
       <PublishDialog
         open={publishOpen}

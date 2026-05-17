@@ -37,7 +37,7 @@ export function ExplorerFocusCard({
   }
 
   if (focus.level === 'package' && packageDetail) {
-    return <PackageFocus pkg={packageDetail} focus={focus} onRefresh={onRefresh} />
+    return <PackageFocus pkg={packageDetail} onRefresh={onRefresh} />
   }
 
   if (focus.level === 'series' && currentSeries) {
@@ -48,7 +48,6 @@ export function ExplorerFocusCard({
     return (
       <SeriesFocus
         series={currentSeries}
-        focus={focus}
         isTheory={isTheory}
         onRefresh={onRefresh}
       />
@@ -56,7 +55,7 @@ export function ExplorerFocusCard({
   }
 
   if (focus.level === 'module' && currentModule) {
-    return <ModuleFocus module={currentModule} focus={focus} onRefresh={onRefresh} />
+    return <ModuleFocus module={currentModule} onRefresh={onRefresh} />
   }
 
   return null

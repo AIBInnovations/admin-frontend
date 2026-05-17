@@ -6,7 +6,7 @@ import { FreeBadge, FormatBadge, PublishBadge } from '../../ui/StatusBadge'
 import { DocumentFormDialog } from '../../forms/DocumentFormDialog'
 import { MoveDocumentDialog } from '../../dialogs/MoveDocumentDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
-import { ConfirmDialog } from '../../dialogs/ConfirmDialog'
+import { ArchiveWithImpactDialog } from '../../dialogs/ArchiveWithImpactDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { copyText } from '../../copyShareLink'
@@ -160,14 +160,14 @@ export function DocumentRow({ document: doc, onRefresh, selected, onSelect, drag
         documentTitle={doc.title}
       />
 
-      <ConfirmDialog
+      <ArchiveWithImpactDialog
         open={archiveOpen}
         onClose={() => setArchiveOpen(false)}
         onConfirm={archiveMutation.execute}
+        fetchImpact={() => documentsService.getDeleteImpact(doc._id)}
+        entityName={doc.title}
+        entityType="document"
         loading={archiveMutation.loading}
-        title="Archive document"
-        description={`"${doc.title}" will be hidden from students. You can restore it later.`}
-        confirmLabel="Archive"
       />
 
       {doc.publish_status !== undefined && (

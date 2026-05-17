@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ChevronRight, MoreHorizontal, Pencil, ListTree, Copy, Trash2, Braces } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ChevronRight, MoreHorizontal, Pencil, ListTree, Copy, Braces } from 'lucide-react'
 import { PublishBadge, ActiveBadge, SaleBadge } from '../../ui/StatusBadge'
 import { PackageFormDialog } from '../../forms/PackageFormDialog'
-import { DeletePackageDialog } from '../../dialogs/DeletePackageDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { copyText } from '../../copyShareLink'
@@ -33,7 +32,6 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
   const navigate = useNavigate()
   const drillUrl = buildChildUrl(parentFocus, pkg._id)
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
   return (
@@ -95,13 +93,6 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
               <DropdownMenuItem onClick={() => setRawJsonOpen(true)}>
                 <Braces className="w-3.5 h-3.5 mr-2" /> View raw JSON
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -122,13 +113,6 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         subjectId={getSubjectId(pkg)}
         pkg={pkg}
-      />
-      <DeletePackageDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={() => { setDeleteOpen(false); onRefresh?.() }}
-        packageId={pkg._id}
-        packageName={pkg.name}
       />
       <RawJsonDrawer
         open={rawJsonOpen}

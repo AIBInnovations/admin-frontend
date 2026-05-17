@@ -6,7 +6,7 @@ import { MoreHorizontal, Pencil, Copy, Clock, Archive, Eye, EyeOff, GripVertical
 import { ProcessingBadge, PublishBadge, FreeBadge, ScheduledBadge } from '../../ui/StatusBadge'
 import { VideoFormDialog } from '../../forms/VideoFormDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
-import { ConfirmDialog } from '../../dialogs/ConfirmDialog'
+import { ArchiveWithImpactDialog } from '../../dialogs/ArchiveWithImpactDialog'
 import { ProcessingDetailsPopover } from '../popovers/ProcessingDetailsPopover'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
@@ -163,14 +163,14 @@ export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps
         video={video}
       />
 
-      <ConfirmDialog
+      <ArchiveWithImpactDialog
         open={archiveOpen}
         onClose={() => setArchiveOpen(false)}
         onConfirm={archiveMutation.execute}
+        fetchImpact={() => videosService.getDeleteImpact(video._id)}
+        entityName={video.title}
+        entityType="video"
         loading={archiveMutation.loading}
-        title="Archive video"
-        description={`"${video.title}" will be hidden from students. You can restore it later.`}
-        confirmLabel="Archive"
       />
 
       <PublishDialog

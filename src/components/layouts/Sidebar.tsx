@@ -111,6 +111,7 @@ const navigation: NavItem[] = [
       { name: 'Admin Users', href: '/settings/admin-users' },
       { name: 'Admin Roles', href: '/settings/admin-roles' },
       { name: 'App Settings', href: '/settings/app' },
+      { name: 'Web Store Redirect', href: '/settings/web-store-redirect' },
     ],
   },
 ]

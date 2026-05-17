@@ -241,6 +241,13 @@ class DocumentsService {
   async delete(documentId: string): Promise<ApiResponse<void>> {
     return apiService.delete<void>(`${this.basePath}/${documentId}`)
   }
+
+  /**
+   * Bulk reorder documents — sends full ordered list, rewrites display_order as 1..N
+   */
+  async reorder(orderedIds: string[]): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/reorder`, { ordered_ids: orderedIds })
+  }
 }
 
 export const documentsService = new DocumentsService()

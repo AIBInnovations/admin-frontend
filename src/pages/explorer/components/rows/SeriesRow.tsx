@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ChevronRight, MoreHorizontal, Pencil, Layers, FileText, Copy, Trash2, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ChevronRight, MoreHorizontal, Pencil, Layers, FileText, Copy, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { ActiveBadge, PublishBadge } from '../../ui/StatusBadge'
 import { SeriesFormDialog } from '../../forms/SeriesFormDialog'
-import { DeleteSeriesDialog } from '../../dialogs/DeleteSeriesDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
@@ -28,7 +27,6 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
   const navigate = useNavigate()
   const drillUrl = buildChildUrl(parentFocus, series._id)
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
@@ -114,13 +112,6 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
               <DropdownMenuItem onClick={() => setRawJsonOpen(true)}>
                 <Braces className="w-3.5 h-3.5 mr-2" /> View raw JSON
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -141,13 +132,6 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
         onSuccess={() => { setEditOpen(false); onRefresh?.() }}
         packageId={series.package_id}
         series={series}
-      />
-      <DeleteSeriesDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onSuccess={() => { setDeleteOpen(false); onRefresh?.() }}
-        seriesId={series._id}
-        seriesName={series.name}
       />
       <PublishDialog
         open={publishOpen}

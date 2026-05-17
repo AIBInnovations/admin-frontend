@@ -33,6 +33,7 @@ import { NotificationsPage } from '@/pages/notifications/NotificationsPage'
 import { AdminUsersPage } from '@/pages/settings/AdminUsersPage'
 import { AdminRolesPage } from '@/pages/settings/AdminRolesPage'
 import { AppSettingsPage } from '@/pages/settings/AppSettingsPage'
+import { WebStoreRedirectRulesPage } from '@/pages/settings/WebStoreRedirectRulesPage'
 import { VideoTagsPage } from '@/pages/content/VideoTagsPage'
 import { BooksPage } from '@/pages/content/BooksPage'
 import { BannersPage } from '@/pages/content/BannersPage'
@@ -128,6 +129,7 @@ function App() {
               <Route path="/settings/admin-users" element={<AdminUsersPage />} />
               <Route path="/settings/admin-roles" element={<AdminRolesPage />} />
               <Route path="/settings/app" element={<AppSettingsPage />} />
+              <Route path="/settings/web-store-redirect" element={<WebStoreRedirectRulesPage />} />
             </Route>
           </Route>
         </Routes>

@@ -51,6 +51,13 @@ class ModulesService extends BaseCrudService<Module, ModuleFormData, ModulesList
     }
     return response as ApiResponse<Module>
   }
+
+  /**
+   * Bulk reorder modules — sends full ordered list, rewrites display_order as 1..N
+   */
+  async reorder(orderedIds: string[]): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`${this.basePath}/reorder`, { ordered_ids: orderedIds })
+  }
 }
 
 export const modulesService = new ModulesService()
