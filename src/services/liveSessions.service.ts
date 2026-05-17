@@ -261,6 +261,65 @@ class LiveSessionsService {
   ): Promise<ApiResponse<{ package_id: string; package_name: string; series_count: number; module_count: number; video_count: number; purchases_migrated: number }>> {
     return apiService.post(`${this.basePath}/${sessionId}/convert-to-package`, data)
   }
+
+  // ---------------------------------------------------------------------------
+  // Cohost links
+  // ---------------------------------------------------------------------------
+
+  async listCohostLinks(sessionId: string): Promise<ApiResponse<{ links: CohostLink[] }>> {
+    return apiService.get<{ links: CohostLink[] }>(`${this.basePath}/${sessionId}/cohost-links`)
+  }
+
+  async createCohostLink(
+    sessionId: string,
+    data: CreateCohostLinkPayload,
+  ): Promise<ApiResponse<{ link: CohostLink }>> {
+    return apiService.post<{ link: CohostLink }>(`${this.basePath}/${sessionId}/cohost-links`, data)
+  }
+
+  async createCohostLinksBulk(
+    sessionId: string,
+    data: { count: number; label_prefix: string },
+  ): Promise<ApiResponse<{ links: CohostLink[] }>> {
+    return apiService.post<{ links: CohostLink[] }>(`${this.basePath}/${sessionId}/cohost-links/bulk`, data)
+  }
+
+  async revokeCohostLink(
+    sessionId: string,
+    token: string,
+  ): Promise<ApiResponse<{ link: CohostLink }>> {
+    return apiService.delete<{ link: CohostLink }>(`${this.basePath}/${sessionId}/cohost-links/${token}`)
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Cohost link types
+// ----------------------------------------------------------------------------
+export type CohostLinkType = 'licensed' | 'guest'
+export type CohostLinkStatus = 'active' | 'claimed' | 'expired' | 'revoked'
+
+export interface CohostLink {
+  token: string
+  type: CohostLinkType
+  label: string
+  zoom_email: string | null
+  registrant_id: string | null
+  created_by: string
+  created_at: string
+  expires_at: string | null
+  claimed_at: string | null
+  claimed_ip: string | null
+  revoked_at: string | null
+  revoked_by: string | null
+  status: CohostLinkStatus
+  share_url: string
+}
+
+export interface CreateCohostLinkPayload {
+  type: CohostLinkType
+  label: string
+  zoom_email?: string
+  expires_at?: string
 }
 
 export const liveSessionsService = new LiveSessionsService()

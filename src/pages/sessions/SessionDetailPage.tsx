@@ -29,6 +29,7 @@ import { recordingsService, Recording } from '@/services/recordings.service'
 import { packageTypesService, PackageType } from '@/services/packageTypes.service'
 import { SessionFormModal } from '@/components/sessions/SessionFormModal'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
+import { CohostLinksPanel } from '@/components/sessions/CohostLinksPanel'
 
 export function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -853,6 +854,15 @@ export function SessionDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cohost Links */}
+      {session.platform === 'zoom' ? (
+        <CohostLinksPanel
+          sessionId={session._id}
+          sessionStatus={session.status}
+          hasZoomMeeting={!!session.zoom_meeting_id}
+        />
+      ) : null}
 
       {/* Edit Modal */}
       <SessionFormModal
