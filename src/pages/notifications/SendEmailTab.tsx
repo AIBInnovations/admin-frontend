@@ -74,6 +74,12 @@ export function SendEmailTab() {
   const [searchingUsers, setSearchingUsers] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
 
+  // Per-send exclude (admin "exclude once")
+  const [excludeSearch, setExcludeSearch] = useState('')
+  const [excludeResults, setExcludeResults] = useState<User[]>([])
+  const [searchingExcludes, setSearchingExcludes] = useState(false)
+  const [excludedUsers, setExcludedUsers] = useState<User[]>([])
+
   // Session selection
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [loadingSessions, setLoadingSessions] = useState(false)
@@ -197,6 +203,44 @@ export function SendEmailTab() {
     setSelectedUsers((prev) => prev.filter((u) => u._id !== userId))
   }
 
+  // ── Per-send exclude search ──────────────────────────────────────────────
+  const searchExcludes = useCallback(
+    async (query: string) => {
+      if (query.length < 2) {
+        setExcludeResults([])
+        return
+      }
+      setSearchingExcludes(true)
+      try {
+        const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
+        if (res.success && res.data) {
+          const excludedIds = new Set(excludedUsers.map((u) => u._id))
+          setExcludeResults((res.data.entities || []).filter((u) => !excludedIds.has(u._id)))
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setSearchingExcludes(false)
+      }
+    },
+    [excludedUsers]
+  )
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchExcludes(excludeSearch), 300)
+    return () => clearTimeout(timer)
+  }, [excludeSearch, searchExcludes])
+
+  const addExcludedUser = (user: User) => {
+    setExcludedUsers((prev) => [...prev, user])
+    setExcludeResults((prev) => prev.filter((u) => u._id !== user._id))
+    setExcludeSearch('')
+  }
+
+  const removeExcludedUser = (userId: string) => {
+    setExcludedUsers((prev) => prev.filter((u) => u._id !== userId))
+  }
+
   // ── Attachments ──────────────────────────────────────────────────────────
   const handleAttachmentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -284,13 +328,17 @@ export function SendEmailTab() {
   }
 
   // ── Preview HTML ─────────────────────────────────────────────────────────
+  // Mirrors backend `buildHtml` + the auto-injected unsubscribe footer so admin
+  // sees exactly what the recipient will see.
   const buildPreviewHtml = () => {
     const headerHtml = header.trim()
       ? `<div style="background-color:#1e40af;color:#ffffff;padding:24px;text-align:center;">${header}</div>`
       : ''
-    const footerHtml = footer.trim()
-      ? `<div style="background-color:#f9fafb;padding:16px 24px;text-align:center;color:#6b7280;font-size:13px;border-top:1px solid #e5e7eb;">${footer}</div>`
-      : ''
+    const unsubHtml = 'You are receiving this email because you have an account with PGME. <a href="#" style="color:#1e40af;text-decoration:underline;">Unsubscribe</a> at any time.'
+    const combinedFooter = footer.trim()
+      ? `${footer}<div style="margin-top:12px;">${unsubHtml}</div>`
+      : unsubHtml
+    const footerHtml = `<div style="background-color:#f9fafb;padding:16px 24px;text-align:center;color:#6b7280;font-size:13px;border-top:1px solid #e5e7eb;">${combinedFooter}</div>`
     return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
   <div style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -329,6 +377,7 @@ export function SendEmailTab() {
         ...(header.trim() && { header: header.trim() }),
         ...(footer.trim() && { footer: footer.trim() }),
         ...(uploadedAttachments.length > 0 && { attachments: uploadedAttachments }),
+        ...(excludedUsers.length > 0 && { excluded_user_ids: excludedUsers.map((u) => u._id) }),
       }
 
       // ── Scheduled path ────────────────────────────────────────────────
@@ -361,6 +410,7 @@ export function SendEmailTab() {
           email_header: payload.header,
           email_footer: payload.footer,
           email_attachments: payload.attachments,
+          ...(excludedUsers.length > 0 && { email_excluded_user_ids: excludedUsers.map((u) => u._id) }),
         })
         if (schedRes.success) {
           toast.success(`Email scheduled for ${new Date(scheduledAt).toLocaleString()}`)
@@ -460,6 +510,9 @@ export function SendEmailTab() {
     setSelectedUsers([])
     setUserSearch('')
     setUserResults([])
+    setExcludedUsers([])
+    setExcludeSearch('')
+    setExcludeResults([])
     setSessionId('')
     setScheduleEnabled(false)
     setScheduledAt('')
@@ -719,6 +772,77 @@ export function SendEmailTab() {
               )}
             </div>
           )}
+
+          {/* ── Per-send Exclude (always visible) ── */}
+          <div className="space-y-3 border-t pt-6">
+            <div>
+              <Label className="flex items-center gap-2">
+                <X className="h-4 w-4 text-orange-600" />
+                Exclude these users from this send
+                <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Skip specific users for this send only — their persistent email preference is not changed.
+              </p>
+            </div>
+            {excludedUsers.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {excludedUsers.map((user) => (
+                  <Badge
+                    key={user._id}
+                    className="gap-1 py-1 pl-2 pr-1 bg-orange-500/10 text-orange-700 border-orange-200"
+                  >
+                    {user.name || user.phone_number}
+                    <button
+                      type="button"
+                      onClick={() => removeExcludedUser(user._id)}
+                      className="ml-1 rounded-full p-0.5 hover:bg-orange-200/50"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search users to exclude…"
+                value={excludeSearch}
+                onChange={(e) => setExcludeSearch(e.target.value)}
+                className="pl-9"
+              />
+              {searchingExcludes && (
+                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {excludeResults.length > 0 && (
+              <div className="rounded-lg border">
+                {excludeResults.map((user) => (
+                  <button
+                    key={user._id}
+                    type="button"
+                    onClick={() => addExcludedUser(user)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 text-xs font-medium text-orange-700">
+                      {(user.name || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{user.name || 'Unnamed'}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {user.phone_number}
+                        {user.email ? ` · ${user.email}` : ''}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {excludeSearch.length >= 2 && !searchingExcludes && excludeResults.length === 0 && (
+              <p className="text-sm text-muted-foreground">No users found</p>
+            )}
+          </div>
 
           {/* ── Email template ── */}
           <div className="space-y-5 border-t pt-6">

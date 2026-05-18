@@ -71,6 +71,10 @@ export interface User {
   subject_selections: SubjectSelection[]
   total_purchases_count?: number
   active_purchases_count?: number
+  email_excluded?: boolean
+  email_excluded_at?: string | null
+  email_excluded_reason?: 'user_unsubscribed' | 'admin_excluded' | null
+  email_excluded_by?: { _id: string; name?: string; email?: string } | string | null
   createdAt: string
   updatedAt: string
 }
@@ -135,6 +139,7 @@ export interface UsersListParams extends BaseListParams {
   search?: string
   is_active?: boolean | null
   has_active_purchase?: boolean | null
+  email_excluded?: boolean | null
 }
 
 export interface SessionPurchase {
@@ -378,6 +383,34 @@ class UsersService {
     reason?: string
   ): Promise<ApiResponse<{ message: string }>> {
     return apiService.put(`${this.basePath}/${userId}/session-purchases/${sessionPurchaseId}/revoke`, { reason })
+  }
+
+  /**
+   * Exclude user from bulk/marketing emails (admin action).
+   */
+  async excludeFromEmails(
+    userId: string
+  ): Promise<ApiResponse<{ user_id: string; email_excluded: boolean; message: string }>> {
+    return apiService.put(`${this.basePath}/${userId}/email-exclude`)
+  }
+
+  /**
+   * Re-include user in bulk/marketing emails.
+   */
+  async includeInEmails(
+    userId: string
+  ): Promise<ApiResponse<{ user_id: string; email_excluded: boolean; message: string }>> {
+    return apiService.put(`${this.basePath}/${userId}/email-include`)
+  }
+
+  /**
+   * List users currently excluded from emails.
+   */
+  async getExcludedUsers(
+    params: { page?: number; limit?: number; reason?: 'user_unsubscribed' | 'admin_excluded' } = {}
+  ): Promise<ApiResponse<ListResponse<User>>> {
+    const query = this.buildQuery(params as Record<string, unknown>)
+    return apiService.get<ListResponse<User>>(`${this.basePath}/email-excluded${query}`)
   }
 }
 

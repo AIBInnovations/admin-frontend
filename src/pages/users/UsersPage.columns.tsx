@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { User } from '@/services/users.service'
-import { MoreVertical, Eye, ShieldBan, ShieldCheck, UserCircle } from 'lucide-react'
+import { MoreVertical, Eye, ShieldBan, ShieldCheck, UserCircle, MailX } from 'lucide-react'
 
 interface UsersColumnsProps {
   onNavigate: (user: User) => void
@@ -48,14 +48,29 @@ export function useUsersColumns({
     {
       id: 'status',
       header: 'Status',
-      width: 'w-24',
+      width: 'w-36',
       cell: (user) => (
-        <Badge className={`text-[10px] ${user.is_active
-          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-          : 'bg-red-500/10 text-red-600 border-red-200'
-        }`}>
-          {user.is_active ? 'Active' : 'Blocked'}
-        </Badge>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge className={`text-[10px] ${user.is_active
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+            : 'bg-red-500/10 text-red-600 border-red-200'
+          }`}>
+            {user.is_active ? 'Active' : 'Blocked'}
+          </Badge>
+          {user.email_excluded && (
+            <Badge
+              className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200"
+              title={
+                user.email_excluded_reason === 'user_unsubscribed'
+                  ? 'Self-unsubscribed'
+                  : 'Excluded by admin'
+              }
+            >
+              <MailX className="mr-0.5 h-2.5 w-2.5" />
+              No Email
+            </Badge>
+          )}
+        </div>
       ),
     },
     {

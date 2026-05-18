@@ -65,6 +65,7 @@ const navigation: NavItem[] = [
     children: [
       { name: 'All Users', href: '/users' },
       { name: 'Grant Access', href: '/users/grant-access' },
+      { name: 'Email Excluded', href: '/users/email-excluded' },
     ],
   },
   {

@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import {
   UserCircle, ShieldBan, ShieldCheck, Loader2,
-  Phone, Mail, MapPin, Calendar, GraduationCap, Globe, Smartphone,
+  Phone, Mail, MailX, MapPin, Calendar, GraduationCap, Globe, Smartphone,
   Monitor, Tablet, CreditCard, Package, Settings, BookOpen,
   Video, ShoppingBag, Truck, Edit, Gift, Ban,
 } from 'lucide-react'
@@ -59,6 +59,7 @@ export function UserDetailPage() {
   const [revokeSessionTarget, setRevokeSessionTarget] = useState<SessionPurchase | null>(null)
   const [revokeSessionReason, setRevokeSessionReason] = useState('')
   const [revokingSession, setRevokingSession] = useState(false)
+  const [togglingEmailExclude, setTogglingEmailExclude] = useState(false)
 
   const fetchUser = useCallback(async () => {
     if (!userId) return
@@ -206,6 +207,26 @@ export function UserDetailPage() {
     throw new Error('Grant failed')
   }
 
+  const handleEmailExcludeToggle = async () => {
+    if (!user) return
+    try {
+      setTogglingEmailExclude(true)
+      const response = user.email_excluded
+        ? await usersService.includeInEmails(user._id)
+        : await usersService.excludeFromEmails(user._id)
+      if (response.success) {
+        toast.success(user.email_excluded ? 'User re-included in emails' : 'User excluded from emails')
+        fetchUser()
+      } else {
+        toast.error(response.message || 'Failed to update email exclusion')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update email exclusion')
+    } finally {
+      setTogglingEmailExclude(false)
+    }
+  }
+
   const handleRevokeSession = async () => {
     if (!user || !revokeSessionTarget) return
     try {
@@ -338,6 +359,22 @@ export function UserDetailPage() {
               Edit
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEmailExcludeToggle}
+              disabled={togglingEmailExclude}
+              title={user.email_excluded ? 'Re-include in marketing emails' : 'Exclude from marketing emails'}
+            >
+              {togglingEmailExclude ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : user.email_excluded ? (
+                <Mail className="mr-1.5 h-4 w-4" />
+              ) : (
+                <MailX className="mr-1.5 h-4 w-4" />
+              )}
+              {user.email_excluded ? 'Re-include Emails' : 'Exclude Emails'}
+            </Button>
+            <Button
               variant={user.is_active ? 'destructive' : 'default'}
               size="sm"
               onClick={handleBlockToggle}
@@ -375,7 +412,7 @@ export function UserDetailPage() {
               <div className="min-w-0 flex-1 space-y-3">
                 <div>
                   <p className="text-lg font-medium">{user.name || '—'}</p>
-                  <div className="mt-1 flex items-center gap-2">
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
                     <Badge className={`text-[10px] ${user.is_active
                       ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
                       : 'bg-red-500/10 text-red-600 border-red-200'
@@ -385,6 +422,22 @@ export function UserDetailPage() {
                     <Badge variant={user.onboarding_completed ? 'secondary' : 'outline'} className="text-[10px]">
                       {user.onboarding_completed ? 'Done' : 'Pending'}
                     </Badge>
+                    {user.email_excluded && (
+                      <Badge
+                        className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200"
+                        title={
+                          user.email_excluded_reason === 'user_unsubscribed'
+                            ? `Self-unsubscribed${user.email_excluded_at ? ' on ' + formatDate(user.email_excluded_at) : ''}`
+                            : `Excluded by admin${user.email_excluded_at ? ' on ' + formatDate(user.email_excluded_at) : ''}`
+                        }
+                      >
+                        <MailX className="mr-1 h-2.5 w-2.5" />
+                        Email Excluded
+                        {user.email_excluded_reason === 'user_unsubscribed' && (
+                          <span className="ml-1 opacity-75">(self)</span>
+                        )}
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2 text-sm">

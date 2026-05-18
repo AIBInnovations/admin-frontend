@@ -22,6 +22,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true)
   const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [emailExcludedFilter, setEmailExcludedFilter] = useState(searchParams.get('email_excluded') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -39,6 +40,7 @@ export function UsersPage() {
         limit: 20,
         search: debouncedSearch || undefined,
         is_active: statusFilter === 'all' ? null : statusFilter === 'active',
+        email_excluded: emailExcludedFilter === 'all' ? null : emailExcludedFilter === 'excluded',
       })
       if (isStale(fetchId)) return
 
@@ -55,7 +57,7 @@ export function UsersPage() {
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, statusFilter, debouncedSearch, nextFetchId, isStale])
+  }, [currentPage, statusFilter, emailExcludedFilter, debouncedSearch, nextFetchId, isStale])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
@@ -64,11 +66,12 @@ export function UsersPage() {
     const params: Record<string, string> = {}
     if (search) params.search = search
     if (statusFilter !== 'all') params.status = statusFilter
+    if (emailExcludedFilter !== 'all') params.email_excluded = emailExcludedFilter
     if (currentPage > 1) params.page = currentPage.toString()
     setSearchParams(params)
-  }, [search, statusFilter, currentPage, setSearchParams])
+  }, [search, statusFilter, emailExcludedFilter, currentPage, setSearchParams])
 
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter])
+  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, emailExcludedFilter])
 
   // Handlers
   const handleBlockToggle = async (user: User) => {
@@ -125,6 +128,18 @@ export function UsersPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
+    {
+      key: 'email_excluded',
+      label: 'Email',
+      type: 'select',
+      options: [
+        { label: 'All', value: 'all' },
+        { label: 'Excluded from emails', value: 'excluded' },
+        { label: 'Receiving emails', value: 'included' },
+      ],
+      placeholder: 'Filter by email',
+      defaultValue: 'all',
+    },
   ]
 
   const columns = useUsersColumns({
@@ -151,9 +166,10 @@ export function UsersPage() {
         onChange={setSearch}
         placeholder="Search by name, email, phone, or student ID..."
         filters={filters}
-        activeFilters={{ status: statusFilter }}
+        activeFilters={{ status: statusFilter, email_excluded: emailExcludedFilter }}
         onFiltersChange={(f) => {
           if (f.status !== undefined) setStatusFilter(f.status)
+          if (f.email_excluded !== undefined) setEmailExcludedFilter(f.email_excluded)
         }}
       />
 

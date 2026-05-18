@@ -162,15 +162,15 @@ class NotificationsService {
     return apiService.post<AttachmentUploadResult>(`${this.basePath}/upload-attachment`, { mimeType, filename })
   }
 
-  async sendEmailToAll(data: { subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToAll(data: { subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-all`, data, { timeout: 120000 })
   }
 
-  async sendEmailToSubject(data: { subject_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToSubject(data: { subject_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-subject`, data, { timeout: 120000 })
   }
 
-  async sendEmailToUsers(data: { user_ids: string[]; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToUsers(data: { user_ids: string[]; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-users`, data, { timeout: 120000 })
   }
 
@@ -196,11 +196,11 @@ class NotificationsService {
     return apiService.post<SendResult>(`${this.basePath}/send-series`, data)
   }
 
-  async sendEmailToPackage(data: { package_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToPackage(data: { package_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-package`, data, { timeout: 120000 })
   }
 
-  async sendEmailToSeries(data: { series_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToSeries(data: { series_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-series`, data, { timeout: 120000 })
   }
 
@@ -218,7 +218,7 @@ class NotificationsService {
     return apiService.post<SendResult>(`${this.basePath}/send-session`, data)
   }
 
-  async sendEmailToSession(data: { session_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[] }): Promise<ApiResponse<SendEmailResult>> {
+  async sendEmailToSession(data: { session_id: string; subject: string; body: string; header?: string; footer?: string; attachments?: EmailAttachment[]; excluded_user_ids?: string[] }): Promise<ApiResponse<SendEmailResult>> {
     return apiService.post<SendEmailResult>(`${this.basePath}/send-email-session`, data, { timeout: 120000 })
   }
 
@@ -271,6 +271,7 @@ export interface ScheduleNotificationPayload {
   email_body?: string
   email_footer?: string
   email_attachments?: EmailAttachment[]
+  email_excluded_user_ids?: string[]
 
   // SMS
   sms_message?: string
