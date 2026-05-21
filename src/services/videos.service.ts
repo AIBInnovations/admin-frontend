@@ -80,6 +80,20 @@ export interface VideoStatus {
   duration_seconds: number
 }
 
+export interface VideoDownloadVersion {
+  index: number
+  replaced_at: string | null
+  file_size_mb: number
+  download_url: string
+}
+
+export interface VideoDownloadInfo {
+  current: { file_size_mb: number; download_url: string } | null
+  previous_versions: VideoDownloadVersion[]
+  replacement_in_progress: boolean
+  last_replace_error: string | null
+}
+
 class VideosService {
   private basePath = 'admin/videos'
 
@@ -358,6 +372,51 @@ class VideosService {
     } catch (error: any) {
       throw new Error(`Upload failed while saving record: ${error.message}`)
     }
+  }
+
+  /**
+   * Replace the file of an existing ready/failed video (zero-downtime).
+   * Reuses the same S3 upload logic, then calls the replace-file endpoint.
+   * The current video keeps playing until the new transcode completes, then it
+   * is swapped in. Same video _id is kept (views/reviews/progress preserved),
+   * and the replaced original is retained for download.
+   */
+  async replaceFile(
+    videoId: string,
+    videoFile: File,
+    opts: {
+      onProgress?: (percent: number) => void
+      onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void
+    } = {},
+  ): Promise<ApiResponse<{ video_id: string; replacement_in_progress: boolean }>> {
+    const { onProgress, onPhaseChange } = opts
+    const mimeType = videoFile.type || 'video/mp4'
+    let s3Key: string
+
+    if (videoFile.size <= this.MULTIPART_THRESHOLD) {
+      s3Key = await this.uploadSinglePart(videoFile, mimeType, onProgress, onPhaseChange)
+    } else {
+      s3Key = await this.uploadMultipart(videoFile, mimeType, onProgress, onPhaseChange)
+    }
+
+    onPhaseChange?.('confirming')
+    try {
+      return await apiService.post<{ video_id: string; replacement_in_progress: boolean }>(
+        `${this.basePath}/${videoId}/replace-file`,
+        { s3Key, fileSize: videoFile.size, mimeType },
+        { timeout: this.UPLOAD_API_TIMEOUT },
+      )
+    } catch (error: any) {
+      throw new Error(`Replace failed while saving record: ${error.message}`)
+    }
+  }
+
+  /**
+   * Get presigned download URLs for a video's current original file and any
+   * previously replaced originals.
+   */
+  async getDownloadInfo(videoId: string): Promise<ApiResponse<VideoDownloadInfo>> {
+    return apiService.get<VideoDownloadInfo>(`${this.basePath}/${videoId}/download-info`)
   }
 
   /**

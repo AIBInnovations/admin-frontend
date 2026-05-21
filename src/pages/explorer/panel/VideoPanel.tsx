@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Archive, RefreshCw, Video as VideoIcon } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Archive, RefreshCw, Video as VideoIcon, Download, Upload } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { PanelShell } from './PanelShell'
 import { PanelField, PanelSectionTitle, PanelSelect, PanelSwitchRow, PanelText, PanelTextarea } from './fields'
 import { EntityHeaderActions } from './EntityHeaderActions'
@@ -11,7 +15,7 @@ import { FileUploadField } from '../media/FileUploadField'
 import { usePanelForm } from '../hooks/usePanelForm'
 import { useExplorerMutation } from '../hooks/useExplorerMutation'
 import { useMediaUpload } from '../hooks/useMediaUpload'
-import { videosService } from '@/services/videos.service'
+import { videosService, type VideoDownloadInfo } from '@/services/videos.service'
 import { facultyService, type Faculty } from '@/services/faculty.service'
 import type { PackageDetailVideo } from '@/services/packages.service'
 
@@ -46,7 +50,12 @@ export function VideoPanel({ entity, onRefresh, onClose }: VideoPanelProps) {
   const [releaseMode, setReleaseMode] = useState<'immediate' | 'scheduled'>('immediate')
   const media = useMediaUpload()
   const fileUpload = useMediaUpload()
+  const replaceUpload = useMediaUpload()
   const isUpcoming = entity.processing_status === 'upcoming'
+
+  const [downloadInfo, setDownloadInfo] = useState<VideoDownloadInfo | null>(null)
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false)
+  const [replaceArmed, setReplaceArmed] = useState(false)
 
   useEffect(() => {
     if (faculty.length > 0) return
@@ -54,6 +63,17 @@ export function VideoPanel({ entity, onRefresh, onClose }: VideoPanelProps) {
       if (res.success && res.data) setFaculty(res.data.entities)
     })
   }, [faculty.length])
+
+  // Download URLs (current + previously replaced files) + replacement status.
+  const loadDownloadInfo = useCallback(() => {
+    if (entity.processing_status === 'upcoming') return
+    videosService
+      .getDownloadInfo(entity._id)
+      .then((res) => { if (res.success && res.data) setDownloadInfo(res.data) })
+      .catch(() => {})
+  }, [entity._id, entity.processing_status])
+
+  useEffect(() => { loadDownloadInfo() }, [loadDownloadInfo])
 
   const form = usePanelForm(
     () => ({
@@ -211,6 +231,82 @@ export function VideoPanel({ entity, onRefresh, onClose }: VideoPanelProps) {
         </div>
       )}
 
+      {!isUpcoming && (
+        <div className="space-y-3 pt-1">
+          <PanelSectionTitle>Video file</PanelSectionTitle>
+
+          {downloadInfo?.current && (
+            <a
+              href={downloadInfo.current.download_url}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download current{downloadInfo.current.file_size_mb ? ` (${downloadInfo.current.file_size_mb} MB)` : ''}
+            </a>
+          )}
+
+          {downloadInfo?.replacement_in_progress ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              A replacement is processing. The current video stays live until the new one is ready.
+            </p>
+          ) : (
+            <>
+              {downloadInfo?.last_replace_error && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  Last replacement failed: {downloadInfo.last_replace_error}
+                </p>
+              )}
+              {!replaceArmed ? (
+                <div>
+                  <button
+                    onClick={() => setReplaceConfirmOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Replace video
+                  </button>
+                </div>
+              ) : (
+                <FileUploadField
+                  label="New video file"
+                  accept="video/mp4,video/mpeg,video/quicktime,video/x-msvideo,video/webm"
+                  maxMb={10240}
+                  buttonLabel="Choose replacement file"
+                  hint="Current video keeps playing until the new one finishes processing."
+                  uploading={replaceUpload.uploading}
+                  uploadProgress={replaceUpload.progress}
+                  onPick={async (file) => {
+                    await replaceUpload.run('Uploading replacement', (onProgress) =>
+                      videosService.replaceFile(entity._id, file, { onProgress }),
+                    )
+                    setReplaceArmed(false)
+                    loadDownloadInfo()
+                    onRefresh?.()
+                  }}
+                />
+              )}
+            </>
+          )}
+
+          {downloadInfo && downloadInfo.previous_versions.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-medium text-slate-400">Previous (replaced) files</p>
+              {downloadInfo.previous_versions.map((pv) => (
+                <a
+                  key={pv.index}
+                  href={pv.download_url}
+                  className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
+                >
+                  <Download className="w-3 h-3" />
+                  Version {pv.index + 1}
+                  {pv.replaced_at ? ` · replaced ${new Date(pv.replaced_at).toLocaleDateString()}` : ''}
+                  {pv.file_size_mb ? ` · ${pv.file_size_mb} MB` : ''}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-3 pt-1">
         <PanelSectionTitle>Resources</PanelSectionTitle>
         <PanelField label="Subtitle URL" htmlFor="vp-sub">
@@ -236,6 +332,26 @@ export function VideoPanel({ entity, onRefresh, onClose }: VideoPanelProps) {
           }}
         />
       </div>
+
+      <AlertDialog open={replaceConfirmOpen} onOpenChange={setReplaceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The new file will be uploaded and re-transcoded. The current video keeps
+              playing until the new one is ready, then it is swapped in automatically.
+              Views, reviews and watch progress are preserved, and the replaced file
+              stays available to download.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="pb-6">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setReplaceConfirmOpen(false); setReplaceArmed(true) }}>
+              Yes, choose file
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ArchiveWithImpactDialog
         open={archiveOpen}

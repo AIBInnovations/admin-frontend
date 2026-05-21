@@ -173,7 +173,9 @@ export function RevenuePage() {
               {trends.trends.map((trend, i) => {
                 const label = typeof trend.period === 'string'
                   ? trend.period
-                  : `W${trend.period.week}, ${trend.period.year}`
+                  : trend.period
+                    ? `W${trend.period.week}, ${trend.period.year}`
+                    : 'Unknown'
                 const maxRevenue = Math.max(...trends.trends.map((t) => t.total_revenue), 1)
                 const barWidth = Math.max((trend.total_revenue / maxRevenue) * 100, 2)
                 return (

@@ -13,7 +13,7 @@ export interface RevenueByType {
 }
 
 export interface RevenueTrend {
-  period: string | { year: number; week: number }
+  period: string | { year: number; week: number } | null
   package_revenue: number
   session_revenue: number
   book_revenue: number

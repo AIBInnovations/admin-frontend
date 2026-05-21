@@ -52,7 +52,8 @@ export function PublishDialog({
     setCascade(isPublishing)
     setActivateAll(false)
     setPublishAncestors(true)
-    if (!isPublishing) return // unpublish: no info needed
+    // Fetch impact for BOTH directions — unpublish must warn about active
+    // purchases/enrollments + published children, like the legacy modal.
     setLoadingInfo(true)
     publishService
       .getPublishInfo(entityType, entityId)
@@ -65,6 +66,14 @@ export function PublishDialog({
   const hasProcessing = (info?.processing_videos ?? 0) > 0
   const unpublishedAncestors = info?.unpublished_ancestors ?? []
   const cs = info?.children_summary
+
+  const publishedChildren =
+    (cs?.published_series ?? 0) +
+    (cs?.published_modules ?? 0) +
+    (cs?.published_videos ?? 0) +
+    (cs?.published_documents ?? 0)
+  const activePurchases = info?.active_purchases ?? 0
+  const activeEnrollments = info?.active_enrollments ?? 0
 
   const draftChildren =
     (cs?.draft_series ?? 0) +
@@ -103,10 +112,10 @@ export function PublishDialog({
         </DialogHeader>
 
         <div className="space-y-3 py-1">
-          {isPublishing && loadingInfo && (
+          {loadingInfo && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Checking publish readiness…
+              {isPublishing ? 'Checking publish readiness…' : 'Checking impact…'}
             </div>
           )}
 
@@ -197,25 +206,45 @@ export function PublishDialog({
             </div>
           )}
 
-          {/* Unpublish: cascade option */}
+          {/* Unpublish: impact + cascade option */}
           {!isPublishing && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 This will hide the content from students immediately.
               </p>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="pd-un-cascade" className="text-sm font-medium">
-                    Unpublish all children too
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Cascade to series, modules, videos</p>
+
+              {/* Active purchases — revokes access */}
+              {activePurchases > 0 && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">
+                    {activePurchases} active purchase{activePurchases > 1 ? 's' : ''} — unpublishing revokes their access.
+                  </p>
                 </div>
-                <Switch
-                  id="pd-un-cascade"
-                  checked={cascade}
-                  onCheckedChange={setCascade}
-                />
-              </div>
+              )}
+
+              {/* Active enrollments */}
+              {activeEnrollments > 0 && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">
+                    {activeEnrollments} active enrollment{activeEnrollments > 1 ? 's' : ''} will be affected.
+                  </p>
+                </div>
+              )}
+
+              {/* Published children */}
+              {publishedChildren > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <p className="text-sm text-amber-800">
+                    {publishedChildren} published child item{publishedChildren > 1 ? 's' : ''} inside — these may become inaccessible.
+                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <Label htmlFor="pd-un-cascade" className="text-sm">Unpublish all children too</Label>
+                    <Switch id="pd-un-cascade" checked={cascade} onCheckedChange={setCascade} />
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
