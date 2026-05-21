@@ -13,9 +13,10 @@ import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
 import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
+import { BulkImpactDialog } from '../../dialogs/BulkImpactDialog'
+import { classifyPublish, classifyUnpublish } from '../../dialogs/bulkImpact'
 import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
-import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { seriesService } from '@/services/series.service'
 import { publishService } from '@/services/publish.service'
 import { toast } from 'sonner'
@@ -81,41 +82,17 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
     }
   }
 
-  const bulkPublishMutation = useExplorerMutation({
-    name: 'Bulk publish series',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.publish('series', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} published, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} series published`,
-  })
+  const [bulkOp, setBulkOp] = useState<'publish' | 'unpublish' | 'activate' | null>(null)
+  const selectedSeriesItems = displaySeries.filter((s) => selection.isSelected(s._id)).map((s) => ({ id: s._id, name: s.name }))
 
-  const bulkUnpublishMutation = useExplorerMutation({
-    name: 'Bulk unpublish series',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.unpublish('series', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} unpublished, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} series unpublished`,
-  })
-
-  const bulkActivateMutation = useExplorerMutation({
-    name: 'Bulk toggle active',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(ids.map((id) => seriesService.toggleActive(id, true)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} activated, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} series activated`,
-  })
+  const bulkCfg =
+    bulkOp === 'publish'
+      ? { title: 'Publish series', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('series', id), runOne: (id: string) => publishService.publish('series', id) }
+      : bulkOp === 'unpublish'
+      ? { title: 'Unpublish series', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('series', id), runOne: (id: string) => publishService.unpublish('series', id) }
+      : bulkOp === 'activate'
+      ? { title: 'Activate series', actionLabel: 'Activate', destructive: false, classify: undefined, runOne: (id: string) => seriesService.toggleActive(id, true) }
+      : null
 
   const filtered = displaySeries.filter((s) =>
     search.length < 1 ? true : s.name.toLowerCase().includes(search.toLowerCase()),
@@ -261,27 +238,25 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
         count={selection.count}
         onClear={selection.clear}
         actions={[
-          {
-            label: 'Publish',
-            icon: <Eye className="w-3.5 h-3.5" />,
-            onClick: bulkPublishMutation.execute,
-            loading: bulkPublishMutation.loading,
-          },
-          {
-            label: 'Unpublish',
-            icon: <EyeOff className="w-3.5 h-3.5" />,
-            onClick: bulkUnpublishMutation.execute,
-            loading: bulkUnpublishMutation.loading,
-            variant: 'amber',
-          },
-          {
-            label: 'Activate',
-            icon: <Power className="w-3.5 h-3.5" />,
-            onClick: bulkActivateMutation.execute,
-            loading: bulkActivateMutation.loading,
-          },
+          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setBulkOp('publish') },
+          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setBulkOp('unpublish'), variant: 'amber' },
+          { label: 'Activate', icon: <Power className="w-3.5 h-3.5" />, onClick: () => setBulkOp('activate') },
         ]}
       />
+
+      {bulkCfg && (
+        <BulkImpactDialog
+          open={!!bulkOp}
+          onClose={() => setBulkOp(null)}
+          onSuccess={() => { setBulkOp(null); selection.clear(); onRefresh?.() }}
+          items={selectedSeriesItems}
+          title={bulkCfg.title}
+          actionLabel={bulkCfg.actionLabel}
+          destructive={bulkCfg.destructive}
+          classify={bulkCfg.classify}
+          runOne={bulkCfg.runOne}
+        />
+      )}
     </>
   )
 }

@@ -13,9 +13,10 @@ import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
 import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
+import { BulkImpactDialog } from '../../dialogs/BulkImpactDialog'
+import { classifyPublish, classifyUnpublish, classifyArchive } from '../../dialogs/bulkImpact'
 import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
-import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { modulesService } from '@/services/modules.service'
 import { documentsService } from '@/services/documents.service'
 import { publishService } from '@/services/publish.service'
@@ -104,77 +105,29 @@ export function SeriesChildren({ series, loading, focus, onRefresh }: SeriesChil
   )
   const filteredDocIds = filteredDocs.map((d) => d._id)
 
-  const bulkPublishModulesMutation = useExplorerMutation({
-    name: 'Bulk publish modules',
-    fn: async () => {
-      const ids = [...moduleSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.publish('module', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} published, ${failed} failed`)
-    },
-    onSuccess: () => { moduleSelection.clear(); onRefresh?.() },
-    successMessage: `${moduleSelection.count} module${moduleSelection.count !== 1 ? 's' : ''} published`,
-  })
+  const [moduleBulkOp, setModuleBulkOp] = useState<'publish' | 'unpublish' | 'activate' | null>(null)
+  const [docBulkOp, setDocBulkOp] = useState<'publish' | 'unpublish' | 'archive' | null>(null)
 
-  const bulkUnpublishModulesMutation = useExplorerMutation({
-    name: 'Bulk unpublish modules',
-    fn: async () => {
-      const ids = [...moduleSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.unpublish('module', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} unpublished, ${failed} failed`)
-    },
-    onSuccess: () => { moduleSelection.clear(); onRefresh?.() },
-    successMessage: `${moduleSelection.count} module${moduleSelection.count !== 1 ? 's' : ''} unpublished`,
-  })
+  const selectedModuleItems = filteredModules.filter((m) => moduleSelection.isSelected(m._id)).map((m) => ({ id: m._id, name: m.name }))
+  const selectedDocItems = filteredDocs.filter((d) => docSelection.isSelected(d._id)).map((d) => ({ id: d._id, name: d.title }))
 
-  const bulkActivateModulesMutation = useExplorerMutation({
-    name: 'Bulk activate modules',
-    fn: async () => {
-      const ids = [...moduleSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => modulesService.toggleActive(id, true)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} activated, ${failed} failed`)
-    },
-    onSuccess: () => { moduleSelection.clear(); onRefresh?.() },
-    successMessage: `${moduleSelection.count} module${moduleSelection.count !== 1 ? 's' : ''} activated`,
-  })
+  const moduleCfg =
+    moduleBulkOp === 'publish'
+      ? { title: 'Publish modules', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('module', id), runOne: (id: string) => publishService.publish('module', id) }
+      : moduleBulkOp === 'unpublish'
+      ? { title: 'Unpublish modules', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('module', id), runOne: (id: string) => publishService.unpublish('module', id) }
+      : moduleBulkOp === 'activate'
+      ? { title: 'Activate modules', actionLabel: 'Activate', destructive: false, classify: undefined, runOne: (id: string) => modulesService.toggleActive(id, true) }
+      : null
 
-  const bulkPublishDocsMutation = useExplorerMutation({
-    name: 'Bulk publish documents',
-    fn: async () => {
-      const ids = [...docSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.publish('document', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} published, ${failed} failed`)
-    },
-    onSuccess: () => { docSelection.clear(); onRefresh?.() },
-    successMessage: `${docSelection.count} document${docSelection.count !== 1 ? 's' : ''} published`,
-  })
-
-  const bulkUnpublishDocsMutation = useExplorerMutation({
-    name: 'Bulk unpublish documents',
-    fn: async () => {
-      const ids = [...docSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => publishService.unpublish('document', id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} unpublished, ${failed} failed`)
-    },
-    onSuccess: () => { docSelection.clear(); onRefresh?.() },
-    successMessage: `${docSelection.count} document${docSelection.count !== 1 ? 's' : ''} unpublished`,
-  })
-
-  const bulkArchiveDocsMutation = useExplorerMutation({
-    name: 'Bulk archive documents',
-    fn: async () => {
-      const ids = [...docSelection.selected]
-      const results = await Promise.allSettled(ids.map((id) => documentsService.archive(id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} archived, ${failed} failed`)
-    },
-    onSuccess: () => { docSelection.clear(); onRefresh?.() },
-    successMessage: `${docSelection.count} document${docSelection.count !== 1 ? 's' : ''} archived`,
-  })
+  const docCfg =
+    docBulkOp === 'publish'
+      ? { title: 'Publish documents', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('document', id), runOne: (id: string) => publishService.publish('document', id) }
+      : docBulkOp === 'unpublish'
+      ? { title: 'Unpublish documents', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('document', id), runOne: (id: string) => publishService.unpublish('document', id) }
+      : docBulkOp === 'archive'
+      ? { title: 'Archive documents', actionLabel: 'Archive', destructive: true, classify: (id: string) => classifyArchive(documentsService.getDeleteImpact.bind(documentsService), id), runOne: (id: string) => documentsService.archive(id) }
+      : null
 
   return (
     <>
@@ -338,25 +291,9 @@ export function SeriesChildren({ series, loading, focus, onRefresh }: SeriesChil
         count={moduleSelection.count}
         onClear={moduleSelection.clear}
         actions={[
-          {
-            label: 'Publish',
-            icon: <Eye className="w-3.5 h-3.5" />,
-            onClick: bulkPublishModulesMutation.execute,
-            loading: bulkPublishModulesMutation.loading,
-          },
-          {
-            label: 'Unpublish',
-            icon: <EyeOff className="w-3.5 h-3.5" />,
-            onClick: bulkUnpublishModulesMutation.execute,
-            loading: bulkUnpublishModulesMutation.loading,
-            variant: 'amber',
-          },
-          {
-            label: 'Activate',
-            icon: <Power className="w-3.5 h-3.5" />,
-            onClick: bulkActivateModulesMutation.execute,
-            loading: bulkActivateModulesMutation.loading,
-          },
+          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setModuleBulkOp('publish') },
+          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setModuleBulkOp('unpublish'), variant: 'amber' },
+          { label: 'Activate', icon: <Power className="w-3.5 h-3.5" />, onClick: () => setModuleBulkOp('activate') },
         ]}
       />
 
@@ -364,28 +301,39 @@ export function SeriesChildren({ series, loading, focus, onRefresh }: SeriesChil
         count={docSelection.count}
         onClear={docSelection.clear}
         actions={[
-          {
-            label: 'Publish',
-            icon: <Eye className="w-3.5 h-3.5" />,
-            onClick: bulkPublishDocsMutation.execute,
-            loading: bulkPublishDocsMutation.loading,
-          },
-          {
-            label: 'Unpublish',
-            icon: <EyeOff className="w-3.5 h-3.5" />,
-            onClick: bulkUnpublishDocsMutation.execute,
-            loading: bulkUnpublishDocsMutation.loading,
-            variant: 'amber',
-          },
-          {
-            label: 'Archive',
-            icon: <Archive className="w-3.5 h-3.5" />,
-            onClick: bulkArchiveDocsMutation.execute,
-            loading: bulkArchiveDocsMutation.loading,
-            variant: 'amber',
-          },
+          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('publish') },
+          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('unpublish'), variant: 'amber' },
+          { label: 'Archive', icon: <Archive className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('archive'), variant: 'amber' },
         ]}
       />
+
+      {moduleCfg && (
+        <BulkImpactDialog
+          open={!!moduleBulkOp}
+          onClose={() => setModuleBulkOp(null)}
+          onSuccess={() => { setModuleBulkOp(null); moduleSelection.clear(); onRefresh?.() }}
+          items={selectedModuleItems}
+          title={moduleCfg.title}
+          actionLabel={moduleCfg.actionLabel}
+          destructive={moduleCfg.destructive}
+          classify={moduleCfg.classify}
+          runOne={moduleCfg.runOne}
+        />
+      )}
+
+      {docCfg && (
+        <BulkImpactDialog
+          open={!!docBulkOp}
+          onClose={() => setDocBulkOp(null)}
+          onSuccess={() => { setDocBulkOp(null); docSelection.clear(); onRefresh?.() }}
+          items={selectedDocItems}
+          title={docCfg.title}
+          actionLabel={docCfg.actionLabel}
+          destructive={docCfg.destructive}
+          classify={docCfg.classify}
+          runOne={docCfg.runOne}
+        />
+      )}
     </>
   )
 }

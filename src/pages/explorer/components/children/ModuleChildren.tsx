@@ -12,8 +12,9 @@ import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
 import { UpcomingVideoDialog } from '../../forms/UpcomingVideoDialog'
 import { CreateVideoDialog } from '../../forms/CreateVideoDialog'
+import { BulkImpactDialog } from '../../dialogs/BulkImpactDialog'
+import { classifyPublish, classifyUnpublish, classifyArchive } from '../../dialogs/bulkImpact'
 import { useSelection } from '../../hooks/useSelection'
-import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { videosService } from '@/services/videos.service'
 import { publishService } from '@/services/publish.service'
 import { toast } from 'sonner'
@@ -76,45 +77,19 @@ export function ModuleChildren({ module, focus, loading, onRefresh }: ModuleChil
     }
   }
 
-  const bulkPublishMutation = useExplorerMutation({
-    name: 'Bulk publish videos',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(
-        ids.map((id) => publishService.publish('video', id)),
-      )
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} published, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} video${selection.count !== 1 ? 's' : ''} published`,
-  })
+  const [bulkOp, setBulkOp] = useState<'publish' | 'unpublish' | 'archive' | null>(null)
+  const selectedItems = displayVideos
+    .filter((v) => selection.isSelected(v._id))
+    .map((v) => ({ id: v._id, name: v.title }))
 
-  const bulkUnpublishMutation = useExplorerMutation({
-    name: 'Bulk unpublish videos',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(
-        ids.map((id) => publishService.unpublish('video', id)),
-      )
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} unpublished, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} video${selection.count !== 1 ? 's' : ''} unpublished`,
-  })
-
-  const bulkArchiveMutation = useExplorerMutation({
-    name: 'Bulk archive videos',
-    fn: async () => {
-      const ids = [...selection.selected]
-      const results = await Promise.allSettled(ids.map((id) => videosService.archive(id)))
-      const failed = results.filter((r) => r.status === 'rejected').length
-      if (failed > 0) throw new Error(`${ids.length - failed} archived, ${failed} failed`)
-    },
-    onSuccess: () => { selection.clear(); onRefresh?.() },
-    successMessage: `${selection.count} video${selection.count !== 1 ? 's' : ''} archived`,
-  })
+  const bulkCfg =
+    bulkOp === 'publish'
+      ? { title: 'Publish videos', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('video', id), runOne: (id: string) => publishService.publish('video', id) }
+      : bulkOp === 'unpublish'
+      ? { title: 'Unpublish videos', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('video', id), runOne: (id: string) => publishService.unpublish('video', id) }
+      : bulkOp === 'archive'
+      ? { title: 'Archive videos', actionLabel: 'Archive', destructive: true, classify: (id: string) => classifyArchive(videosService.getDeleteImpact.bind(videosService), id), runOne: (id: string) => videosService.archive(id) }
+      : null
 
   const filtered = displayVideos.filter((v) => {
     const matchesSearch =
@@ -257,28 +232,25 @@ export function ModuleChildren({ module, focus, loading, onRefresh }: ModuleChil
         count={selection.count}
         onClear={selection.clear}
         actions={[
-          {
-            label: 'Publish',
-            icon: <Eye className="w-3.5 h-3.5" />,
-            onClick: bulkPublishMutation.execute,
-            loading: bulkPublishMutation.loading,
-          },
-          {
-            label: 'Unpublish',
-            icon: <EyeOff className="w-3.5 h-3.5" />,
-            onClick: bulkUnpublishMutation.execute,
-            loading: bulkUnpublishMutation.loading,
-            variant: 'amber',
-          },
-          {
-            label: 'Archive',
-            icon: <Archive className="w-3.5 h-3.5" />,
-            onClick: bulkArchiveMutation.execute,
-            loading: bulkArchiveMutation.loading,
-            variant: 'amber',
-          },
+          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setBulkOp('publish') },
+          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setBulkOp('unpublish'), variant: 'amber' },
+          { label: 'Archive', icon: <Archive className="w-3.5 h-3.5" />, onClick: () => setBulkOp('archive'), variant: 'amber' },
         ]}
       />
+
+      {bulkCfg && (
+        <BulkImpactDialog
+          open={!!bulkOp}
+          onClose={() => setBulkOp(null)}
+          onSuccess={() => { setBulkOp(null); selection.clear(); onRefresh?.() }}
+          items={selectedItems}
+          title={bulkCfg.title}
+          actionLabel={bulkCfg.actionLabel}
+          destructive={bulkCfg.destructive}
+          classify={bulkCfg.classify}
+          runOne={bulkCfg.runOne}
+        />
+      )}
     </>
   )
 }
