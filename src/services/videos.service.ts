@@ -400,6 +400,28 @@ class VideosService {
   }
 
   /**
+   * Upload a manual thumbnail (overrides the auto-generated one) via presigned S3 URL.
+   */
+  async uploadThumbnail(videoId: string, file: File): Promise<ApiResponse<Video>> {
+    const mimeType = file.type || 'image/jpeg'
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; thumbnailUrl: string }>(
+      `${this.basePath}/${videoId}/thumbnail-upload-url`,
+      { mimeType },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+    await axios.put(uploadUrl, file, { headers: { 'Content-Type': mimeType } })
+    const res = await apiService.post<{ video: Video }>(
+      `${this.basePath}/${videoId}/thumbnail-confirm`,
+      { s3Key, thumbnailUrl },
+    )
+    if (res.success && res.data) return { ...res, data: res.data.video }
+    return res as ApiResponse<Video>
+  }
+
+  /**
    * Assign tags to a video
    */
   async assignTags(videoId: string, tagIds: string[]): Promise<ApiResponse<any>> {

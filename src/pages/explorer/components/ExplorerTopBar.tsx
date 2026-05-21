@@ -15,6 +15,8 @@ interface ExplorerTopBarProps {
   packageName?: string
   seriesName?: string
   moduleName?: string
+  videoName?: string
+  bookName?: string
   onRefresh?: () => void
   loading?: boolean
 }
@@ -25,6 +27,8 @@ export function ExplorerTopBar({
   packageName,
   seriesName,
   moduleName,
+  videoName,
+  bookName,
   onRefresh,
   loading,
 }: ExplorerTopBarProps) {
@@ -65,6 +69,8 @@ export function ExplorerTopBar({
             packageName={packageName}
             seriesName={seriesName}
             moduleName={moduleName}
+            videoName={videoName}
+            bookName={bookName}
           />
         </div>
 

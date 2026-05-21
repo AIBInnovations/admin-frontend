@@ -10,7 +10,7 @@ import { SortableItem } from '../SortableItem'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
-import { SeriesFormDialog } from '../../forms/SeriesFormDialog'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { seriesService } from '@/services/series.service'
@@ -36,13 +36,14 @@ function isTheoryPackage(pkg: PackageDetail): boolean {
 
 export function PackageChildren({ packageDetail, loading, focus, onRefresh }: PackageChildrenProps) {
   const [search, setSearch] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
   const [localSeries, setLocalSeries] = useState<PackageDetailSeries[]>([])
   const selection = useSelection()
+  const { select } = usePanelSelection()
 
   const series = packageDetail?.series ?? []
   const isTheory = packageDetail ? isTheoryPackage(packageDetail) : false
   const packageId = focus.level === 'package' ? focus.packageId : packageDetail?._id ?? ''
+  const newSeries = () => select({ kind: 'series', entity: null, ctx: { packageId } })
 
   useEffect(() => { setLocalSeries([]) }, [packageId])
 
@@ -131,11 +132,7 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setCreateOpen(true)}
-          >
+          <Button size="sm" className="gap-1.5 shrink-0" onClick={newSeries}>
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Series</span>
           </Button>
@@ -173,21 +170,10 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
             description={
               search ? `No results for "${search}".` : 'Add your first series to this package.'
             }
-            action={
-              search
-                ? undefined
-                : { label: 'Create series', onClick: () => setCreateOpen(true) }
-            }
+            action={search ? undefined : { label: 'Create series', onClick: newSeries }}
           />
         )}
       </div>
-
-      <SeriesFormDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSuccess={() => { setCreateOpen(false); onRefresh?.() }}
-        packageId={packageId}
-      />
 
       <ExplorerSelectionBar
         count={selection.count}

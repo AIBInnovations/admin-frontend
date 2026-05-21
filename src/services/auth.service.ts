@@ -201,12 +201,26 @@ class AuthService {
   }
 
   /**
+   * Resolve a required permission against the user's permission list.
+   * Mirrors backend admin.service.js hasPermission: supports '*' (super admin)
+   * and 'resource.*' wildcards. Role permissions are stored/sent as wildcards
+   * (e.g. Super Admin ['*'], Content Manager ['videos.*']), so an exact-match
+   * check alone would wrongly deny privileged roles.
+   */
+  private matches(userPermissions: string[], required: string): boolean {
+    if (userPermissions.includes('*')) return true; // super admin
+    if (userPermissions.includes(required)) return true; // exact match
+    const resource = required.split('.')[0];
+    return userPermissions.includes(`${resource}.*`); // resource wildcard
+  }
+
+  /**
    * Check if user has specific permission
    */
   hasPermission(permission: string): boolean {
     const admin = this.getAdminUser();
     if (!admin) return false;
-    return admin.permissions.includes(permission);
+    return this.matches(admin.permissions, permission);
   }
 
   /**
@@ -215,7 +229,7 @@ class AuthService {
   hasAnyPermission(permissions: string[]): boolean {
     const admin = this.getAdminUser();
     if (!admin) return false;
-    return permissions.some(permission => admin.permissions.includes(permission));
+    return permissions.some(permission => this.matches(admin.permissions, permission));
   }
 
   /**
@@ -224,7 +238,7 @@ class AuthService {
   hasAllPermissions(permissions: string[]): boolean {
     const admin = this.getAdminUser();
     if (!admin) return false;
-    return permissions.every(permission => admin.permissions.includes(permission));
+    return permissions.every(permission => this.matches(admin.permissions, permission));
   }
 
   /**

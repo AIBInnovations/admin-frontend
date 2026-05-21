@@ -5,11 +5,12 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChevronRight, MoreHorizontal, Pencil, Layers, FileText, Copy, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { ActiveBadge, PublishBadge } from '../../ui/StatusBadge'
-import { SeriesFormDialog } from '../../forms/SeriesFormDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { copyText } from '../../copyShareLink'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { entityId } from '../../panel/panelTypes'
 import type { PackageDetailSeries } from '@/services/packages.service'
 
 interface SeriesRowProps {
@@ -25,18 +26,20 @@ interface SeriesRowProps {
 
 export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, onSelect, dragHandleProps, isDragging }: SeriesRowProps) {
   const navigate = useNavigate()
+  const { select, target } = usePanelSelection()
   const drillUrl = buildChildUrl(parentFocus, series._id)
-  const [editOpen, setEditOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
   const isPublished = series.publish_status === 'published'
+  const isOpen = entityId(target?.entity) === series._id
+  const openInPanel = () => select({ kind: 'series', entity: series, ctx: { packageId: series.package_id } })
 
   return (
     <>
       <div
-        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : ''} ${isDragging ? 'opacity-40' : ''}`}
-        onClick={() => navigate(drillUrl)}
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'} ${isOpen ? 'ring-1 ring-blue-300' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        onClick={openInPanel}
       >
         {dragHandleProps && (
           <span
@@ -98,7 +101,7 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <DropdownMenuItem onClick={openInPanel}>
                 <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPublishOpen(true)}>
@@ -119,6 +122,7 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+            title="Open"
             onClick={() => navigate(drillUrl)}
           >
             <ChevronRight className="w-3.5 h-3.5" />
@@ -126,13 +130,6 @@ export function SeriesRow({ series, parentFocus, isTheory, onRefresh, selected, 
         </div>
       </div>
 
-      <SeriesFormDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSuccess={() => { setEditOpen(false); onRefresh?.() }}
-        packageId={series.package_id}
-        series={series}
-      />
       <PublishDialog
         open={publishOpen}
         onClose={() => setPublishOpen(false)}

@@ -50,6 +50,21 @@ class SeriesService extends BaseCrudService<Series, SeriesFormData, SeriesListPa
   }
 
   /**
+   * One-shot thumbnail upload via presigned S3 URL (get URL → PUT → confirm).
+   */
+  async uploadThumbnail(seriesId: string, file: File): Promise<ApiResponse<Series>> {
+    const mimeType = file.type || 'image/jpeg'
+    const urlRes = await this.getThumbnailUploadUrl(mimeType)
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get thumbnail upload URL')
+    }
+    const { uploadUrl, s3Key, thumbnailUrl } = urlRes.data
+    const axios = (await import('axios')).default
+    await axios.put(uploadUrl, file, { headers: { 'Content-Type': mimeType } })
+    return this.confirmThumbnailUpload(seriesId, s3Key, thumbnailUrl)
+  }
+
+  /**
    * Confirm thumbnail upload after S3 upload
    */
   async confirmThumbnailUpload(seriesId: string, s3Key: string, thumbnailUrl: string): Promise<ApiResponse<Series>> {

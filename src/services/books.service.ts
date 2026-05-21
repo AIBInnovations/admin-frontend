@@ -136,6 +136,20 @@ class BooksService {
   }
 
   /**
+   * Append image URLs to a book's gallery (already-uploaded CloudFront URLs).
+   */
+  async addImages(bookId: string, imageUrls: string[]): Promise<ApiResponse<{ images: string[]; message?: string }>> {
+    return apiService.post(`${this.basePath}/${bookId}/images`, { images: imageUrls })
+  }
+
+  /**
+   * Remove a gallery image by its index.
+   */
+  async removeImage(bookId: string, imageIndex: number): Promise<ApiResponse<{ images: string[]; message?: string }>> {
+    return apiService.delete(`${this.basePath}/${bookId}/images/${imageIndex}`)
+  }
+
+  /**
    * Upload ebook file to S3 and confirm with backend.
    * 3-step flow: get presigned URL → upload to S3 → confirm upload.
    */

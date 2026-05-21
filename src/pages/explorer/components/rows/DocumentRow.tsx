@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Pencil, Copy, FileText, Archive, FolderInput, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { FreeBadge, FormatBadge, PublishBadge } from '../../ui/StatusBadge'
-import { DocumentFormDialog } from '../../forms/DocumentFormDialog'
 import { MoveDocumentDialog } from '../../dialogs/MoveDocumentDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { ArchiveWithImpactDialog } from '../../dialogs/ArchiveWithImpactDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { copyText } from '../../copyShareLink'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { entityId } from '../../panel/panelTypes'
 import { documentsService } from '@/services/documents.service'
 
 /** Minimal shape accepted by DocumentRow — satisfied by both PackageDetailDocument and Document. */
@@ -25,6 +26,7 @@ export interface DocRowData {
   display_order: number
   download_count: number
   publish_status?: 'draft' | 'published'
+  source_book_id?: unknown
 }
 
 interface DocumentRowProps {
@@ -37,13 +39,15 @@ interface DocumentRowProps {
 }
 
 export function DocumentRow({ document: doc, onRefresh, selected, onSelect, dragHandleProps, isDragging }: DocumentRowProps) {
-  const [editOpen, setEditOpen] = useState(false)
+  const { select, target } = usePanelSelection()
   const [moveOpen, setMoveOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
   const isPublished = doc.publish_status === 'published'
+  const isOpen = entityId(target?.entity) === doc._id
+  const openInPanel = () => select({ kind: 'document', entity: doc })
 
   const sizeLabel =
     doc.file_size_mb < 1
@@ -59,7 +63,10 @@ export function DocumentRow({ document: doc, onRefresh, selected, onSelect, drag
 
   return (
     <>
-      <div className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl hover:bg-slate-50 transition-colors group ${selected ? 'bg-blue-50' : ''} ${isDragging ? 'opacity-40' : ''}`}>
+      <div
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'} ${isOpen ? 'ring-1 ring-blue-300' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        onClick={openInPanel}
+      >
         {dragHandleProps && (
           <span
             {...dragHandleProps}
@@ -114,7 +121,7 @@ export function DocumentRow({ document: doc, onRefresh, selected, onSelect, drag
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <DropdownMenuItem onClick={openInPanel}>
                 <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
               {doc.publish_status !== undefined && (
@@ -144,13 +151,6 @@ export function DocumentRow({ document: doc, onRefresh, selected, onSelect, drag
           </DropdownMenu>
         </div>
       </div>
-
-      <DocumentFormDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSuccess={() => { setEditOpen(false); onRefresh?.() }}
-        document={doc}
-      />
 
       <MoveDocumentDialog
         open={moveOpen}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useServerSearch } from '@/hooks/useServerSearch'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -17,6 +18,7 @@ export function RecordingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // State
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [loading, setLoading] = useState(true)
   const [sessionFilter, setSessionFilter] = useState(searchParams.get('session') || 'all')
@@ -50,6 +52,7 @@ export function RecordingsPage() {
       const response = await recordingsService.getAll({
         page: currentPage,
         limit: 20,
+        search: debouncedSearch || undefined,
         session_id: sessionFilter !== 'all' ? sessionFilter : undefined,
         processing_status: statusFilter !== 'all' ? statusFilter : undefined,
       })
@@ -66,7 +69,7 @@ export function RecordingsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, sessionFilter, statusFilter])
+  }, [currentPage, sessionFilter, statusFilter, debouncedSearch])
 
   useEffect(() => { fetchRecordings() }, [fetchRecordings])
 
@@ -82,7 +85,7 @@ export function RecordingsPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [sessionFilter, statusFilter])
+  }, [sessionFilter, statusFilter, debouncedSearch])
 
   // Handlers
   const handleCreate = () => {
@@ -209,7 +212,17 @@ export function RecordingsPage() {
         }
       />
 
-      <SearchWithFilters filters={filters} />
+      <SearchWithFilters
+        value={search}
+        onChange={setSearch}
+        placeholder="Search recordings..."
+        filters={filters}
+        activeFilters={{ session: sessionFilter, status: statusFilter }}
+        onFiltersChange={(f) => {
+          if (f.session !== undefined) setSessionFilter(f.session)
+          if (f.status !== undefined) setStatusFilter(f.status)
+        }}
+      />
 
       <DataTable
         columns={columns}

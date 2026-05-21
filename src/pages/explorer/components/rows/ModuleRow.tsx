@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChevronRight, MoreHorizontal, Pencil, Video, Clock, Copy, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { ActiveBadge, PublishBadge } from '../../ui/StatusBadge'
-import { ModuleFormDialog } from '../../forms/ModuleFormDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { copyText } from '../../copyShareLink'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { entityId } from '../../panel/panelTypes'
 import type { PackageDetailModule } from '@/services/packages.service'
 
 interface ModuleRowProps {
@@ -30,18 +31,20 @@ function formatDuration(minutes: number): string {
 
 export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isDragging, selected, onSelect }: ModuleRowProps) {
   const navigate = useNavigate()
+  const { select, target } = usePanelSelection()
   const drillUrl = buildChildUrl(parentFocus, module._id)
-  const [editOpen, setEditOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
 
   const isPublished = module.publish_status === 'published'
+  const isOpen = entityId(target?.entity) === module._id
+  const openInPanel = () => select({ kind: 'module', entity: module, ctx: { seriesId: module.series_id } })
 
   return (
     <>
       <div
-        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : ''} ${isDragging ? 'opacity-40' : ''}`}
-        onClick={() => navigate(drillUrl)}
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'} ${isOpen ? 'ring-1 ring-blue-300' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        onClick={openInPanel}
       >
         {dragHandleProps && (
           <span
@@ -101,7 +104,7 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <DropdownMenuItem onClick={openInPanel}>
                 <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPublishOpen(true)}>
@@ -122,6 +125,7 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+            title="Open"
             onClick={() => navigate(drillUrl)}
           >
             <ChevronRight className="w-3.5 h-3.5" />
@@ -129,13 +133,6 @@ export function ModuleRow({ module, parentFocus, onRefresh, dragHandleProps, isD
         </div>
       </div>
 
-      <ModuleFormDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSuccess={() => { setEditOpen(false); onRefresh?.() }}
-        seriesId={module.series_id}
-        module={module}
-      />
       <PublishDialog
         open={publishOpen}
         onClose={() => setPublishOpen(false)}

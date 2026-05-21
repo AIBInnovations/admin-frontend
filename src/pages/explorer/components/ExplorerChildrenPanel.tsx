@@ -5,6 +5,8 @@ import { SubjectChildren } from './children/SubjectChildren'
 import { PackageChildren } from './children/PackageChildren'
 import { SeriesChildren } from './children/SeriesChildren'
 import { ModuleChildren } from './children/ModuleChildren'
+import { VideoChildren } from './children/VideoChildren'
+import { BooksCatalog } from './children/BooksCatalog'
 import type { ExplorerFocus } from '../parseExplorerPath'
 import type { ExplorerData } from '../hooks/useExplorerData'
 
@@ -23,7 +25,7 @@ function isTheoryPackage(pkg: ExplorerData['packageDetail']): boolean {
 }
 
 export function ExplorerChildrenPanel({ focus, data, onRefresh }: ExplorerChildrenPanelProps) {
-  const { loading, error, subjects, packages, packageDetail, currentSeries, currentModule } = data
+  const { loading, error, subjects, packages, packageDetail, currentSeries, currentModule, currentVideo } = data
 
   if (focus.level === 'invalid') return null
 
@@ -54,6 +56,17 @@ export function ExplorerChildrenPanel({ focus, data, onRefresh }: ExplorerChildr
         focus={focus}
         onRefresh={onRefresh}
         libraryDocuments={data.libraryDocuments}
+      />
+    )
+  }
+
+  if (focus.level === 'books' || focus.level === 'book') {
+    return (
+      <BooksCatalog
+        books={data.books}
+        loading={loading}
+        focus={focus}
+        onRefresh={onRefresh}
       />
     )
   }
@@ -97,6 +110,20 @@ export function ExplorerChildrenPanel({ focus, data, onRefresh }: ExplorerChildr
     return (
       <ModuleChildren
         module={currentModule}
+        focus={focus}
+        loading={loading}
+        onRefresh={onRefresh}
+      />
+    )
+  }
+
+  if (focus.level === 'video') {
+    return (
+      <VideoChildren
+        video={currentVideo}
+        videoTags={data.videoTags}
+        videoReviews={data.videoReviews}
+        videoReviewsTotal={data.videoReviewsTotal}
         loading={loading}
         onRefresh={onRefresh}
       />

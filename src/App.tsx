@@ -66,72 +66,120 @@ function App() {
           <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          {/* Protected Routes */}
+          {/* Protected Routes. Inner ProtectedRoute wrappers gate by permission
+              (mirror Sidebar nav permissions); they redirect to /unauthorized. */}
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
-              {/* Dashboard */}
+              {/* Dashboard — always available to any authenticated admin */}
               <Route path="/" element={<DashboardPage />} />
 
               {/* Users */}
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/users/grant-access" element={<GrantAccessPage />} />
-              <Route path="/users/email-excluded" element={<ExcludedUsersPage />} />
-              <Route path="/users/:userId" element={<UserDetailPage />} />
+              <Route element={<ProtectedRoute requiredPermission="users.read" />}>
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/users/email-excluded" element={<ExcludedUsersPage />} />
+                <Route path="/users/:userId" element={<UserDetailPage />} />
+                {/* Exports use users.read on the backend */}
+                <Route path="/exports" element={<ExportsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="users.update" />}>
+                <Route path="/users/grant-access" element={<GrantAccessPage />} />
+              </Route>
 
               {/* Content */}
-              <Route path="/content/subjects" element={<SubjectsPage />} />
-              <Route path="/content/subjects/:subjectId" element={<SubjectDetailPage />} />
-              <Route path="/content/packages" element={<PackagesPage />} />
-              <Route path="/content/packages/:packageId" element={<PackageDetailPage />} />
-              <Route path="/content/package-types" element={<PackageTypesPage />} />
-              <Route path="/content/series" element={<SeriesPage />} />
-              <Route path="/content/modules" element={<ModulesPage />} />
-              <Route path="/content/videos" element={<VideosPage />} />
-              <Route path="/content/documents" element={<DocumentsPage />} />
-              <Route path="/content/recordings" element={<RecordingsPage />} />
-              <Route path="/content/video-tags" element={<VideoTagsPage />} />
-              <Route path="/content/books" element={<BooksPage />} />
-              <Route path="/content/banners" element={<BannersPage />} />
-              <Route path="/content/home-sections" element={<HomeSectionsPage />} />
-              <Route path="/content/home-sections/:sectionId" element={<HomeSectionDetailPage />} />
-              <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
-              <Route path="/content/archives" element={<ArchivesPage />} />
-              <Route path="/content/forms" element={<FormsPage />} />
-              <Route path="/content/forms/:formId/submissions" element={<FormSubmissionsPage />} />
-              <Route path="/content/tutorials" element={<TutorialsPage />} />
-
-              {/* Live Sessions */}
-              <Route path="/sessions" element={<SessionsPage />} />
-              <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
-              <Route path="/sessions/:sessionId/attendees" element={<SessionAttendeesPage />} />
+              <Route element={<ProtectedRoute requiredPermission="subjects.read" />}>
+                <Route path="/content/subjects" element={<SubjectsPage />} />
+                <Route path="/content/subjects/:subjectId" element={<SubjectDetailPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="packages.read" />}>
+                <Route path="/content/packages" element={<PackagesPage />} />
+                <Route path="/content/packages/:packageId" element={<PackageDetailPage />} />
+                <Route path="/content/package-types" element={<PackageTypesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="series.read" />}>
+                <Route path="/content/series" element={<SeriesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="modules.read" />}>
+                <Route path="/content/modules" element={<ModulesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="videos.read" />}>
+                <Route path="/content/videos" element={<VideosPage />} />
+                <Route path="/content/video-reviews" element={<VideoReviewsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="video_tags.read" />}>
+                <Route path="/content/video-tags" element={<VideoTagsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="documents.read" />}>
+                <Route path="/content/documents" element={<DocumentsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="live_sessions.read" />}>
+                <Route path="/content/recordings" element={<RecordingsPage />} />
+                {/* Live Sessions */}
+                <Route path="/sessions" element={<SessionsPage />} />
+                <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+                <Route path="/sessions/:sessionId/attendees" element={<SessionAttendeesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="books.read" />}>
+                <Route path="/content/books" element={<BooksPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="banners.read" />}>
+                <Route path="/content/banners" element={<BannersPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="home-sections.read" />}>
+                <Route path="/content/home-sections" element={<HomeSectionsPage />} />
+                <Route path="/content/home-sections/:sectionId" element={<HomeSectionDetailPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="forms.read" />}>
+                <Route path="/content/forms" element={<FormsPage />} />
+                <Route path="/content/forms/:formId/submissions" element={<FormSubmissionsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="tutorials.read" />}>
+                <Route path="/content/tutorials" element={<TutorialsPage />} />
+              </Route>
 
               {/* Faculty */}
-              <Route path="/faculty" element={<FacultyPage />} />
+              <Route element={<ProtectedRoute requiredPermission="faculty.read" />}>
+                <Route path="/faculty" element={<FacultyPage />} />
+              </Route>
 
               {/* Commerce */}
-              <Route path="/commerce/purchases" element={<PurchasesPage />} />
-              <Route path="/commerce/payments" element={<PaymentsPage />} />
-              <Route path="/commerce/book-orders" element={<BookOrdersPage />} />
-              <Route path="/commerce/revenue" element={<RevenuePage />} />
-              <Route path="/commerce/invoices" element={<InvoicesPage />} />
-
-              {/* Analytics */}
-              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route element={<ProtectedRoute requiredPermission="payments.read" />}>
+                <Route path="/commerce/purchases" element={<PurchasesPage />} />
+                <Route path="/commerce/payments" element={<PaymentsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="book_orders.read" />}>
+                <Route path="/commerce/book-orders" element={<BookOrdersPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="invoices.read" />}>
+                <Route path="/commerce/invoices" element={<InvoicesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="analytics.read" />}>
+                <Route path="/commerce/revenue" element={<RevenuePage />} />
+                {/* Analytics */}
+                <Route path="/analytics" element={<AnalyticsPage />} />
+              </Route>
 
               {/* Notifications */}
-              <Route path="/notifications" element={<NotificationsPage />} />
-
-              {/* Exports */}
-              <Route path="/exports" element={<ExportsPage />} />
-
-              {/* Explorer */}
-              <Route path="/content/explorer/*" element={<ExplorerPage />} />
+              <Route element={<ProtectedRoute requiredPermission="notifications.read" />}>
+                <Route path="/notifications" element={<NotificationsPage />} />
+              </Route>
 
               {/* Settings */}
-              <Route path="/settings/admin-users" element={<AdminUsersPage />} />
-              <Route path="/settings/admin-roles" element={<AdminRolesPage />} />
-              <Route path="/settings/app" element={<AppSettingsPage />} />
-              <Route path="/settings/web-store-redirect" element={<WebStoreRedirectRulesPage />} />
+              <Route element={<ProtectedRoute requiredPermission="admin_users.read" />}>
+                <Route path="/settings/admin-users" element={<AdminUsersPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="admin_roles.read" />}>
+                <Route path="/settings/admin-roles" element={<AdminRolesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="settings.read" />}>
+                <Route path="/settings/app" element={<AppSettingsPage />} />
+                <Route path="/settings/web-store-redirect" element={<WebStoreRedirectRulesPage />} />
+              </Route>
+
+              {/* Super-admin only: Explorer (edits all entities) + Archives */}
+              <Route element={<ProtectedRoute requiredPermission="*" />}>
+                <Route path="/content/explorer/*" element={<ExplorerPage />} />
+                <Route path="/content/archives" element={<ArchivesPage />} />
+              </Route>
             </Route>
           </Route>
         </Routes>

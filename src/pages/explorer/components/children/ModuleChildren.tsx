@@ -11,17 +11,20 @@ import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
 import { UpcomingVideoDialog } from '../../forms/UpcomingVideoDialog'
+import { CreateVideoDialog } from '../../forms/CreateVideoDialog'
 import { useSelection } from '../../hooks/useSelection'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { videosService } from '@/services/videos.service'
 import { publishService } from '@/services/publish.service'
 import { toast } from 'sonner'
 import type { PackageDetailModule, PackageDetailVideo } from '@/services/packages.service'
+import type { ExplorerFocus } from '../../parseExplorerPath'
 
 type ProcessingFilter = 'all' | 'ready' | 'processing' | 'uploading' | 'upcoming' | 'failed'
 
 interface ModuleChildrenProps {
   module: PackageDetailModule | undefined
+  focus: ExplorerFocus
   loading: boolean
   onRefresh?: () => void
 }
@@ -35,10 +38,11 @@ const FILTER_OPTIONS: { value: ProcessingFilter; label: string }[] = [
   { value: 'failed', label: 'Failed' },
 ]
 
-export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenProps) {
+export function ModuleChildren({ module, focus, loading, onRefresh }: ModuleChildrenProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProcessingFilter>('all')
   const [upcomingOpen, setUpcomingOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const selection = useSelection()
 
   const videos: PackageDetailVideo[] = module?.videos ?? []
@@ -169,7 +173,8 @@ export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenPro
               size="sm"
               variant="outline"
               className="gap-1.5"
-              onClick={() => toast.info('Video upload — coming soon')}
+              onClick={() => setUploadOpen(true)}
+              disabled={!moduleId}
             >
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Upload Video</span>
@@ -197,6 +202,7 @@ export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenPro
                     {({ dragHandleProps, isDragging }) => (
                       <VideoRow
                         video={v}
+                        parentFocus={focus}
                         onRefresh={onRefresh}
                         selected={selection.isSelected(v._id)}
                         onSelect={selection.toggle}
@@ -227,7 +233,7 @@ export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenPro
             action={
               search || statusFilter !== 'all'
                 ? undefined
-                : { label: 'Upload video', onClick: () => toast.info('Video upload — coming soon') }
+                : { label: 'Upload video', onClick: () => setUploadOpen(true) }
             }
           />
         )}
@@ -237,6 +243,13 @@ export function ModuleChildren({ module, loading, onRefresh }: ModuleChildrenPro
         open={upcomingOpen}
         onClose={() => setUpcomingOpen(false)}
         onSuccess={() => { setUpcomingOpen(false); onRefresh?.() }}
+        moduleId={moduleId}
+      />
+
+      <CreateVideoDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onSuccess={() => { setUploadOpen(false); onRefresh?.() }}
         moduleId={moduleId}
       />
 

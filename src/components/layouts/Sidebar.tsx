@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   LayoutDashboard,
   Users,
@@ -46,6 +47,8 @@ interface NavChild {
   name: string
   href: string
   icon?: LucideIcon
+  /** Backend permission required to see this item. Omit = always visible. '*' = super admin only. */
+  permission?: string
 }
 
 interface NavItem {
@@ -54,65 +57,67 @@ interface NavItem {
   icon: LucideIcon
   badge?: string
   children?: NavChild[]
+  /** Backend permission required to see this item. Omit = always visible. '*' = super admin only. */
+  permission?: string
 }
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Explorer', href: '/content/explorer', icon: Compass, badge: 'Beta' },
+  { name: 'Explorer', href: '/content/explorer', icon: Compass, badge: 'Beta', permission: '*' },
   {
     name: 'Users',
     icon: Users,
     children: [
-      { name: 'All Users', href: '/users' },
-      { name: 'Grant Access', href: '/users/grant-access' },
-      { name: 'Email Excluded', href: '/users/email-excluded' },
+      { name: 'All Users', href: '/users', permission: 'users.read' },
+      { name: 'Grant Access', href: '/users/grant-access', permission: 'users.update' },
+      { name: 'Email Excluded', href: '/users/email-excluded', permission: 'users.read' },
     ],
   },
   {
     name: 'Content',
     icon: BookOpen,
     children: [
-      { name: 'Subjects', href: '/content/subjects' },
-      { name: 'Packages', href: '/content/packages' },
-      { name: 'Series', href: '/content/series' },
-      { name: 'Modules', href: '/content/modules' },
-      { name: 'Videos', href: '/content/videos' },
-      { name: 'Video Reviews', href: '/content/video-reviews' },
-      { name: 'Video Tags', href: '/content/video-tags' },
-      { name: 'Documents', href: '/content/documents' },
-      { name: 'Recordings', href: '/content/recordings' },
-      { name: 'Books', href: '/content/books' },
-      { name: 'Banners', href: '/content/banners' },
-      { name: 'Home Sections', href: '/content/home-sections' },
-      { name: 'Forms', href: '/content/forms' },
-      { name: 'Tutorials', href: '/content/tutorials' },
-      { name: 'Archives', href: '/content/archives' },
+      { name: 'Subjects', href: '/content/subjects', permission: 'subjects.read' },
+      { name: 'Packages', href: '/content/packages', permission: 'packages.read' },
+      { name: 'Series', href: '/content/series', permission: 'series.read' },
+      { name: 'Modules', href: '/content/modules', permission: 'modules.read' },
+      { name: 'Videos', href: '/content/videos', permission: 'videos.read' },
+      { name: 'Video Reviews', href: '/content/video-reviews', permission: 'videos.read' },
+      { name: 'Video Tags', href: '/content/video-tags', permission: 'video_tags.read' },
+      { name: 'Documents', href: '/content/documents', permission: 'documents.read' },
+      { name: 'Recordings', href: '/content/recordings', permission: 'live_sessions.read' },
+      { name: 'Books', href: '/content/books', permission: 'books.read' },
+      { name: 'Banners', href: '/content/banners', permission: 'banners.read' },
+      { name: 'Home Sections', href: '/content/home-sections', permission: 'home-sections.read' },
+      { name: 'Forms', href: '/content/forms', permission: 'forms.read' },
+      { name: 'Tutorials', href: '/content/tutorials', permission: 'tutorials.read' },
+      { name: 'Archives', href: '/content/archives', permission: '*' },
     ],
   },
-  { name: 'Live Sessions', href: '/sessions', icon: Calendar },
-  { name: 'Faculty', href: '/faculty', icon: GraduationCap },
+  { name: 'Live Sessions', href: '/sessions', icon: Calendar, permission: 'live_sessions.read' },
+  { name: 'Faculty', href: '/faculty', icon: GraduationCap, permission: 'faculty.read' },
   {
     name: 'Commerce',
     icon: ShoppingBag,
     children: [
-      { name: 'Purchases', href: '/commerce/purchases' },
-      { name: 'Payments', href: '/commerce/payments' },
-      { name: 'Invoices', href: '/commerce/invoices' },
-      { name: 'Book Orders', href: '/commerce/book-orders' },
-      { name: 'Revenue', href: '/commerce/revenue' },
+      { name: 'Purchases', href: '/commerce/purchases', permission: 'payments.read' },
+      { name: 'Payments', href: '/commerce/payments', permission: 'payments.read' },
+      { name: 'Invoices', href: '/commerce/invoices', permission: 'invoices.read' },
+      { name: 'Book Orders', href: '/commerce/book-orders', permission: 'book_orders.read' },
+      { name: 'Revenue', href: '/commerce/revenue', permission: 'analytics.read' },
     ],
   },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Exports', href: '/exports', icon: Download },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics.read' },
+  { name: 'Exports', href: '/exports', icon: Download, permission: 'users.read' },
+  { name: 'Notifications', href: '/notifications', icon: Bell, permission: 'notifications.read' },
   {
     name: 'Settings',
     icon: Settings,
     children: [
-      { name: 'Admin Users', href: '/settings/admin-users' },
-      { name: 'Admin Roles', href: '/settings/admin-roles' },
-      { name: 'App Settings', href: '/settings/app' },
-      { name: 'Web Store Redirect', href: '/settings/web-store-redirect' },
+      { name: 'Admin Users', href: '/settings/admin-users', permission: 'admin_users.read' },
+      { name: 'Admin Roles', href: '/settings/admin-roles', permission: 'admin_roles.read' },
+      { name: 'App Settings', href: '/settings/app', permission: 'settings.read' },
+      { name: 'Web Store Redirect', href: '/settings/web-store-redirect', permission: 'settings.read' },
     ],
   },
 ]
@@ -124,6 +129,23 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onToggle, onClose }: SidebarProps) {
+  const { hasPermission } = useAuth()
+
+  // Filter nav by the current admin's permissions. A parent with children is
+  // dropped when none of its children are visible. Entries without a
+  // `permission` are always shown.
+  const visibleNavigation = navigation
+    .map((item) => {
+      if (item.children) {
+        const children = item.children.filter(
+          (child) => !child.permission || hasPermission(child.permission)
+        )
+        return children.length > 0 ? { ...item, children } : null
+      }
+      return !item.permission || hasPermission(item.permission) ? item : null
+    })
+    .filter((item): item is NavItem => item !== null)
+
   return (
     <TooltipProvider delayDuration={0}>
       {/* Mobile backdrop overlay */}
@@ -173,7 +195,7 @@ export function Sidebar({ isOpen, onToggle, onClose }: SidebarProps) {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-3">
           <nav className="space-y-1 px-2">
-            {navigation.map((item) => (
+            {visibleNavigation.map((item) => (
               <NavItemComponent
                 key={item.name}
                 item={item}

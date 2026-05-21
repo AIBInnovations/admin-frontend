@@ -12,8 +12,18 @@ function buildCrumbs(focus: ExplorerFocus, names: {
   packageName?: string
   seriesName?: string
   moduleName?: string
+  videoName?: string
+  bookName?: string
 }): Crumb[] {
   if (focus.level === 'root' || focus.level === 'invalid') return []
+
+  if (focus.level === 'books' || focus.level === 'book') {
+    const crumbs: Crumb[] = [{ label: 'Books', href: `${EXPLORER_BASE}/books` }]
+    if (focus.level === 'book') {
+      crumbs.push({ label: names.bookName ?? focus.bookId, href: `${EXPLORER_BASE}/books/${focus.bookId}` })
+    }
+    return crumbs
+  }
 
   const crumbs: Crumb[] = []
 
@@ -43,6 +53,13 @@ function buildCrumbs(focus: ExplorerFocus, names: {
     href: `${EXPLORER_BASE}/subjects/${focus.subjectId}/packages/${focus.packageId}/series/${focus.seriesId}/modules/${focus.moduleId}`,
   })
 
+  if (focus.level === 'module') return crumbs
+
+  crumbs.push({
+    label: names.videoName ?? focus.videoId,
+    href: `${EXPLORER_BASE}/subjects/${focus.subjectId}/packages/${focus.packageId}/series/${focus.seriesId}/modules/${focus.moduleId}/videos/${focus.videoId}`,
+  })
+
   return crumbs
 }
 
@@ -52,6 +69,8 @@ interface ExplorerBreadcrumbProps {
   packageName?: string
   seriesName?: string
   moduleName?: string
+  videoName?: string
+  bookName?: string
 }
 
 export function ExplorerBreadcrumb({
@@ -60,8 +79,10 @@ export function ExplorerBreadcrumb({
   packageName,
   seriesName,
   moduleName,
+  videoName,
+  bookName,
 }: ExplorerBreadcrumbProps) {
-  const crumbs = buildCrumbs(focus, { subjectName, packageName, seriesName, moduleName })
+  const crumbs = buildCrumbs(focus, { subjectName, packageName, seriesName, moduleName, videoName, bookName })
 
   return (
     <nav className="flex items-center gap-1 text-sm min-w-0 overflow-hidden">

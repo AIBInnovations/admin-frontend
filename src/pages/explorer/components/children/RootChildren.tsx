@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, BookOpen } from 'lucide-react'
+import { Search, Plus, BookOpen, BookCopy } from 'lucide-react'
 import { SubjectRow } from '../rows/SubjectRow'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { SubjectsGridSkeleton } from '../ExplorerSkeleton'
-import { SubjectFormDialog } from '../../forms/SubjectFormDialog'
 import { ExplorerLibraryRail } from '../ExplorerLibraryRail'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { EXPLORER_BASE } from '../../parseExplorerPath'
 import type { Subject } from '@/services/subjects.service'
 import type { Document } from '@/services/documents.service'
 import type { ExplorerFocus } from '../../parseExplorerPath'
@@ -21,7 +23,10 @@ interface RootChildrenProps {
 
 export function RootChildren({ subjects, loading, focus, onRefresh, libraryDocuments }: RootChildrenProps) {
   const [search, setSearch] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
+  const { select } = usePanelSelection()
+  const navigate = useNavigate()
+
+  const newSubject = () => select({ kind: 'subject', entity: null })
 
   const filtered = subjects?.filter((s) =>
     search.length < 1 ? true : s.name.toLowerCase().includes(search.toLowerCase()),
@@ -43,9 +48,14 @@ export function RootChildren({ subjects, loading, focus, onRefresh, libraryDocum
           </div>
           <Button
             size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setCreateOpen(true)}
+            variant="outline"
+            className="gap-1.5 shrink-0 border-slate-200 text-slate-600 hover:bg-slate-50"
+            onClick={() => navigate(`${EXPLORER_BASE}/books`)}
           >
+            <BookCopy className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Books</span>
+          </Button>
+          <Button size="sm" className="gap-1.5 shrink-0" onClick={newSubject}>
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Subject</span>
           </Button>
@@ -61,7 +71,6 @@ export function RootChildren({ subjects, loading, focus, onRefresh, libraryDocum
                 key={subject._id}
                 subject={subject}
                 parentFocus={focus}
-                onEdit={() => setCreateOpen(false)}
                 onRefresh={onRefresh}
               />
             ))}
@@ -75,20 +84,10 @@ export function RootChildren({ subjects, loading, focus, onRefresh, libraryDocum
                 ? `No results for "${search}". Try a different search.`
                 : 'Create your first subject to start organising your content.'
             }
-            action={
-              search
-                ? undefined
-                : { label: 'Create subject', onClick: () => setCreateOpen(true) }
-            }
+            action={search ? undefined : { label: 'Create subject', onClick: newSubject }}
           />
         )}
       </div>
-
-      <SubjectFormDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSuccess={() => { setCreateOpen(false); onRefresh?.() }}
-      />
 
       {libraryDocuments && libraryDocuments.length > 0 && (
         <ExplorerLibraryRail documents={libraryDocuments} onRefresh={onRefresh} />

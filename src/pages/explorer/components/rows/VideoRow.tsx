@@ -1,21 +1,25 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Pencil, Copy, Clock, Archive, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
+import { ChevronRight, MoreHorizontal, Pencil, Copy, Archive, Eye, EyeOff, GripVertical, Braces } from 'lucide-react'
 import { ProcessingBadge, PublishBadge, FreeBadge, ScheduledBadge } from '../../ui/StatusBadge'
-import { VideoFormDialog } from '../../forms/VideoFormDialog'
 import { PublishDialog } from '../../dialogs/PublishDialog'
 import { ArchiveWithImpactDialog } from '../../dialogs/ArchiveWithImpactDialog'
 import { ProcessingDetailsPopover } from '../popovers/ProcessingDetailsPopover'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { copyText } from '../../copyShareLink'
+import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { entityId } from '../../panel/panelTypes'
 import { videosService } from '@/services/videos.service'
 import type { PackageDetailVideo } from '@/services/packages.service'
 
 interface VideoRowProps {
   video: PackageDetailVideo
+  parentFocus: ExplorerFocus
   onRefresh?: () => void
   selected?: boolean
   onSelect?: (id: string) => void
@@ -29,12 +33,17 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps, isDragging }: VideoRowProps) {
-  const [editOpen, setEditOpen] = useState(false)
+export function VideoRow({ video, parentFocus, onRefresh, selected, onSelect, dragHandleProps, isDragging }: VideoRowProps) {
+  const navigate = useNavigate()
+  const { select, target } = usePanelSelection()
+  const drillUrl = buildChildUrl(parentFocus, video._id)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
   const isPublished = video.publish_status === 'published'
+
+  const isOpen = entityId(target?.entity) === video._id
+  const openInPanel = () => select({ kind: 'video', entity: video, ctx: { moduleId: video.module_id } })
 
   const isScheduled =
     video.processing_status === 'ready' &&
@@ -50,7 +59,10 @@ export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps
 
   return (
     <>
-      <div className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl hover:bg-slate-50 transition-colors group ${selected ? 'bg-blue-50' : ''} ${isDragging ? 'opacity-40' : ''}`}>
+      <div
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'} ${isOpen ? 'ring-1 ring-blue-300' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        onClick={openInPanel}
+      >
         {/* Drag handle */}
         {dragHandleProps && (
           <span
@@ -86,7 +98,6 @@ export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps
           <div className="flex items-center gap-2 mt-0.5">
             {video.duration_seconds > 0 && (
               <span className="text-xs text-slate-400 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
                 {formatDuration(video.duration_seconds)}
               </span>
             )}
@@ -130,7 +141,7 @@ export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <DropdownMenuItem onClick={openInPanel}>
                 <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPublishOpen(true)}>
@@ -153,15 +164,18 @@ export function VideoRow({ video, onRefresh, selected, onSelect, dragHandleProps
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+            title="Open (tags & reviews)"
+            onClick={() => navigate(drillUrl)}
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
-
-      <VideoFormDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSuccess={() => { setEditOpen(false); onRefresh?.() }}
-        video={video}
-      />
 
       <ArchiveWithImpactDialog
         open={archiveOpen}

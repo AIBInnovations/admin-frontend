@@ -12,7 +12,8 @@ import { SortableItem } from '../SortableItem'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
-import { ModuleFormDialog } from '../../forms/ModuleFormDialog'
+import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { modulesService } from '@/services/modules.service'
@@ -33,16 +34,18 @@ interface SeriesChildrenProps {
 export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: SeriesChildrenProps) {
   const [moduleSearch, setModuleSearch] = useState('')
   const [docSearch, setDocSearch] = useState('')
-  const [createModuleOpen, setCreateModuleOpen] = useState(false)
+  const [docCreateOpen, setDocCreateOpen] = useState(false)
   const [localModules, setLocalModules] = useState<PackageDetailModule[]>([])
   const [localDocuments, setLocalDocuments] = useState<PackageDetailDocument[]>([])
   const moduleSelection = useSelection()
   const docSelection = useSelection()
+  const { select } = usePanelSelection()
 
   const modules = series?.modules ?? []
   useEffect(() => { setLocalModules([]); setLocalDocuments([]) }, [series?._id])
   const documents = series?.documents ?? []
   const seriesId = series?._id ?? (focus.level === 'series' ? focus.seriesId : '')
+  const newModule = () => select({ kind: 'module', entity: null, ctx: { seriesId } })
 
   const displayModules = localModules.length > 0 ? localModules : modules
   const displayDocuments = localDocuments.length > 0 ? localDocuments : documents
@@ -223,11 +226,7 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
                 onChange={(e) => setModuleSearch(e.target.value)}
               />
             </div>
-            <Button
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => setCreateModuleOpen(true)}
-            >
+            <Button size="sm" className="gap-1.5 shrink-0" onClick={newModule}>
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Module</span>
             </Button>
@@ -264,11 +263,7 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
               description={
                 moduleSearch ? `No results for "${moduleSearch}".` : 'Add your first module to this series.'
               }
-              action={
-                moduleSearch
-                  ? undefined
-                  : { label: 'Create module', onClick: () => setCreateModuleOpen(true) }
-              }
+              action={moduleSearch ? undefined : { label: 'Create module', onClick: newModule }}
             />
           )}
         </TabsContent>
@@ -293,11 +288,7 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
                   onChange={(e) => setDocSearch(e.target.value)}
                 />
               </div>
-              <Button
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={() => toast.info('Upload document — coming soon')}
-              >
+              <Button size="sm" className="gap-1.5 shrink-0" onClick={() => setDocCreateOpen(true)}>
                 <Plus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Add Document</span>
               </Button>
@@ -331,21 +322,17 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
                 description={
                   docSearch ? `No results for "${docSearch}".` : 'Add study material to this series.'
                 }
-                action={
-                  docSearch
-                    ? undefined
-                    : { label: 'Add document', onClick: () => toast.info('Coming soon') }
-                }
+                action={docSearch ? undefined : { label: 'Add document', onClick: () => setDocCreateOpen(true) }}
               />
             )}
           </TabsContent>
         )}
       </Tabs>
 
-      <ModuleFormDialog
-        open={createModuleOpen}
-        onClose={() => setCreateModuleOpen(false)}
-        onSuccess={() => { setCreateModuleOpen(false); onRefresh?.() }}
+      <CreateDocumentDialog
+        open={docCreateOpen}
+        onClose={() => setDocCreateOpen(false)}
+        onSuccess={() => { setDocCreateOpen(false); onRefresh?.() }}
         seriesId={seriesId}
       />
 

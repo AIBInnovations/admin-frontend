@@ -5,10 +5,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChevronRight, MoreHorizontal, Pencil, ListTree, Copy, Braces } from 'lucide-react'
 import { PublishBadge, ActiveBadge, SaleBadge } from '../../ui/StatusBadge'
-import { PackageFormDialog } from '../../forms/PackageFormDialog'
 import { RawJsonDrawer } from '../popovers/RawJsonDrawer'
 import { buildChildUrl, type ExplorerFocus } from '../../parseExplorerPath'
 import { copyText } from '../../copyShareLink'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import { entityId } from '../../panel/panelTypes'
 import type { Package } from '@/services/packages.service'
 
 interface PackageRowProps {
@@ -28,17 +29,20 @@ function getSubjectId(pkg: Package): string {
   return pkg.subject_id ?? ''
 }
 
-export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
+export function PackageRow({ pkg, parentFocus, onRefresh: _onRefresh }: PackageRowProps) {
   const navigate = useNavigate()
+  const { select, target } = usePanelSelection()
   const drillUrl = buildChildUrl(parentFocus, pkg._id)
-  const [editOpen, setEditOpen] = useState(false)
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
+
+  const isOpen = entityId(target?.entity) === pkg._id
+  const openInPanel = () => select({ kind: 'package', entity: pkg, ctx: { subjectId: getSubjectId(pkg) } })
 
   return (
     <>
       <div
-        className="flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
-        onClick={() => navigate(drillUrl)}
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${isOpen ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}
+        onClick={openInPanel}
       >
         <Avatar className="w-9 h-9 rounded-lg shrink-0">
           {pkg.thumbnail_url && <AvatarImage src={pkg.thumbnail_url} alt={pkg.name} />}
@@ -84,7 +88,7 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <DropdownMenuItem onClick={openInPanel}>
                 <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => copyText(pkg._id, 'Package ID')}>
@@ -100,6 +104,7 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+            title="Open"
             onClick={() => navigate(drillUrl)}
           >
             <ChevronRight className="w-3.5 h-3.5" />
@@ -107,13 +112,6 @@ export function PackageRow({ pkg, parentFocus, onRefresh }: PackageRowProps) {
         </div>
       </div>
 
-      <PackageFormDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSuccess={() => { setEditOpen(false); onRefresh?.() }}
-        subjectId={getSubjectId(pkg)}
-        pkg={pkg}
-      />
       <RawJsonDrawer
         open={rawJsonOpen}
         onClose={() => setRawJsonOpen(false)}

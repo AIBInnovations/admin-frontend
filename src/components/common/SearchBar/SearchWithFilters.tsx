@@ -92,8 +92,8 @@ function SearchableFilter({
  * Supports both regular selects and searchable combobox filters
  */
 export function SearchWithFilters({
-  value,
-  onChange,
+  value = '',
+  onChange = () => {},
   placeholder = 'Search...',
   filters = [],
   activeFilters = {},

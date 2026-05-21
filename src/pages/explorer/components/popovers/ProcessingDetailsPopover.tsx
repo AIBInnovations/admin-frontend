@@ -1,6 +1,8 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, AlertCircle, CheckCircle2, Loader2, Clock, Upload } from 'lucide-react'
+import { useExplorerMutation } from '../../hooks/useExplorerMutation'
+import { videosService } from '@/services/videos.service'
 import type { PackageDetailVideo } from '@/services/packages.service'
 
 type ProcessingStatus = PackageDetailVideo['processing_status']
@@ -49,9 +51,16 @@ interface ProcessingDetailsPopoverProps {
   children: React.ReactNode
 }
 
-export function ProcessingDetailsPopover({ video, children }: ProcessingDetailsPopoverProps) {
+export function ProcessingDetailsPopover({ video, onRefresh, children }: ProcessingDetailsPopoverProps) {
   const config = STATUS_CONFIG[video.processing_status] ?? STATUS_CONFIG.failed
   const StatusIcon = config.icon
+
+  const retry = useExplorerMutation({
+    name: 'Retry transcoding',
+    fn: () => videosService.retryTranscoding(video._id),
+    onSuccess: () => onRefresh?.(),
+    successMessage: 'Transcoding restarted',
+  })
 
   return (
     <Popover>
@@ -106,11 +115,12 @@ export function ProcessingDetailsPopover({ video, children }: ProcessingDetailsP
             <Button
               size="sm"
               variant="outline"
-              className="w-full gap-2 border-slate-200 text-slate-500 hover:bg-slate-50 text-xs h-8 cursor-not-allowed opacity-60"
-              disabled
+              className="w-full gap-2 border-slate-200 text-slate-600 hover:bg-slate-50 text-xs h-8"
+              disabled={retry.loading}
+              onClick={(e) => { e.stopPropagation(); retry.execute() }}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Retry processing (contact support)
+              <RefreshCw className={`w-3.5 h-3.5 ${retry.loading ? 'animate-spin' : ''}`} />
+              {retry.loading ? 'Restarting…' : 'Retry processing'}
             </Button>
           </div>
         )}

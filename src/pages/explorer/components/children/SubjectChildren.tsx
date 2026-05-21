@@ -8,12 +8,12 @@ import { DocumentRow } from '../rows/DocumentRow'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
-import { PackageFormDialog } from '../../forms/PackageFormDialog'
+import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
 import { documentsService } from '@/services/documents.service'
 import { publishService } from '@/services/publish.service'
-import { toast } from 'sonner'
 import type { Package as PkgType } from '@/services/packages.service'
 import type { Document } from '@/services/documents.service'
 import type { ExplorerFocus } from '../../parseExplorerPath'
@@ -29,10 +29,12 @@ interface SubjectChildrenProps {
 export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDocuments }: SubjectChildrenProps) {
   const [search, setSearch] = useState('')
   const [docSearch, setDocSearch] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
+  const [docCreateOpen, setDocCreateOpen] = useState(false)
   const docSelection = useSelection()
+  const { select } = usePanelSelection()
 
   const subjectId = focus.level === 'subject' ? focus.subjectId : ''
+  const newPackage = () => select({ kind: 'package', entity: null, ctx: { subjectId } })
 
   const filtered = packages?.filter((p) =>
     search.length < 1 ? true : p.name.toLowerCase().includes(search.toLowerCase()),
@@ -112,11 +114,7 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Button
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => setCreateOpen(true)}
-            >
+            <Button size="sm" className="gap-1.5 shrink-0" onClick={newPackage}>
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Package</span>
             </Button>
@@ -131,7 +129,6 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
                   key={pkg._id}
                   pkg={pkg}
                   parentFocus={focus}
-                  onEdit={() => {}}
                   onRefresh={onRefresh}
                 />
               ))}
@@ -145,11 +142,7 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
                   ? `No results for "${search}".`
                   : 'Add your first package to this subject.'
               }
-              action={
-                search
-                  ? undefined
-                  : { label: 'Create package', onClick: () => setCreateOpen(true) }
-              }
+              action={search ? undefined : { label: 'Create package', onClick: newPackage }}
             />
           )}
         </TabsContent>
@@ -173,11 +166,7 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
                 onChange={(e) => setDocSearch(e.target.value)}
               />
             </div>
-            <Button
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => toast.info('Document upload — coming soon')}
-            >
+            <Button size="sm" className="gap-1.5 shrink-0" onClick={() => setDocCreateOpen(true)}>
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Add Document</span>
             </Button>
@@ -206,20 +195,16 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
                   ? `No results for "${docSearch}".`
                   : 'Subject-level documents attached to this subject appear here.'
               }
-              action={
-                docSearch
-                  ? undefined
-                  : { label: 'Add document', onClick: () => toast.info('Document upload — coming soon') }
-              }
+              action={docSearch ? undefined : { label: 'Add document', onClick: () => setDocCreateOpen(true) }}
             />
           )}
         </TabsContent>
       </Tabs>
 
-      <PackageFormDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSuccess={() => { setCreateOpen(false); onRefresh?.() }}
+      <CreateDocumentDialog
+        open={docCreateOpen}
+        onClose={() => setDocCreateOpen(false)}
+        onSuccess={() => { setDocCreateOpen(false); onRefresh?.() }}
         subjectId={subjectId}
       />
 

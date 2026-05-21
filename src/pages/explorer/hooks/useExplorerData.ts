@@ -3,9 +3,15 @@ import { toast } from 'sonner'
 import { subjectsService } from '@/services/subjects.service'
 import { packagesService } from '@/services/packages.service'
 import { documentsService } from '@/services/documents.service'
+import { videosService } from '@/services/videos.service'
+import { videoReviewsService } from '@/services/videoReviews.service'
+import { booksService } from '@/services/books.service'
+import type { Book } from '@/services/books.service'
 import type { Subject, SubjectDetail } from '@/services/subjects.service'
-import type { Package, PackageDetail, PackageDetailSeries, PackageDetailModule } from '@/services/packages.service'
+import type { Package, PackageDetail, PackageDetailSeries, PackageDetailModule, PackageDetailVideo } from '@/services/packages.service'
 import type { Document } from '@/services/documents.service'
+import type { VideoTag } from '@/services/videoTags.service'
+import type { VideoReview } from '@/services/videoReviews.service'
 import type { ExplorerFocus } from '../parseExplorerPath'
 
 export interface ExplorerData {
@@ -17,6 +23,11 @@ export interface ExplorerData {
   subjects?: Subject[]
   libraryDocuments?: Document[]
 
+  // Books catalog
+  books?: Book[]
+  book?: Book
+  bookName?: string
+
   // Subject focus
   subject?: SubjectDetail
   packages?: Package[]
@@ -25,18 +36,25 @@ export interface ExplorerData {
   // Package+ (full tree)
   packageDetail?: PackageDetail
 
-  // Derived (series/module level — plucked from packageDetail)
+  // Derived (series/module/video level — plucked from packageDetail)
   currentSeries?: PackageDetailSeries
   currentModule?: PackageDetailModule
+  currentVideo?: PackageDetailVideo
+
+  // Video-level extras (fetched separately)
+  videoTags?: VideoTag[]
+  videoReviews?: VideoReview[]
+  videoReviewsTotal?: number
 
   // Breadcrumb names
   subjectName?: string
   packageName?: string
   seriesName?: string
   moduleName?: string
+  videoName?: string
 
   // Chain-mismatch signalling for the page shell
-  missing?: 'subject' | 'package' | 'series' | 'module' | null
+  missing?: 'subject' | 'package' | 'series' | 'module' | 'video' | 'book' | null
 }
 
 type CacheMap = Map<string, unknown>
@@ -49,6 +67,9 @@ function focusKey(focus: ExplorerFocus): string {
     case 'package': return `p:${focus.subjectId}:${focus.packageId}`
     case 'series': return `sr:${focus.subjectId}:${focus.packageId}:${focus.seriesId}`
     case 'module': return `m:${focus.subjectId}:${focus.packageId}:${focus.seriesId}:${focus.moduleId}`
+    case 'video': return `v:${focus.subjectId}:${focus.packageId}:${focus.seriesId}:${focus.moduleId}:${focus.videoId}`
+    case 'books': return 'books'
+    case 'book': return `b:${focus.bookId}`
     case 'invalid': return `invalid:${focus.reason}`
   }
 }
@@ -57,6 +78,9 @@ function focusKey(focus: ExplorerFocus): string {
 function branchKeys(focus: ExplorerFocus): string[] {
   if (focus.level === 'root' || focus.level === 'invalid') {
     return ['root.subjects', 'root.library']
+  }
+  if (focus.level === 'books' || focus.level === 'book') {
+    return ['books']
   }
   const keys = [
     `subject:${focus.subjectId}`,
@@ -87,6 +111,41 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
     try {
       if (stableFocus.level === 'invalid') {
         setData({})
+        return
+      }
+
+      if (stableFocus.level === 'books' || stableFocus.level === 'book') {
+        const cachedBooks = cache.get('books') as Book[] | undefined
+        if (cachedBooks) setData({ books: cachedBooks })
+
+        const listRes = await booksService.getAll({
+          page: 1,
+          limit: 200,
+          sort_by: 'display_order',
+          sort_order: 'asc',
+        })
+        if (fetchId !== fetchIdRef.current) return
+
+        const books = listRes.success && listRes.data ? listRes.data.entities : cachedBooks
+        if (books) cache.set('books', books)
+
+        if (stableFocus.level === 'books') {
+          setData({ books, missing: null })
+          return
+        }
+
+        // book level — pluck from list, else fetch detail
+        let book = books?.find((b) => b._id === stableFocus.bookId)
+        if (!book) {
+          const detRes = await booksService.getById(stableFocus.bookId)
+          if (fetchId !== fetchIdRef.current) return
+          if (detRes.success && detRes.data) book = detRes.data
+        }
+        if (!book) {
+          setData({ books, missing: 'book' })
+          return
+        }
+        setData({ books, book, bookName: book.title, missing: null })
         return
       }
 
@@ -268,20 +327,75 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
         return
       }
 
-      if (stableFocus.level === 'module') {
-        const currentModule = currentSeries.modules?.find((m) => m._id === stableFocus.moduleId)
+      // module or video — both need currentModule
+      const currentModule = currentSeries.modules?.find((m) => m._id === stableFocus.moduleId)
+      if (!currentModule) {
         setData({
           subject,
           packageDetail,
           currentSeries,
-          currentModule,
           subjectName,
           packageName: packageDetail.name,
           seriesName: currentSeries.name,
-          moduleName: currentModule?.name,
-          missing: currentModule ? null : 'module',
+          missing: 'module',
         })
+        return
       }
+
+      const baseModuleData = {
+        subject,
+        packageDetail,
+        currentSeries,
+        currentModule,
+        subjectName,
+        packageName: packageDetail.name,
+        seriesName: currentSeries.name,
+        moduleName: currentModule.name,
+      }
+
+      if (stableFocus.level === 'module') {
+        setData({ ...baseModuleData, missing: null })
+        return
+      }
+
+      // video level — pluck the video, then fetch its tags + reviews
+      const currentVideo = currentModule.videos?.find((v) => v._id === stableFocus.videoId)
+      if (!currentVideo) {
+        setData({ ...baseModuleData, missing: 'video' })
+        return
+      }
+
+      // Paint the video immediately; tags/reviews stream in after.
+      setData({ ...baseModuleData, currentVideo, videoName: currentVideo.title, missing: null })
+
+      const [tagsRes, reviewsRes] = await Promise.allSettled([
+        videosService.getVideoTags(currentVideo._id),
+        videoReviewsService.getVideoReviews(currentVideo._id, { limit: 100 }),
+      ])
+      if (fetchId !== fetchIdRef.current) return
+
+      const videoTags: VideoTag[] =
+        tagsRes.status === 'fulfilled' && tagsRes.value.success
+          ? ((tagsRes.value.data?.tags ?? tagsRes.value.data ?? []) as VideoTag[])
+          : []
+      const videoReviews: VideoReview[] =
+        reviewsRes.status === 'fulfilled' && reviewsRes.value.success && reviewsRes.value.data
+          ? reviewsRes.value.data.reviews
+          : []
+      const videoReviewsTotal =
+        reviewsRes.status === 'fulfilled' && reviewsRes.value.success && reviewsRes.value.data
+          ? reviewsRes.value.data.pagination.total
+          : 0
+
+      setData({
+        ...baseModuleData,
+        currentVideo,
+        videoName: currentVideo.title,
+        videoTags,
+        videoReviews,
+        videoReviewsTotal,
+        missing: null,
+      })
     } catch (err) {
       if (fetchId !== fetchIdRef.current) return
       const msg = err instanceof Error ? err.message : 'Failed to load'
