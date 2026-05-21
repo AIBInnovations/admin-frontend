@@ -31,7 +31,7 @@ interface SeriesChildrenProps {
   onRefresh?: () => void
 }
 
-export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: SeriesChildrenProps) {
+export function SeriesChildren({ series, loading, focus, onRefresh }: SeriesChildrenProps) {
   const [moduleSearch, setModuleSearch] = useState('')
   const [docSearch, setDocSearch] = useState('')
   const [docCreateOpen, setDocCreateOpen] = useState(false)
@@ -195,15 +195,13 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
               <Layers className="w-3.5 h-3.5" />
               Modules {modules.length > 0 && `(${modules.length})`}
             </TabsTrigger>
-            {isTheory && (
-              <TabsTrigger
-                value="documents"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                Documents {documents.length > 0 && `(${documents.length})`}
-              </TabsTrigger>
-            )}
+            <TabsTrigger
+              value="documents"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Documents {documents.length > 0 && `(${documents.length})`}
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -268,7 +266,6 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
           )}
         </TabsContent>
 
-        {isTheory && (
           <TabsContent value="documents" className="mt-0 flex-1">
             <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-slate-100">
               {filteredDocs.length > 0 && (
@@ -326,7 +323,6 @@ export function SeriesChildren({ series, loading, focus, isTheory, onRefresh }: 
               />
             )}
           </TabsContent>
-        )}
       </Tabs>
 
       <CreateDocumentDialog

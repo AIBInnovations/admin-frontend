@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, ListTree, Eye, EyeOff, Power } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Search, Plus, ListTree, FileText, Eye, EyeOff, Power } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { SeriesRow } from '../rows/SeriesRow'
+import { DocumentRow, type DocRowData } from '../rows/DocumentRow'
 import { SortableItem } from '../SortableItem'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
@@ -26,22 +28,14 @@ interface PackageChildrenProps {
   onRefresh?: () => void
 }
 
-function isTheoryPackage(pkg: PackageDetail): boolean {
-  if (!pkg.package_type_id) return false
-  if (typeof pkg.package_type_id === 'object') {
-    return pkg.package_type_id.name?.toLowerCase().includes('theory') ?? false
-  }
-  return false
-}
-
 export function PackageChildren({ packageDetail, loading, focus, onRefresh }: PackageChildrenProps) {
   const [search, setSearch] = useState('')
+  const [docSearch, setDocSearch] = useState('')
   const [localSeries, setLocalSeries] = useState<PackageDetailSeries[]>([])
   const selection = useSelection()
   const { select } = usePanelSelection()
 
   const series = packageDetail?.series ?? []
-  const isTheory = packageDetail ? isTheoryPackage(packageDetail) : false
   const packageId = focus.level === 'package' ? focus.packageId : packageDetail?._id ?? ''
   const newSeries = () => select({ kind: 'series', entity: null, ctx: { packageId } })
 
@@ -49,6 +43,18 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
 
   const displaySeries = localSeries.length > 0 ? localSeries : series
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+
+  // All documents across the package's series, tagged with their series name.
+  const allDocs = useMemo<DocRowData[]>(
+    () =>
+      series.flatMap((s) =>
+        (s.documents ?? []).map((d) => ({ ...d, series_id: { _id: s._id, name: s.name } })),
+      ),
+    [series],
+  )
+  const filteredDocs = allDocs.filter((d) =>
+    docSearch.length < 1 ? true : d.title.toLowerCase().includes(docSearch.toLowerCase()),
+  )
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -107,73 +113,111 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
   const filtered = displaySeries.filter((s) =>
     search.length < 1 ? true : s.name.toLowerCase().includes(search.toLowerCase()),
   )
-
   const filteredIds = filtered.map((s) => s._id)
 
   return (
     <>
-      <div>
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
-          {filtered.length > 0 && (
-            <input
-              type="checkbox"
-              checked={filteredIds.length > 0 && filteredIds.every((id) => selection.isSelected(id))}
-              onChange={() => selection.toggleAll(filteredIds)}
-              className="w-4 h-4 accent-primary cursor-pointer shrink-0"
-            />
-          )}
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9 h-8 text-sm"
-              placeholder="Search series…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button size="sm" className="gap-1.5 shrink-0" onClick={newSeries}>
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">New Series</span>
-          </Button>
+      <Tabs defaultValue="series" className="flex flex-col flex-1">
+        <div className="border-b border-slate-100">
+          <TabsList className="h-auto rounded-none bg-transparent border-b-0 px-4 sm:px-6 pt-1 gap-4">
+            <TabsTrigger
+              value="series"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
+            >
+              <ListTree className="w-3.5 h-3.5" />
+              Series {series.length > 0 && `(${series.length})`}
+            </TabsTrigger>
+            <TabsTrigger
+              value="documents"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Documents {allDocs.length > 0 && `(${allDocs.length})`}
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        {loading && !packageDetail ? (
-          <ChildrenListSkeleton />
-        ) : filtered.length > 0 ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={filtered.map((s) => s._id)} strategy={verticalListSortingStrategy}>
-              <div className="py-1.5">
-                {filtered.map((s) => (
-                  <SortableItem key={s._id} id={s._id}>
-                    {({ dragHandleProps, isDragging }) => (
-                      <SeriesRow
-                        series={s}
-                        parentFocus={focus}
-                        isTheory={isTheory}
-                        onRefresh={onRefresh}
-                        selected={selection.isSelected(s._id)}
-                        onSelect={selection.toggle}
-                        dragHandleProps={dragHandleProps}
-                        isDragging={isDragging}
-                      />
-                    )}
-                  </SortableItem>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          <ExplorerEmptyState
-            icon={ListTree}
-            title={search ? 'No series match' : 'No series yet'}
-            description={
-              search ? `No results for "${search}".` : 'Add your first series to this package.'
-            }
-            action={search ? undefined : { label: 'Create series', onClick: newSeries }}
-          />
-        )}
-      </div>
+        {/* Series */}
+        <TabsContent value="series" className="mt-0 flex-1">
+          <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
+            {filtered.length > 0 && (
+              <input
+                type="checkbox"
+                checked={filteredIds.length > 0 && filteredIds.every((id) => selection.isSelected(id))}
+                onChange={() => selection.toggleAll(filteredIds)}
+                className="w-4 h-4 accent-primary cursor-pointer shrink-0"
+              />
+            )}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input className="pl-9 h-8 text-sm" placeholder="Search series…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Button size="sm" className="gap-1.5 shrink-0" onClick={newSeries}>
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">New Series</span>
+            </Button>
+          </div>
+
+          {loading && !packageDetail ? (
+            <ChildrenListSkeleton />
+          ) : filtered.length > 0 ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={filtered.map((s) => s._id)} strategy={verticalListSortingStrategy}>
+                <div className="py-1.5">
+                  {filtered.map((s) => (
+                    <SortableItem key={s._id} id={s._id}>
+                      {({ dragHandleProps, isDragging }) => (
+                        <SeriesRow
+                          series={s}
+                          parentFocus={focus}
+                          onRefresh={onRefresh}
+                          selected={selection.isSelected(s._id)}
+                          onSelect={selection.toggle}
+                          dragHandleProps={dragHandleProps}
+                          isDragging={isDragging}
+                        />
+                      )}
+                    </SortableItem>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <ExplorerEmptyState
+              icon={ListTree}
+              title={search ? 'No series match' : 'No series yet'}
+              description={search ? `No results for "${search}".` : 'Add your first series to this package.'}
+              action={search ? undefined : { label: 'Create series', onClick: newSeries }}
+            />
+          )}
+        </TabsContent>
+
+        {/* Documents (aggregated across series) */}
+        <TabsContent value="documents" className="mt-0 flex-1">
+          <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input className="pl-9 h-8 text-sm" placeholder="Search documents…" value={docSearch} onChange={(e) => setDocSearch(e.target.value)} />
+            </div>
+          </div>
+
+          {filteredDocs.length > 0 ? (
+            <div className="py-1.5">
+              {filteredDocs.map((d) => <DocumentRow key={d._id} document={d} onRefresh={onRefresh} />)}
+            </div>
+          ) : (
+            <ExplorerEmptyState
+              icon={FileText}
+              title={docSearch ? 'No documents match' : 'No documents yet'}
+              description={
+                docSearch
+                  ? `No results for "${docSearch}".`
+                  : 'Documents added to this package’s series appear here. Add them from a series.'
+              }
+            />
+          )}
+        </TabsContent>
+      </Tabs>
 
       <ExplorerSelectionBar
         count={selection.count}

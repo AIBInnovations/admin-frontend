@@ -193,7 +193,7 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
               description={
                 docSearch
                   ? `No results for "${docSearch}".`
-                  : 'Subject-level documents attached to this subject appear here.'
+                  : 'Documents under this subject (including those inside its series) appear here.'
               }
               action={docSearch ? undefined : { label: 'Add document', onClick: () => setDocCreateOpen(true) }}
             />

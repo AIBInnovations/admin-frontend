@@ -227,10 +227,11 @@ export function useExplorerData(focus: ExplorerFocus): ExplorerData {
             page: 1,
             limit: 200,
           } as Parameters<typeof packagesService.getAll>[0]),
+          // All documents under this subject (they carry a denormalized
+          // subject_id even when nested in a series), not just orphan ones.
           documentsService.getAll({
             subject_id: stableFocus.subjectId,
-            series_id: 'null',
-            limit: 200,
+            limit: 500,
           }),
         ])
         if (fetchId !== fetchIdRef.current) return

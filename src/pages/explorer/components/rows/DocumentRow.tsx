@@ -27,6 +27,12 @@ export interface DocRowData {
   download_count: number
   publish_status?: 'draft' | 'published'
   source_book_id?: unknown
+  /** Populated when the doc is listed outside its own series (e.g. subject tab). */
+  series_id?: { _id: string; name: string } | string | null
+}
+
+function seriesName(series: DocRowData['series_id']): string | null {
+  return series && typeof series === 'object' && 'name' in series ? series.name : null
 }
 
 interface DocumentRowProps {
@@ -92,6 +98,9 @@ export function DocumentRow({ document: doc, onRefresh, selected, onSelect, drag
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
           <div className="flex items-center gap-2 mt-0.5">
+            {seriesName(doc.series_id) && (
+              <span className="text-xs text-slate-500 font-medium truncate max-w-32">{seriesName(doc.series_id)}</span>
+            )}
             <span className="text-xs text-slate-400">{sizeLabel}</span>
             {doc.page_count != null && (
               <span className="text-xs text-slate-400">{doc.page_count} pages</span>
