@@ -330,6 +330,8 @@ export function SeriesChildren({ series, loading, focus, onRefresh }: SeriesChil
         onClose={() => setDocCreateOpen(false)}
         onSuccess={() => { setDocCreateOpen(false); onRefresh?.() }}
         seriesId={seriesId}
+        seriesName={series?.name}
+        subjectId={'subjectId' in focus ? focus.subjectId : undefined}
       />
 
       <ExplorerSelectionBar

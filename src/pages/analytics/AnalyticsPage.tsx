@@ -6,20 +6,42 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  Users, TrendingUp, Eye, ArrowUpRight, Loader2,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  Users, TrendingUp, Eye, ArrowUpRight, Loader2, Clock,
 } from 'lucide-react'
-import { analyticsService, DashboardAnalytics } from '@/services/analytics.service'
+import { analyticsService, DashboardAnalytics, AnalyticsRange } from '@/services/analytics.service'
 import { toast } from 'sonner'
+
+const RANGE_LABELS: Record<AnalyticsRange, string> = {
+  week: 'Past week',
+  month: 'Past month',
+  year: 'Past year',
+  all: 'All time',
+}
+
+// Format watch-time seconds into a compact human string.
+function formatWatch(seconds: number): string {
+  if (!seconds || seconds < 1) return '—'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
 
 export function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [range, setRange] = useState<AnalyticsRange>('month')
 
   useEffect(() => {
     async function fetchAnalytics() {
       try {
         setLoading(true)
-        const response = await analyticsService.getDashboard()
+        const response = await analyticsService.getDashboard(range)
         if (response.success && response.data) {
           setAnalytics(response.data)
         }
@@ -30,9 +52,9 @@ export function AnalyticsPage() {
       }
     }
     fetchAnalytics()
-  }, [])
+  }, [range])
 
-  if (loading) {
+  if (loading && !analytics) {
     return (
       <div>
         <PageHeader
@@ -71,6 +93,22 @@ export function AnalyticsPage() {
         description="Platform performance, user engagement, and content metrics"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Analytics' }]}
       />
+
+      {/* Date-range selector — drives Events + Most Viewed Videos */}
+      <div className="mb-6 flex items-center justify-end gap-3">
+        <span className="text-sm text-muted-foreground">Events &amp; most-viewed for:</span>
+        <Select value={range} onValueChange={(v) => setRange(v as AnalyticsRange)}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="week">Past week</SelectItem>
+            <SelectItem value="month">Past month</SelectItem>
+            <SelectItem value="year">Past year</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* KPI Cards */}
       <div className="mb-8 grid grid-cols-4 gap-4">
@@ -142,12 +180,12 @@ export function AnalyticsPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Events (Last 30 Days)</CardTitle>
+            <CardTitle className="text-sm font-semibold">Events ({RANGE_LABELS[range]})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {events.last_30_days.length > 0 ? (
-                events.last_30_days.map((event) => (
+              {events.by_range.length > 0 ? (
+                events.by_range.map((event) => (
                   <div key={event.event_type} className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground capitalize">
                       {event.event_type.replace(/_/g, ' ')}
@@ -208,14 +246,16 @@ export function AnalyticsPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Most Viewed Videos</CardTitle>
+            <CardTitle className="text-sm font-semibold">Most Viewed Videos ({RANGE_LABELS[range]})</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Video</TableHead>
-                  <TableHead>Views</TableHead>
+                  <TableHead className="text-right">Plays</TableHead>
+                  <TableHead className="text-right">Unique</TableHead>
+                  <TableHead className="text-right">Avg watch</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -231,16 +271,28 @@ export function AnalyticsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-end gap-1">
                           <Eye className="h-3 w-3 text-muted-foreground" />
                           <span className="text-sm">{video.view_count.toLocaleString('en-IN')}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm">{video.unique_viewer_count.toLocaleString('en-IN')}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm">{formatWatch(video.avg_watch_seconds)}</span>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={2} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
                       No data available
                     </TableCell>
                   </TableRow>

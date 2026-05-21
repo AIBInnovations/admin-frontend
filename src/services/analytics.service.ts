@@ -1,5 +1,8 @@
 import { apiService, ApiResponse } from './api.service'
 
+// Date-range presets for events + most-viewed analytics
+export type AnalyticsRange = 'week' | 'month' | 'year' | 'all'
+
 // Types
 export interface DashboardAnalytics {
   users: {
@@ -15,7 +18,10 @@ export interface DashboardAnalytics {
     most_viewed_videos: Array<{
       video_id: string
       title: string
-      view_count: number
+      view_count: number // plays
+      unique_viewer_count: number
+      total_watch_seconds: number
+      avg_watch_seconds: number
       thumbnail_url: string | null
     }>
     popular_subjects: Array<{
@@ -26,7 +32,8 @@ export interface DashboardAnalytics {
     }>
   }
   events: {
-    last_30_days: Array<{
+    range: AnalyticsRange
+    by_range: Array<{
       event_type: string
       count: number
     }>
@@ -34,8 +41,8 @@ export interface DashboardAnalytics {
 }
 
 class AnalyticsService {
-  async getDashboard(): Promise<ApiResponse<DashboardAnalytics>> {
-    return apiService.get<DashboardAnalytics>('admin/analytics/dashboard')
+  async getDashboard(range: AnalyticsRange = 'month'): Promise<ApiResponse<DashboardAnalytics>> {
+    return apiService.get<DashboardAnalytics>(`admin/analytics/dashboard?range=${range}`)
   }
 }
 

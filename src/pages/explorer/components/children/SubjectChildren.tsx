@@ -206,6 +206,7 @@ export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDo
         onClose={() => setDocCreateOpen(false)}
         onSuccess={() => { setDocCreateOpen(false); onRefresh?.() }}
         subjectId={subjectId}
+        packageOptions={(packages ?? []).map((p) => ({ _id: p._id, name: p.name }))}
       />
 
       <ExplorerSelectionBar

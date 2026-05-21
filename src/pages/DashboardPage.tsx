@@ -53,7 +53,8 @@ export function DashboardPage() {
     async function fetchDashboard() {
       try {
         setLoading(true)
-        const response = await analyticsService.getDashboard()
+        // 'all' = lifetime/backfilled most-viewed (range presets are post-deploy only)
+        const response = await analyticsService.getDashboard('all')
         if (response.success && response.data) {
           setAnalytics(response.data)
         }

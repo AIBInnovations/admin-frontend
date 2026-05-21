@@ -33,8 +33,9 @@ export function SubjectRow({ subject, parentFocus, onRefresh }: SubjectRowProps)
   return (
     <>
       <div
-        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${isOpen ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group select-none ${isOpen ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}
         onClick={openInPanel}
+        onDoubleClick={() => navigate(drillUrl)}
       >
         <Avatar className="w-9 h-9 rounded-lg shrink-0">
           {subject.icon_url && <AvatarImage src={subject.icon_url} alt={subject.name} />}

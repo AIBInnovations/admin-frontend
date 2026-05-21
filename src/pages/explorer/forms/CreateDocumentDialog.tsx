@@ -7,20 +7,46 @@ import { FileUploadField } from '../media/FileUploadField'
 import { useExplorerMutation } from '../hooks/useExplorerMutation'
 import { documentsService } from '@/services/documents.service'
 import { booksService, type Book } from '@/services/books.service'
+import { seriesService } from '@/services/series.service'
+
+interface RefLite {
+  _id: string
+  name: string
+}
 
 interface CreateDocumentDialogProps {
   open: boolean
   onClose: () => void
   onSuccess: () => void
-  /** Where the document attaches. */
+  /** Subject in context — always sent as subject_id. */
   subjectId?: string
+  /** Locked series (series-level context). */
   seriesId?: string
+  seriesName?: string
+  /** Pick a series (package-level context). */
+  seriesOptions?: RefLite[]
+  /** Pick a package → then a series (subject-level context). */
+  packageOptions?: RefLite[]
 }
 
 type Mode = 'upload' | 'link'
 
-export function CreateDocumentDialog({ open, onClose, onSuccess, subjectId, seriesId }: CreateDocumentDialogProps) {
+/**
+ * Create a document. A document always belongs to a SERIES (that's what the
+ * student app shows + how the old CMS works), so the dialog resolves a
+ * series_id one of three ways: locked, series-picker, or package→series-picker.
+ * subject_id is auto-sent from the in-context subject.
+ */
+export function CreateDocumentDialog({
+  open, onClose, onSuccess, subjectId, seriesId, seriesName, seriesOptions, packageOptions,
+}: CreateDocumentDialogProps) {
   const [mode, setMode] = useState<Mode>('upload')
+
+  // series resolution
+  const [pickedPackageId, setPickedPackageId] = useState('')
+  const [pickedSeriesId, setPickedSeriesId] = useState('')
+  const [loadedSeries, setLoadedSeries] = useState<RefLite[]>([])
+  const [loadingSeries, setLoadingSeries] = useState(false)
 
   // upload mode
   const [title, setTitle] = useState('')
@@ -36,18 +62,30 @@ export function CreateDocumentDialog({ open, onClose, onSuccess, subjectId, seri
   useEffect(() => {
     if (!open) return
     setMode('upload'); setTitle(''); setDescription(''); setIsFree(false); setFile(null); setProgress(0); setBookId('')
+    setPickedPackageId(''); setPickedSeriesId(''); setLoadedSeries([])
     booksService.getAll({ limit: 500 }).then((res) => {
-      if (res.success && res.data) {
-        setEbooks(res.data.entities.filter((b) => b.ebook && b.ebook_file_url))
-      }
+      if (res.success && res.data) setEbooks(res.data.entities.filter((b) => b.ebook && b.ebook_file_url))
     })
   }, [open])
+
+  // Subject context: load series for the chosen package.
+  useEffect(() => {
+    if (!pickedPackageId) { setLoadedSeries([]); setPickedSeriesId(''); return }
+    setLoadingSeries(true)
+    setPickedSeriesId('')
+    seriesService.getAll({ package_id: pickedPackageId, limit: 200 }).then((res) => {
+      if (res.success && res.data) setLoadedSeries(res.data.entities.map((s) => ({ _id: s._id, name: s.name })))
+    }).finally(() => setLoadingSeries(false))
+  }, [pickedPackageId])
+
+  const effectiveSeriesId = seriesId ?? pickedSeriesId
+  const hasSeries = !!effectiveSeriesId
 
   const uploadMutation = useExplorerMutation({
     name: 'Upload document',
     fn: () =>
       documentsService.upload(
-        { title: title.trim(), description: description.trim() || undefined, subject_id: subjectId, series_id: seriesId, is_free: isFree },
+        { title: title.trim(), description: description.trim() || undefined, series_id: effectiveSeriesId, subject_id: subjectId, is_free: isFree },
         file as File,
         (p) => setProgress(p),
       ),
@@ -57,18 +95,18 @@ export function CreateDocumentDialog({ open, onClose, onSuccess, subjectId, seri
 
   const linkMutation = useExplorerMutation({
     name: 'Link eBook as document',
-    fn: () => documentsService.createLinked({ source_book_id: bookId, subject_id: subjectId, series_id: seriesId, is_free: isFree }),
+    fn: () => documentsService.createLinked({ source_book_id: bookId, series_id: effectiveSeriesId, subject_id: subjectId, is_free: isFree }),
     onSuccess: () => { onClose(); onSuccess() },
     successMessage: 'Document created from eBook',
   })
 
   const busy = uploadMutation.loading || linkMutation.loading
-  const canUpload = title.trim().length >= 2 && !!file
-  const canLink = !!bookId
+  const canUpload = hasSeries && title.trim().length >= 2 && !!file
+  const canLink = hasSeries && !!bookId
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !busy && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-120">
         <DialogHeader>
           <DialogTitle>New document</DialogTitle>
         </DialogHeader>
@@ -87,10 +125,41 @@ export function CreateDocumentDialog({ open, onClose, onSuccess, subjectId, seri
         </div>
 
         <div className="space-y-4 py-1">
+          {/* Series target */}
+          {seriesId ? (
+            <PanelField label="Series">
+              <div className="h-9 flex items-center px-3 rounded-md bg-slate-50 ring-1 ring-slate-200 text-sm text-slate-600">
+                {seriesName ?? 'This series'}
+              </div>
+            </PanelField>
+          ) : packageOptions ? (
+            <>
+              <PanelField label="Package" required>
+                <PanelSelect value={pickedPackageId} onChange={setPickedPackageId}>
+                  <option value="">Select a package…</option>
+                  {packageOptions.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                </PanelSelect>
+              </PanelField>
+              <PanelField label="Series" required>
+                <PanelSelect value={pickedSeriesId} onChange={setPickedSeriesId} disabled={!pickedPackageId || loadingSeries}>
+                  <option value="">{loadingSeries ? 'Loading…' : pickedPackageId ? 'Select a series…' : 'Pick a package first'}</option>
+                  {loadedSeries.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                </PanelSelect>
+              </PanelField>
+            </>
+          ) : (
+            <PanelField label="Series" required>
+              <PanelSelect value={pickedSeriesId} onChange={setPickedSeriesId}>
+                <option value="">Select a series…</option>
+                {(seriesOptions ?? []).map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              </PanelSelect>
+            </PanelField>
+          )}
+
           {mode === 'upload' ? (
             <>
               <PanelField label="Title" required htmlFor="cd-title">
-                <PanelText id="cd-title" value={title} onChange={setTitle} placeholder="Document title" autoFocus />
+                <PanelText id="cd-title" value={title} onChange={setTitle} placeholder="Document title" />
               </PanelField>
               <PanelField label="Description" htmlFor="cd-desc">
                 <PanelTextarea id="cd-desc" value={description} onChange={setDescription} />

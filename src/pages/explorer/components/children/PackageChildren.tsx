@@ -12,6 +12,7 @@ import { SortableItem } from '../SortableItem'
 import { ExplorerEmptyState } from '../ExplorerEmptyState'
 import { ChildrenListSkeleton } from '../ExplorerSkeleton'
 import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
+import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
 import { usePanelSelection } from '../../context/PanelSelectionContext'
 import { useSelection } from '../../hooks/useSelection'
 import { useExplorerMutation } from '../../hooks/useExplorerMutation'
@@ -31,12 +32,14 @@ interface PackageChildrenProps {
 export function PackageChildren({ packageDetail, loading, focus, onRefresh }: PackageChildrenProps) {
   const [search, setSearch] = useState('')
   const [docSearch, setDocSearch] = useState('')
+  const [docAddSeries, setDocAddSeries] = useState<{ id: string; name: string } | null>(null)
   const [localSeries, setLocalSeries] = useState<PackageDetailSeries[]>([])
   const selection = useSelection()
   const { select } = usePanelSelection()
 
   const series = packageDetail?.series ?? []
   const packageId = focus.level === 'package' ? focus.packageId : packageDetail?._id ?? ''
+  const subjectId = 'subjectId' in focus ? focus.subjectId : undefined
   const newSeries = () => select({ kind: 'series', entity: null, ctx: { packageId } })
 
   useEffect(() => { setLocalSeries([]) }, [packageId])
@@ -44,17 +47,21 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
   const displaySeries = localSeries.length > 0 ? localSeries : series
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  // All documents across the package's series, tagged with their series name.
-  const allDocs = useMemo<DocRowData[]>(
+  // Documents grouped by their series (mirrors the old Package Detail page),
+  // each row tagged with the series name. Empty series still render so an
+  // admin can add the first document.
+  const totalDocs = useMemo(() => series.reduce((n, s) => n + (s.documents?.length ?? 0), 0), [series])
+  const docGroups = useMemo(
     () =>
-      series.flatMap((s) =>
-        (s.documents ?? []).map((d) => ({ ...d, series_id: { _id: s._id, name: s.name } })),
-      ),
-    [series],
+      series.map((s) => ({
+        series: s,
+        docs: (s.documents ?? [])
+          .filter((d) => (docSearch.length < 1 ? true : d.title.toLowerCase().includes(docSearch.toLowerCase())))
+          .map((d) => ({ ...d, series_id: { _id: s._id, name: s.name } }) as DocRowData),
+      })),
+    [series, docSearch],
   )
-  const filteredDocs = allDocs.filter((d) =>
-    docSearch.length < 1 ? true : d.title.toLowerCase().includes(docSearch.toLowerCase()),
-  )
+  const anyMatch = docGroups.some((g) => g.docs.length > 0)
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -132,7 +139,7 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
             >
               <FileText className="w-3.5 h-3.5" />
-              Documents {allDocs.length > 0 && `(${allDocs.length})`}
+              Documents {totalDocs > 0 && `(${totalDocs})`}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -192,7 +199,7 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
           )}
         </TabsContent>
 
-        {/* Documents (aggregated across series) */}
+        {/* Documents grouped by series, each with its own Add */}
         <TabsContent value="documents" className="mt-0 flex-1">
           <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
             <div className="relative flex-1 max-w-sm">
@@ -201,23 +208,54 @@ export function PackageChildren({ packageDetail, loading, focus, onRefresh }: Pa
             </div>
           </div>
 
-          {filteredDocs.length > 0 ? (
-            <div className="py-1.5">
-              {filteredDocs.map((d) => <DocumentRow key={d._id} document={d} onRefresh={onRefresh} />)}
-            </div>
-          ) : (
+          {series.length === 0 ? (
             <ExplorerEmptyState
               icon={FileText}
-              title={docSearch ? 'No documents match' : 'No documents yet'}
-              description={
-                docSearch
-                  ? `No results for "${docSearch}".`
-                  : 'Documents added to this package’s series appear here. Add them from a series.'
-              }
+              title="No series yet"
+              description="Add a series first — documents are attached to a series."
             />
+          ) : docSearch && !anyMatch ? (
+            <ExplorerEmptyState icon={FileText} title="No documents match" description={`No results for "${docSearch}".`} />
+          ) : (
+            <div className="py-2">
+              {docGroups
+                .filter((g) => !docSearch || g.docs.length > 0)
+                .map(({ series: s, docs }) => (
+                  <div key={s._id} className="mb-1">
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">{s.name}</span>
+                        <span className="text-[11px] text-slate-300">{docs.length}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1.5 text-xs text-slate-500 hover:text-slate-800"
+                        onClick={() => setDocAddSeries({ id: s._id, name: s.name })}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Document
+                      </Button>
+                    </div>
+                    {docs.length > 0 ? (
+                      docs.map((d) => <DocumentRow key={d._id} document={d} onRefresh={onRefresh} />)
+                    ) : (
+                      <p className="px-4 sm:px-5 pb-2 text-xs text-slate-300">No documents in this series.</p>
+                    )}
+                  </div>
+                ))}
+            </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <CreateDocumentDialog
+        open={!!docAddSeries}
+        onClose={() => setDocAddSeries(null)}
+        onSuccess={() => { setDocAddSeries(null); onRefresh?.() }}
+        seriesId={docAddSeries?.id}
+        seriesName={docAddSeries?.name}
+        subjectId={subjectId}
+      />
 
       <ExplorerSelectionBar
         count={selection.count}

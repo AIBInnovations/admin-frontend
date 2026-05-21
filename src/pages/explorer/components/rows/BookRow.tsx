@@ -35,8 +35,9 @@ export function BookRow({ book }: BookRowProps) {
   return (
     <>
       <div
-        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group ${isOpen ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}
+        className={`flex items-center gap-3 px-3 py-2.5 mx-2 my-0.5 rounded-xl transition-colors cursor-pointer group select-none ${isOpen ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}
         onClick={openInPanel}
+        onDoubleClick={() => navigate(`${EXPLORER_BASE}/books/${book._id}`)}
       >
         <Avatar className="w-9 h-12 rounded-md shrink-0">
           {book.thumbnail_url && <AvatarImage src={book.thumbnail_url} alt={book.title} className="object-cover" />}
