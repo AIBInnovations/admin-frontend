@@ -8,15 +8,31 @@ import { ReviewListItem } from '@/components/videoReviews/ReviewListItem'
 import { VideoReviewCard } from '@/components/videoReviews/VideoReviewCard'
 import { TeacherReviewCard } from '@/components/videoReviews/TeacherReviewCard'
 import { ReviewDrillDownView } from '@/components/videoReviews/ReviewDrillDownView'
+import { SearchWithFilters } from '@/components/common/SearchBar/SearchWithFilters'
+import type { FilterConfig } from '@/components/common/SearchBar/types'
 import {
   videoReviewsService,
   type VideoReview,
   type VideoSummary,
   type TeacherSummary,
 } from '@/services/videoReviews.service'
+import { subjectsService } from '@/services/subjects.service'
+import { packagesService } from '@/services/packages.service'
+import { seriesService } from '@/services/series.service'
+import { modulesService } from '@/services/modules.service'
 import type { ViewMode } from '@/components/videoReviews/ViewModeToggle'
 import { toast } from 'sonner'
 import { Search, MessageSquare } from 'lucide-react'
+
+// Minimal option shape for filter dropdowns
+type FilterOption = { _id: string; name: string }
+
+const SORT_OPTIONS = [
+  { label: 'Default (latest reviewed)', value: 'default' },
+  { label: 'Upload date (newest)', value: 'upload_date' },
+  { label: 'Most views', value: 'most_views' },
+  { label: 'Most rated', value: 'most_rated' },
+]
 
 // ─── Drill-down state ─────────────────────────────────────────────────────────
 
@@ -101,6 +117,100 @@ export function VideoReviewsPage() {
   const [videoSummaries, setVideoSummaries] = useState<VideoSummary[]>([])
   const [teacherSummaries, setTeacherSummaries] = useState<TeacherSummary[]>([])
 
+  // ── By-video filters + sort ──────────────────────────────────────────────────
+  const [subjectFilter, setSubjectFilter] = useState('all')
+  const [packageFilter, setPackageFilter] = useState('all')
+  const [seriesFilter, setSeriesFilter] = useState('all')
+  const [moduleFilter, setModuleFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('default')
+
+  // Cascading option lists (subject -> package -> series -> module)
+  const [subjects, setSubjects] = useState<FilterOption[]>([])
+  const [packages, setPackages] = useState<FilterOption[]>([])
+  const [seriesList, setSeriesList] = useState<FilterOption[]>([])
+  const [modules, setModules] = useState<FilterOption[]>([])
+
+  // Load subjects once
+  useEffect(() => {
+    subjectsService
+      .getSubjects({ limit: 200, sort_by: 'name', sort_order: 'asc' })
+      .then((r) => r.success && r.data && setSubjects(r.data.entities))
+      .catch(() => {})
+  }, [])
+
+  // Packages depend on selected subject
+  useEffect(() => {
+    packagesService
+      .getAll({ limit: 200, subject_id: subjectFilter !== 'all' ? subjectFilter : undefined })
+      .then((r) => r.success && r.data && setPackages(r.data.entities))
+      .catch(() => {})
+  }, [subjectFilter])
+
+  // Series depend on selected package
+  useEffect(() => {
+    seriesService
+      .getAll({ limit: 300, package_id: packageFilter !== 'all' ? packageFilter : undefined })
+      .then((r) => r.success && r.data && setSeriesList(r.data.entities))
+      .catch(() => {})
+  }, [packageFilter])
+
+  // Modules depend on selected series
+  useEffect(() => {
+    modulesService
+      .getAll({ limit: 500, series_id: seriesFilter !== 'all' ? seriesFilter : undefined })
+      .then((r) => r.success && r.data && setModules(r.data.entities))
+      .catch(() => {})
+  }, [seriesFilter])
+
+  // Reset child filters when a parent changes
+  const handleFiltersChange = (f: Record<string, string>) => {
+    if (f.subject !== subjectFilter) {
+      setSubjectFilter(f.subject)
+      setPackageFilter('all')
+      setSeriesFilter('all')
+      setModuleFilter('all')
+    } else if (f.package !== packageFilter) {
+      setPackageFilter(f.package)
+      setSeriesFilter('all')
+      setModuleFilter('all')
+    } else if (f.series !== seriesFilter) {
+      setSeriesFilter(f.series)
+      setModuleFilter('all')
+    } else if (f.module !== moduleFilter) {
+      setModuleFilter(f.module)
+    } else if (f.sort !== sortBy) {
+      setSortBy(f.sort)
+    }
+  }
+
+  const byVideoFilters: FilterConfig[] = [
+    {
+      key: 'subject', label: 'Subject', type: 'select', searchable: true, defaultValue: 'all',
+      placeholder: 'Subject',
+      options: [{ label: 'All subjects', value: 'all' }, ...subjects.map((s) => ({ label: s.name, value: s._id }))],
+    },
+    {
+      key: 'package', label: 'Package', type: 'select', searchable: true, defaultValue: 'all',
+      placeholder: 'Package',
+      options: [{ label: 'All packages', value: 'all' }, ...packages.map((p) => ({ label: p.name, value: p._id }))],
+    },
+    {
+      key: 'series', label: 'Series', type: 'select', searchable: true, defaultValue: 'all',
+      placeholder: 'Series',
+      options: [{ label: 'All series', value: 'all' }, ...seriesList.map((s) => ({ label: s.name, value: s._id }))],
+    },
+    {
+      key: 'module', label: 'Module', type: 'select', searchable: true, defaultValue: 'all',
+      placeholder: 'Module',
+      options: [{ label: 'All modules', value: 'all' }, ...modules.map((m) => ({ label: m.name, value: m._id }))],
+    },
+    {
+      key: 'sort', label: 'Sort', type: 'select', searchable: false, defaultValue: 'default',
+      placeholder: 'Sort',
+      options: SORT_OPTIONS,
+    },
+  ]
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -114,7 +224,17 @@ export function VideoReviewsPage() {
           toast.error(res.message || 'Failed to load reviews')
         }
       } else if (viewMode === 'by-video') {
-        const res = await videoReviewsService.getByVideo({ page, limit: 12, search: search || undefined })
+        const res = await videoReviewsService.getByVideo({
+          page,
+          limit: 12,
+          search: search || undefined,
+          subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
+          package_id: packageFilter !== 'all' ? packageFilter : undefined,
+          series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
+          module_id: moduleFilter !== 'all' ? moduleFilter : undefined,
+          sort_by: sortBy !== 'default' ? sortBy : undefined,
+          sort_order: 'desc',
+        })
         if (res.success && res.data) {
           setVideoSummaries(res.data.videos)
           setTotalPages(res.data.pagination.totalPages)
@@ -137,7 +257,7 @@ export function VideoReviewsPage() {
     } finally {
       setLoading(false)
     }
-  }, [viewMode, page, search])
+  }, [viewMode, page, search, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy])
 
   useEffect(() => {
     if (drillDown.type === 'none') {
@@ -145,10 +265,10 @@ export function VideoReviewsPage() {
     }
   }, [fetchData, drillDown.type])
 
-  // Reset page when mode or search changes
+  // Reset page when mode, search, filters or sort change
   useEffect(() => {
     setPage(1)
-  }, [viewMode, search])
+  }, [viewMode, search, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy])
 
   const handleModeChange = (mode: ViewMode) => {
     setViewMode(mode)
@@ -190,28 +310,48 @@ export function VideoReviewsPage() {
         ]}
       />
 
-      {/* Toolbar: mode toggle + search */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <ViewModeToggle value={viewMode} onChange={handleModeChange} />
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={
-              viewMode === 'list'
-                ? 'Search by user, teacher, video, package...'
-                : viewMode === 'by-video'
-                ? 'Search by video title, teacher, package...'
-                : 'Search by teacher name...'
-            }
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9"
-          />
+      {/* Toolbar: mode toggle + search/filters */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <ViewModeToggle value={viewMode} onChange={handleModeChange} />
+          {viewMode !== 'by-video' && (
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={
+                  viewMode === 'list'
+                    ? 'Search by user, teacher, video, package...'
+                    : 'Search by teacher name...'
+                }
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+          )}
+          {!loading && (
+            <p className="text-xs text-muted-foreground shrink-0 sm:ml-auto">
+              {total} {total === 1 ? 'result' : 'results'}
+            </p>
+          )}
         </div>
-        {!loading && (
-          <p className="text-xs text-muted-foreground shrink-0 sm:ml-auto">
-            {total} {total === 1 ? 'result' : 'results'}
-          </p>
+
+        {/* By-video: search + cascading filters (subject/package/series/module) + sort */}
+        {viewMode === 'by-video' && (
+          <SearchWithFilters
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by video title, teacher, package..."
+            filters={byVideoFilters}
+            activeFilters={{
+              subject: subjectFilter,
+              package: packageFilter,
+              series: seriesFilter,
+              module: moduleFilter,
+              sort: sortBy,
+            }}
+            onFiltersChange={handleFiltersChange}
+          />
         )}
       </div>
 

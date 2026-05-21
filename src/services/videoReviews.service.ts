@@ -15,6 +15,11 @@ export interface ReviewVideo {
   title: string
   thumbnail_url: string | null
   duration_seconds: number
+  // View metrics (present on by-video summaries)
+  view_count?: number
+  unique_viewer_count?: number
+  total_watch_seconds?: number
+  createdAt?: string
 }
 
 export interface ReviewFaculty {
@@ -117,6 +122,11 @@ export interface ReviewListParams extends BaseListParams {
 
 export interface ByVideoParams extends BaseListParams {
   faculty_id?: string
+  subject_id?: string
+  package_id?: string
+  series_id?: string
+  module_id?: string
+  // sort_by: 'default' | 'upload_date' | 'most_views' | 'most_rated' (via BaseListParams.sort_by)
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────

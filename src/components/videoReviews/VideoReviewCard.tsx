@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
 import { StarDisplay } from './StarDisplay'
 import type { VideoSummary } from '@/services/videoReviews.service'
-import { Video as VideoIcon, MessageSquare, Star } from 'lucide-react'
+import { Video as VideoIcon, MessageSquare, Star, Eye, Users, Clock } from 'lucide-react'
 
 interface VideoReviewCardProps {
   summary: VideoSummary
@@ -17,6 +17,17 @@ function getInitials(name?: string | null) {
     .map((w) => w[0])
     .join('')
     .toUpperCase()
+}
+
+// Compact watch-time formatter (avg seconds per unique viewer).
+function formatWatch(seconds: number): string {
+  if (!seconds || seconds < 1) return '—'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m`
+  return `${s}s`
 }
 
 export function VideoReviewCard({ summary, onClick }: VideoReviewCardProps) {
@@ -80,6 +91,27 @@ export function VideoReviewCard({ summary, onClick }: VideoReviewCardProps) {
           <span className="flex items-center gap-0.5">
             <MessageSquare className="h-3 w-3" />
             {summary.feedback_count}
+          </span>
+        </div>
+
+        {/* View metrics: plays / unique viewers / avg watch time */}
+        <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1" title="Plays">
+            <Eye className="h-3 w-3" />
+            {(summary.video.view_count ?? 0).toLocaleString('en-IN')}
+          </span>
+          <span className="flex items-center gap-1" title="Unique viewers">
+            <Users className="h-3 w-3" />
+            {(summary.video.unique_viewer_count ?? 0).toLocaleString('en-IN')}
+          </span>
+          <span className="flex items-center gap-1" title="Avg watch time per viewer">
+            <Clock className="h-3 w-3" />
+            {formatWatch(
+              Math.round(
+                (summary.video.total_watch_seconds ?? 0) /
+                  Math.max(summary.video.unique_viewer_count ?? 0, 1)
+              )
+            )}
           </span>
         </div>
       </CardContent>

@@ -35,7 +35,9 @@ function formatWatch(seconds: number): string {
 export function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [range, setRange] = useState<AnalyticsRange>('month')
+  // Default to all-time so the page shows backfilled history immediately; narrower ranges
+  // (week/month/year) are event-derived and only have data after the new backend is live.
+  const [range, setRange] = useState<AnalyticsRange>('all')
 
   useEffect(() => {
     async function fetchAnalytics() {
