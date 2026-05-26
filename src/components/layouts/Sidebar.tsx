@@ -69,6 +69,7 @@ const navigation: NavItem[] = [
     icon: Users,
     children: [
       { name: 'All Users', href: '/users', permission: 'users.read' },
+      { name: 'Subscriptions', href: '/users/subscriptions', permission: 'users.read' },
       { name: 'Grant Access', href: '/users/grant-access', permission: 'users.update' },
       { name: 'Email Excluded', href: '/users/email-excluded', permission: 'users.read' },
     ],

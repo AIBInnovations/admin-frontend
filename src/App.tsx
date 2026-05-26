@@ -13,6 +13,7 @@ import { UsersPage } from '@/pages/users/UsersPage'
 import { UserDetailPage } from '@/pages/users/UserDetailPage'
 import { GrantAccessPage } from '@/pages/users/GrantAccessPage'
 import { ExcludedUsersPage } from '@/pages/users/ExcludedUsersPage'
+import { SubscriptionsPage } from '@/pages/subscriptions/SubscriptionsPage'
 import { SubjectsPage } from '@/pages/content/SubjectsPage'
 import { SubjectDetailPage } from '@/pages/content/SubjectDetailPage'
 import { PackagesPage } from '@/pages/content/PackagesPage'
@@ -76,6 +77,7 @@ function App() {
               {/* Users */}
               <Route element={<ProtectedRoute requiredPermission="users.read" />}>
                 <Route path="/users" element={<UsersPage />} />
+                <Route path="/users/subscriptions" element={<SubscriptionsPage />} />
                 <Route path="/users/email-excluded" element={<ExcludedUsersPage />} />
                 <Route path="/users/:userId" element={<UserDetailPage />} />
                 {/* Exports use users.read on the backend */}
