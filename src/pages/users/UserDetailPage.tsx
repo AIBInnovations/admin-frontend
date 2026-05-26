@@ -18,7 +18,7 @@ import {
   UserCircle, ShieldBan, ShieldCheck, Loader2,
   Phone, Mail, MailX, MapPin, Calendar, GraduationCap, Globe, Smartphone,
   Monitor, Tablet, CreditCard, Package, Settings, BookOpen,
-  Video, ShoppingBag, Truck, Edit, Gift, Ban,
+  Video, ShoppingBag, Truck, Edit, Gift, Ban, CalendarClock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -38,10 +38,15 @@ import { UserFormModal } from '@/components/users/UserFormModal'
 import { GrantPackageModal } from '@/components/users/GrantPackageModal'
 import { GrantEbookModal } from '@/components/users/GrantEbookModal'
 import { GrantSessionModal } from '@/components/users/GrantSessionModal'
+import { ExtendValidityDrawer } from '@/pages/subscriptions/components/ExtendValidityDrawer'
+import type { SubscriptionRecord } from '@/services/subscriptions.service'
+import { useAuth } from '@/contexts/AuthContext'
 
 export function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canExtend = hasPermission('users.update')
 
   const [user, setUser] = useState<UserDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -51,6 +56,7 @@ export function UserDetailPage() {
   const [showGrantEbookModal, setShowGrantEbookModal] = useState(false)
   const [showGrantSessionModal, setShowGrantSessionModal] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<UserPurchase | null>(null)
+  const [extendTarget, setExtendTarget] = useState<UserPurchase | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [revoking, setRevoking] = useState(false)
   const [revokeEbookTarget, setRevokeEbookTarget] = useState<EbookPurchase | null>(null)
@@ -550,7 +556,7 @@ export function UserDetailPage() {
                     <TableHead className="w-28">Purchased</TableHead>
                     <TableHead className="w-28">Expires</TableHead>
                     <TableHead className="w-20">Active</TableHead>
-                    <TableHead className="w-20"></TableHead>
+                    <TableHead className="w-44"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -587,17 +593,30 @@ export function UserDetailPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {purchase.is_active && purchase.payment_status === 'completed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => setRevokeTarget(purchase)}
-                          >
-                            <Ban className="mr-1 h-3 w-3" />
-                            Revoke
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                          {!purchase.is_revoked && purchase.payment_status === 'completed' && canExtend && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setExtendTarget(purchase)}
+                            >
+                              <CalendarClock className="mr-1 h-3 w-3" />
+                              Extend
+                            </Button>
+                          )}
+                          {purchase.is_active && purchase.payment_status === 'completed' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setRevokeTarget(purchase)}
+                            >
+                              <Ban className="mr-1 h-3 w-3" />
+                              Revoke
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -981,6 +1000,40 @@ export function UserDetailPage() {
           userName={user.name || user.phone_number}
         />
       )}
+
+      {/* Extend Validity Drawer (slides from left) */}
+      <ExtendValidityDrawer
+        record={
+          extendTarget && user
+            ? {
+                purchase_id: extendTarget._id,
+                type: 'package',
+                expires_at: extendTarget.expires_at,
+                purchased_at: extendTarget.purchased_at,
+                is_active: extendTarget.is_active,
+                is_admin_granted: !!extendTarget.is_admin_granted,
+                tier_name: (extendTarget as { tier_name?: string | null }).tier_name ?? null,
+                amount_paid: extendTarget.amount_paid,
+                currency: extendTarget.currency,
+                extendable: true,
+                item_name:
+                  typeof extendTarget.package_id === 'object' && extendTarget.package_id
+                    ? extendTarget.package_id.name
+                    : 'Package',
+                user: {
+                  _id: user._id,
+                  name: user.name || user.phone_number || 'User',
+                  email: user.email || '',
+                  phone_number: user.phone_number || '',
+                  photo_url: (user as { photo_url?: string | null }).photo_url ?? null,
+                },
+              } satisfies SubscriptionRecord
+            : null
+        }
+        canExtend={canExtend}
+        onClose={() => setExtendTarget(null)}
+        onExtended={() => { setExtendTarget(null); fetchUser() }}
+      />
 
       {/* Revoke Package Confirmation */}
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => { if (!open && !revoking) { setRevokeTarget(null); setRevokeReason('') } }}>

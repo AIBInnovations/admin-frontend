@@ -213,6 +213,10 @@ export function SubscriptionsPage() {
             ))}
           </select>
         )}
+
+        {debouncedSearch && (
+          <span className="text-xs text-slate-400 shrink-0">Searching all subscriptions</span>
+        )}
       </div>
     </div>
   )
