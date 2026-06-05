@@ -81,6 +81,22 @@ class ExportsService {
     )
     return res.data!
   }
+
+  async formSubmissions(formId: string) {
+    return apiService.downloadBlob(
+      `${BASE_PATH}/form-submissions`,
+      { form_id: formId },
+      'form_submissions.xlsx',
+    )
+  }
+
+  async previewFormSubmissions(formId: string): Promise<ExportPreviewData> {
+    const res = await apiService.get<ExportPreviewData>(
+      `${BASE_PATH}/form-submissions`,
+      { params: { form_id: formId, format: 'json' } },
+    )
+    return res.data!
+  }
 }
 
 export const exportsService = new ExportsService()

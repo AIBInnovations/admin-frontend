@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
   Download, BookOpen, CalendarDays, Package as PackageIcon, BookText,
-  Check, ChevronsUpDown, Loader2, Eye, X, Users,
+  FileText, Check, ChevronsUpDown, Loader2, Eye, X, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { exportsService, ExportPreviewData, PreviewColumn } from '@/services/exports.service'
@@ -25,6 +25,7 @@ import { seriesService, Series } from '@/services/series.service'
 import { modulesService, Module as ModuleType } from '@/services/modules.service'
 import { documentsService, Document as DocumentType } from '@/services/documents.service'
 import { booksService, Book } from '@/services/books.service'
+import { formsService, Form } from '@/services/forms.service'
 import { DataTable } from '@/components/common/DataTable/DataTable'
 import type { ColumnDef } from '@/components/common/DataTable/types'
 
@@ -78,6 +79,7 @@ export function ExportsPage() {
         <SessionExportCard onView={handleView} />
         <PackageExportCard onView={handleView} />
         <EbookExportCard onView={handleView} />
+        <FormExportCard onView={handleView} />
       </div>
 
       {viewData && (
@@ -607,6 +609,88 @@ function EbookExportCard({
         viewing={viewing}
         downloading={downloading}
         disabled={!bookId}
+      />
+    </ExportCard>
+  )
+}
+
+/* -------- Form submissions export -------- */
+
+function FormExportCard({
+  onView,
+}: {
+  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
+}) {
+  const [forms, setForms] = useState<Form[]>([])
+  const [loadingList, setLoadingList] = useState(false)
+  const [formId, setFormId] = useState<string>('')
+  const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
+
+  useEffect(() => {
+    setLoadingList(true)
+    formsService
+      .getAll({ limit: 1000 })
+      .then((res) => {
+        if (res.success && res.data) setForms(res.data.entities || [])
+      })
+      .catch((err) => handleError(err, 'Failed to load forms'))
+      .finally(() => setLoadingList(false))
+  }, [])
+
+  const selectedForm = forms.find((f) => f._id === formId)
+
+  const handleDownload = async () => {
+    if (!formId) return
+    try {
+      setDownloading(true)
+      await exportsService.formSubmissions(formId)
+      toast.success('Export downloaded')
+    } catch (err) {
+      handleError(err, 'Failed to download export')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleView = async () => {
+    if (!formId) return
+    setViewing(true)
+    await onView(
+      'Form Submissions',
+      selectedForm?.title ?? '',
+      () => exportsService.previewFormSubmissions(formId),
+    )
+    setViewing(false)
+  }
+
+  return (
+    <ExportCard
+      icon={FileText}
+      title="Form Submissions"
+      description="All submissions for a form, one column per field, with payment status."
+    >
+      <div className="space-y-2">
+        <Label>Form</Label>
+        <Combobox
+          options={forms.map((f) => ({
+            value: f._id,
+            label: f.title,
+            hint: typeof f.subject_id === 'object' && f.subject_id ? f.subject_id.name : undefined,
+          }))}
+          value={formId}
+          onChange={setFormId}
+          placeholder={loadingList ? 'Loading...' : 'Select a form'}
+          searchPlaceholder="Search forms..."
+          emptyText="No forms found"
+        />
+      </div>
+      <ExportActions
+        onView={handleView}
+        onDownload={handleDownload}
+        viewing={viewing}
+        downloading={downloading}
+        disabled={!formId}
       />
     </ExportCard>
   )
