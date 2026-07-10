@@ -179,9 +179,11 @@ export function SendNotificationTab() {
     if (clickAction === 'live_session') {
       if (navSessions.length === 0) {
         setNavSessionsLoading(true)
-        liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any)
+        liveSessionsService.getAll({ limit: 100, publish_status: 'published' })
           .then((res) => {
-            if (res.success && res.data) setNavSessions(res.data.entities || [])
+            if (res.success && res.data) {
+              setNavSessions((res.data.entities || []).filter((s) => s.status === 'scheduled' || s.status === 'live'))
+            }
           })
           .catch(() => toast.error('Failed to load sessions'))
           .finally(() => setNavSessionsLoading(false))
@@ -923,12 +925,14 @@ export function SendNotificationTab() {
                       </SelectTrigger>
                       <SelectContent>
                         {navSessions.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No scheduled sessions found</div>
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No upcoming or live sessions found</div>
                         ) : (
                           navSessions.map((session) => (
                             <SelectItem key={session._id} value={session._id}>
                               {session.title}
-                              {session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
+                              {session.status === 'live'
+                                ? ' — Live now'
+                                : session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
                             </SelectItem>
                           ))
                         )}

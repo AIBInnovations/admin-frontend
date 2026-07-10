@@ -225,8 +225,8 @@ export function HomeSectionItemFormModal({
 
     // Fetch live sessions
     setSessionsLoading(true)
-    liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any).then(res => {
-      if (res.success && res.data) setSessions(res.data.entities || [])
+    liveSessionsService.getAll({ limit: 100, publish_status: 'published' }).then(res => {
+      if (res.success && res.data) setSessions((res.data.entities || []).filter((s: LiveSession) => s.status === 'scheduled' || s.status === 'live'))
     }).catch(() => {}).finally(() => setSessionsLoading(false))
   }, [open])
 

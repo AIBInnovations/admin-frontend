@@ -174,9 +174,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const fetchSessions = async () => {
     setSessionsLoading(true)
     try {
-      const response = await liveSessionsService.getAll({ limit: 100, status: 'scheduled' } as any)
+      const response = await liveSessionsService.getAll({ limit: 100, publish_status: 'published' })
       if (response.success && response.data) {
-        setSessions(response.data.entities || [])
+        setSessions((response.data.entities || []).filter((s) => s.status === 'scheduled' || s.status === 'live'))
       }
     } catch {
       console.error('Failed to fetch sessions')
