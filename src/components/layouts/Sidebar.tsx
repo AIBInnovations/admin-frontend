@@ -104,6 +104,7 @@ const navigation: NavItem[] = [
       { name: 'Purchases', href: '/commerce/purchases', permission: 'payments.read' },
       { name: 'Payments', href: '/commerce/payments', permission: 'payments.read' },
       { name: 'Invoices', href: '/commerce/invoices', permission: 'invoices.read' },
+      { name: 'Coupons', href: '/commerce/coupons', permission: 'coupons.read' },
       { name: 'Book Orders', href: '/commerce/book-orders', permission: 'book_orders.read' },
       { name: 'Revenue', href: '/commerce/revenue', permission: 'analytics.read' },
     ],

@@ -42,6 +42,7 @@ import { BannersPage } from '@/pages/content/BannersPage'
 import { HomeSectionsPage } from '@/pages/content/HomeSectionsPage'
 import { HomeSectionDetailPage } from '@/pages/content/HomeSectionDetailPage'
 import { InvoicesPage } from '@/pages/commerce/InvoicesPage'
+import { CouponsPage } from '@/pages/commerce/CouponsPage'
 import { PackageTypesPage } from '@/pages/content/PackageTypesPage'
 import { RecordingsPage } from '@/pages/content/RecordingsPage'
 import { VideoReviewsPage } from '@/pages/content/VideoReviewsPage'
@@ -153,6 +154,9 @@ function App() {
               </Route>
               <Route element={<ProtectedRoute requiredPermission="invoices.read" />}>
                 <Route path="/commerce/invoices" element={<InvoicesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute requiredPermission="coupons.read" />}>
+                <Route path="/commerce/coupons" element={<CouponsPage />} />
               </Route>
               <Route element={<ProtectedRoute requiredPermission="analytics.read" />}>
                 <Route path="/commerce/revenue" element={<RevenuePage />} />

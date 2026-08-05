@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { analyticsService, DashboardAnalytics } from '@/services/analytics.service'
+import { ZohoSyncCard } from '@/components/dashboard/ZohoSyncCard'
 import { toast } from 'sonner'
 
 interface StatCardProps {
@@ -205,6 +206,9 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Zoho Price Sync */}
+      <ZohoSyncCard />
     </div>
   )
 }
