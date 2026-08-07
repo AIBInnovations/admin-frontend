@@ -20,7 +20,7 @@ const AVAILABLE_PERMISSIONS = [
   { group: 'Documents', permissions: ['documents.read', 'documents.create', 'documents.update', 'documents.delete'] },
   { group: 'Faculty', permissions: ['faculty.read', 'faculty.create', 'faculty.update', 'faculty.delete'] },
   { group: 'Sessions', permissions: ['live_sessions.read', 'live_sessions.create', 'live_sessions.update', 'live_sessions.delete'] },
-  { group: 'Commerce', permissions: ['payments.read', 'books.read', 'books.create', 'books.update', 'books.delete'] },
+  { group: 'Commerce', permissions: ['payments.read', 'invoices.read', 'invoices.create', 'invoices.update', 'coupons.read', 'coupons.create', 'coupons.update', 'coupons.delete', 'book_orders.read', 'book_orders.update', 'books.read', 'books.create', 'books.update', 'books.delete'] },
   { group: 'Admin', permissions: ['admin_users.read', 'admin_users.create', 'admin_users.update', 'admin_users.delete', 'admin_roles.read', 'admin_roles.create', 'admin_roles.update', 'admin_roles.delete'] },
   { group: 'Analytics', permissions: ['analytics.read'] },
 ]
