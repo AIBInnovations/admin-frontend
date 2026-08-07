@@ -18,6 +18,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/admin-frontend
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
             pm2 restart admin-frontend --update-env
             pm2 save
+            echo "Deployed commit: $(git rev-parse --short HEAD)"
