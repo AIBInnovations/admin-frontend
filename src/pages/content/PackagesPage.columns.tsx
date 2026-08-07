@@ -41,9 +41,19 @@ export function usePackagesColumns({
           </div>
           <div>
             <p className="text-sm font-medium">{pkg.name}</p>
-            <Badge variant="outline" className="mt-0.5 text-[10px]">
-              {typeof pkg.package_type_id === 'object' ? pkg.package_type_id.name : '—'}
-            </Badge>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              <Badge variant="outline" className="text-[10px]">
+                {typeof pkg.package_type_id === 'object' ? pkg.package_type_id.name : '—'}
+              </Badge>
+              {pkg.bundled_package_ids && pkg.bundled_package_ids.length > 0 && (
+                <Badge
+                  className="bg-violet-500/10 text-[10px] text-violet-700 hover:bg-violet-500/10"
+                  title={`Bundles: ${pkg.bundled_package_ids.map((b) => b.name).join(', ')}`}
+                >
+                  Combo: {pkg.bundled_package_ids.map((b) => b.name).join(', ')}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       ),

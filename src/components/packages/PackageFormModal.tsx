@@ -19,7 +19,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, ImageIcon, Film } from 'lucide-react'
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, ImageIcon, Film, X } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { MarqueeText } from '@/components/common/MarqueeText'
 import { Package, PackageFormData, packagesService } from '@/services/packages.service'
@@ -56,6 +57,7 @@ const packageSchema = z.object({
   is_active: z.boolean(),
   publish_status: z.enum(['draft', 'published']),
   tiers: z.array(tierSchema),
+  bundled_package_ids: z.array(z.string()),
 }).refine(
   (data) => {
     if (!data.is_on_sale) return true
@@ -84,6 +86,7 @@ interface PackageFormModalProps {
 export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSubjectId }: PackageFormModalProps) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
+  const [bundlablePackages, setBundlablePackages] = useState<Package[]>([])
   const [trailerFile, setTrailerFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [videoLecturesThumbnailFile, setVideoLecturesThumbnailFile] = useState<File | null>(null)
@@ -92,6 +95,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const [isReplacingTrailer, setIsReplacingTrailer] = useState(false)
   const [subjectPopoverOpen, setSubjectPopoverOpen] = useState(false)
   const [typePopoverOpen, setTypePopoverOpen] = useState(false)
+  const [bundlePopoverOpen, setBundlePopoverOpen] = useState(false)
 
   const {
     register, handleSubmit, control,
@@ -106,6 +110,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       duration_days: 365, features: '', rich_description: '', display_order: 0, is_active: true,
       publish_status: 'draft' as const,
       tiers: [],
+      bundled_package_ids: [],
     },
   })
 
@@ -118,6 +123,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
   const isActive = watch('is_active')
   const tiers = watch('tiers')
   const hasTiers = tiers.length > 0
+  const bundledPackageIds = watch('bundled_package_ids')
 
   // Fetch dropdown data
   useEffect(() => {
@@ -128,8 +134,17 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
       packageTypesService.getAllPublic().then((res) => {
         if (res.success && res.data) setPackageTypes(res.data)
       })
+      // Packages this one can bundle: everyone except itself and any package
+      // that's already a combo (no nested combos — mirrors backend validation).
+      packagesService.getAll({ limit: 200, sort_by: 'name', sort_order: 'asc' }).then((res) => {
+        if (res.success && res.data) {
+          setBundlablePackages(
+            res.data.entities.filter((p) => p._id !== pkg?._id && (p.bundled_package_ids || []).length === 0)
+          )
+        }
+      })
     }
-  }, [open])
+  }, [open, pkg?._id])
 
   // Reset form
   useEffect(() => {
@@ -166,6 +181,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           is_active: pkg.is_active,
           publish_status: pkg.publish_status || 'draft',
           tiers: existingTiers,
+          bundled_package_ids: (pkg.bundled_package_ids || []).map((p) => typeof p === 'object' ? p._id : p),
         })
       } else {
         reset({
@@ -175,6 +191,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
           duration_days: 365, features: '', rich_description: '', display_order: 0, is_active: true,
           publish_status: 'draft' as const,
           tiers: [],
+          bundled_package_ids: [],
         })
       }
     }
@@ -219,6 +236,7 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
         tiers: data.tiers.length > 0
           ? data.tiers.map((t, i) => ({ ...t, original_price: t.original_price || null, display_order: t.display_order || i }))
           : [],
+        bundled_package_ids: data.bundled_package_ids || [],
       }
 
       // Sale pricing: multi-tier uses discount %, single-tier uses absolute sale_price
@@ -417,6 +435,80 @@ export function PackageFormModal({ open, onClose, onSubmit, pkg, mode, defaultSu
                 />
                 {errors.package_type_id && <p className="text-sm text-red-500">{errors.package_type_id.message}</p>}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Bundles These Packages (Combo)</Label>
+              <Controller
+                name="bundled_package_ids" control={control}
+                render={({ field }) => (
+                  <>
+                    <Popover open={bundlePopoverOpen} onOpenChange={setBundlePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline" role="combobox"
+                          disabled={isSubmitting}
+                          className="w-full justify-between font-normal h-9"
+                        >
+                          {field.value.length > 0 ? `${field.value.length} package${field.value.length > 1 ? 's' : ''} selected` : 'None (not a combo)'}
+                          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[320px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search packages..." />
+                          <CommandList>
+                            <CommandEmpty>No packages found.</CommandEmpty>
+                            <CommandGroup>
+                              {bundlablePackages.map((p) => {
+                                const selected = field.value.includes(p._id)
+                                return (
+                                  <CommandItem
+                                    key={p._id}
+                                    value={p.name}
+                                    onSelect={() => {
+                                      field.onChange(
+                                        selected
+                                          ? field.value.filter((id) => id !== p._id)
+                                          : [...field.value, p._id]
+                                      )
+                                    }}
+                                  >
+                                    <Check className={cn('mr-2 h-4 w-4', selected ? 'opacity-100' : 'opacity-0')} />
+                                    {p.name}
+                                  </CommandItem>
+                                )
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {bundledPackageIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {bundledPackageIds.map((id) => {
+                          const p = bundlablePackages.find((bp) => bp._id === id)
+                          return (
+                            <Badge key={id} variant="secondary" className="gap-1 font-normal">
+                              {p?.name || id}
+                              <button
+                                type="button"
+                                onClick={() => field.onChange(field.value.filter((v) => v !== id))}
+                                className="hover:text-red-500"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. If set, purchasing this package also grants access to every package selected here — e.g. a "Theory + Practical" combo bundling the standalone Theory and Practical packages.
+              </p>
             </div>
 
             <div className="space-y-2">

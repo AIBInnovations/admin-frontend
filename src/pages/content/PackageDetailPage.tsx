@@ -510,6 +510,20 @@ export function PackageDetailPage() {
                   </p>
                   <p className="mt-0.5 font-medium">{packageTypeName}</p>
                 </div>
+                {pkg.bundled_package_ids && pkg.bundled_package_ids.length > 0 && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Layers className="h-3.5 w-3.5" /> Bundles (Combo)
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {pkg.bundled_package_ids.map((b) => (
+                        <Badge key={b._id} variant="secondary" className="text-[10px] font-normal">
+                          {b.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <IndianRupee className="h-3.5 w-3.5" /> Price

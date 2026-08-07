@@ -35,6 +35,9 @@ export interface Package {
   publish_status: PublishStatus
   display_order: number
   tiers: PackageTier[]
+  // Other packages this package bundles into a "combo". Populated as
+  // {_id, name, ...} objects on GET; sent as an array of IDs on write.
+  bundled_package_ids: PopulatedRef[]
   series_count?: number
   createdAt: string
   updatedAt: string
@@ -134,6 +137,7 @@ export interface PackageFormData {
   is_active?: boolean
   publish_status?: PublishStatus
   tiers?: PackageTier[]
+  bundled_package_ids?: string[]
 }
 
 export interface PackagesListParams extends BaseListParams {
