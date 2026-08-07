@@ -33,6 +33,7 @@ const schema = z
     per_user_limit: z.number().int().min(0).optional().or(z.nan()),
     expiry_at: z.string().optional().or(z.literal('')),
     is_active: z.boolean(),
+    is_visible: z.boolean(),
   })
   .refine((d) => d.discount_type !== 'percentage' || d.discount_value <= 100, {
     message: 'Percentage discount cannot exceed 100',
@@ -64,7 +65,7 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
       code: '', description: '', discount_type: 'percentage', discount_value: undefined as unknown as number,
       max_discount_cap: undefined, applies_to: 'all', applicable_types: [],
       min_order_value: undefined, max_redemptions: undefined, per_user_limit: undefined,
-      expiry_at: '', is_active: true,
+      expiry_at: '', is_active: true, is_visible: false,
     },
   })
 
@@ -72,6 +73,7 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
   const appliesTo = watch('applies_to')
   const applicableTypes = watch('applicable_types') || []
   const isActive = watch('is_active')
+  const isVisible = watch('is_visible')
 
   const [applicableProducts, setApplicableProducts] = useState<(CouponApplicableProduct & { label?: string })[]>([])
   const [productError, setProductError] = useState<string | null>(null)
@@ -92,13 +94,14 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
         per_user_limit: coupon.per_user_limit ?? undefined,
         expiry_at: coupon.expiry_at ? coupon.expiry_at.split('T')[0] : '',
         is_active: coupon.is_active,
+        is_visible: coupon.is_visible,
       })
     } else {
       reset({
         code: '', description: '', discount_type: 'percentage', discount_value: undefined as unknown as number,
         max_discount_cap: undefined, applies_to: 'all', applicable_types: [],
         min_order_value: undefined, max_redemptions: undefined, per_user_limit: undefined,
-        expiry_at: '', is_active: true,
+        expiry_at: '', is_active: true, is_visible: false,
       })
     }
     setProductError(null)
@@ -137,6 +140,7 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
         per_user_limit: numOrUndef(data.per_user_limit) ?? null,
         expiry_at: data.expiry_at ? data.expiry_at : null,
         is_active: data.is_active,
+        is_visible: data.is_visible,
       }
       await onSubmit(payload)
       onClose()
@@ -273,6 +277,17 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
               <p className="text-sm text-muted-foreground">{isActive ? 'Coupon can be redeemed' : 'Coupon is disabled'}</p>
             </div>
             <Switch id="is_active" checked={isActive} onCheckedChange={(c) => setValue('is_active', c)} disabled={isSubmitting} />
+          </div>
+
+          {/* Visible on checkout */}
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="is_visible" className="text-base">Show on Checkout</Label>
+              <p className="text-sm text-muted-foreground">
+                {isVisible ? 'Listed as a suggestion on the checkout page for eligible products' : 'Hidden — customers must already know the code'}
+              </p>
+            </div>
+            <Switch id="is_visible" checked={isVisible} onCheckedChange={(c) => setValue('is_visible', c)} disabled={isSubmitting} />
           </div>
 
           <DialogFooter>

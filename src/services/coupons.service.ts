@@ -29,6 +29,7 @@ export interface Coupon {
   per_user_limit: number | null
   expiry_at: string | null
   is_active: boolean
+  is_visible: boolean
   createdAt: string
   updatedAt: string
 }
@@ -47,6 +48,7 @@ export interface CouponFormData {
   per_user_limit?: number | null
   expiry_at?: string | null
   is_active?: boolean
+  is_visible?: boolean
 }
 
 export interface CouponsListParams extends BaseListParams {

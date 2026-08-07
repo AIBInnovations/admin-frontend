@@ -90,9 +90,16 @@ export function useCouponsColumns({ onEdit, onToggle, onDelete }: CouponsColumns
       header: 'Status',
       width: 'w-24',
       cell: (c) => (
-        <Badge className={`text-[10px] ${c.is_active ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' : 'bg-red-500/10 text-red-600 border-red-200'}`}>
-          {c.is_active ? 'Active' : 'Inactive'}
-        </Badge>
+        <div className="flex flex-wrap gap-1">
+          <Badge className={`text-[10px] ${c.is_active ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' : 'bg-red-500/10 text-red-600 border-red-200'}`}>
+            {c.is_active ? 'Active' : 'Inactive'}
+          </Badge>
+          {c.is_visible && (
+            <Badge className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-200" title="Shown on checkout">
+              Visible
+            </Badge>
+          )}
+        </div>
       ),
     },
     {
