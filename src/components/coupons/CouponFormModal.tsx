@@ -18,6 +18,7 @@ import {
   Coupon, CouponFormData, CouponProductType, CouponApplicableProduct, COUPON_PRODUCT_TYPES,
 } from '@/services/coupons.service'
 import { CouponProductPicker } from './CouponProductPicker'
+import { CouponCustomerPicker, PickerUser } from './CouponCustomerPicker'
 
 const schema = z
   .object({
@@ -34,6 +35,7 @@ const schema = z
     expiry_at: z.string().optional().or(z.literal('')),
     is_active: z.boolean(),
     is_visible: z.boolean(),
+    customer_scope: z.enum(['all', 'specific']),
   })
   .refine((d) => d.discount_type !== 'percentage' || d.discount_value <= 100, {
     message: 'Percentage discount cannot exceed 100',
@@ -65,7 +67,7 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
       code: '', description: '', discount_type: 'percentage', discount_value: undefined as unknown as number,
       max_discount_cap: undefined, applies_to: 'all', applicable_types: [],
       min_order_value: undefined, max_redemptions: undefined, per_user_limit: undefined,
-      expiry_at: '', is_active: true, is_visible: false,
+      expiry_at: '', is_active: true, is_visible: false, customer_scope: 'all',
     },
   })
 
@@ -74,9 +76,12 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
   const applicableTypes = watch('applicable_types') || []
   const isActive = watch('is_active')
   const isVisible = watch('is_visible')
+  const customerScope = watch('customer_scope')
 
   const [applicableProducts, setApplicableProducts] = useState<(CouponApplicableProduct & { label?: string })[]>([])
   const [productError, setProductError] = useState<string | null>(null)
+  const [applicableUsers, setApplicableUsers] = useState<PickerUser[]>([])
+  const [customerError, setCustomerError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -95,19 +100,26 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
         expiry_at: coupon.expiry_at ? coupon.expiry_at.split('T')[0] : '',
         is_active: coupon.is_active,
         is_visible: coupon.is_visible,
+        customer_scope: coupon.customer_scope || 'all',
       })
     } else {
       reset({
         code: '', description: '', discount_type: 'percentage', discount_value: undefined as unknown as number,
         max_discount_cap: undefined, applies_to: 'all', applicable_types: [],
         min_order_value: undefined, max_redemptions: undefined, per_user_limit: undefined,
-        expiry_at: '', is_active: true, is_visible: false,
+        expiry_at: '', is_active: true, is_visible: false, customer_scope: 'all',
       })
     }
     setProductError(null)
     setApplicableProducts(
       mode === 'edit' && coupon && coupon.applies_to === 'products'
         ? (coupon.applicable_products || []).map((p) => ({ product_type: p.product_type, product_id: p.product_id }))
+        : [],
+    )
+    setCustomerError(null)
+    setApplicableUsers(
+      mode === 'edit' && coupon && coupon.customer_scope === 'specific'
+        ? (coupon.applicable_users || []).map((u) => ({ id: u._id, label: u.name || u.email, sublabel: u.email || u.phone_number }))
         : [],
     )
   }, [open, mode, coupon, reset])
@@ -121,6 +133,10 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
   const handleFormSubmit = async (data: CouponFormValues) => {
     if (data.applies_to === 'products' && applicableProducts.length === 0) {
       setProductError('Select at least one product')
+      return
+    }
+    if (data.customer_scope === 'specific' && applicableUsers.length === 0) {
+      setCustomerError('Select at least one customer')
       return
     }
     try {
@@ -141,6 +157,8 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
         expiry_at: data.expiry_at ? data.expiry_at : null,
         is_active: data.is_active,
         is_visible: data.is_visible,
+        customer_scope: data.customer_scope,
+        applicable_users: data.customer_scope === 'specific' ? applicableUsers.map((u) => u.id) : [],
       }
       await onSubmit(payload)
       onClose()
@@ -248,6 +266,32 @@ export function CouponFormModal({ open, onClose, onSubmit, coupon, mode }: Coupo
               </div>
             )}
             {errors.applicable_types && <p className="text-sm text-red-500">{errors.applicable_types.message as string}</p>}
+          </div>
+
+          {/* Customer eligibility */}
+          <div className="space-y-2">
+            <Label>Customer Eligibility</Label>
+            <Select
+              value={customerScope}
+              onValueChange={(v) => setValue('customer_scope', v as 'all' | 'specific', { shouldValidate: true })}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All customers</SelectItem>
+                <SelectItem value="specific">Specific customers only</SelectItem>
+              </SelectContent>
+            </Select>
+            {customerScope === 'specific' && (
+              <div className="pt-1">
+                <CouponCustomerPicker
+                  value={applicableUsers}
+                  onChange={(v) => { setApplicableUsers(v); setCustomerError(null) }}
+                  disabled={isSubmitting}
+                />
+                {customerError && <p className="text-sm text-red-500 mt-1">{customerError}</p>}
+              </div>
+            )}
           </div>
 
           {/* Constraints */}

@@ -13,6 +13,16 @@ export interface CouponApplicableProduct {
   product_id: string
 }
 
+export type CouponCustomerScope = 'all' | 'specific'
+
+export interface CouponApplicableUser {
+  _id: string
+  name: string
+  email: string
+  phone_number?: string
+  student_id?: string | null
+}
+
 export interface Coupon {
   _id: string
   code: string
@@ -30,6 +40,8 @@ export interface Coupon {
   expiry_at: string | null
   is_active: boolean
   is_visible: boolean
+  customer_scope: CouponCustomerScope
+  applicable_users: CouponApplicableUser[]
   createdAt: string
   updatedAt: string
 }
@@ -49,6 +61,8 @@ export interface CouponFormData {
   expiry_at?: string | null
   is_active?: boolean
   is_visible?: boolean
+  customer_scope?: CouponCustomerScope
+  applicable_users?: string[]
 }
 
 export interface CouponsListParams extends BaseListParams {

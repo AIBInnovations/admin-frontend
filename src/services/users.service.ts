@@ -412,6 +412,23 @@ class UsersService {
     const query = this.buildQuery(params as Record<string, unknown>)
     return apiService.get<ListResponse<User>>(`${this.basePath}/email-excluded${query}`)
   }
+
+  /**
+   * Lightweight name/email/phone/student-id search for picker UIs
+   * (e.g. targeting a coupon at specific customers).
+   */
+  async searchLite(params: { search?: string; limit?: number } = {}): Promise<ApiResponse<{ users: UserLite[] }>> {
+    const query = this.buildQuery(params as Record<string, unknown>)
+    return apiService.get<{ users: UserLite[] }>(`${this.basePath}/search${query}`)
+  }
+}
+
+export interface UserLite {
+  _id: string
+  name: string
+  email: string
+  phone_number: string
+  student_id?: string | null
 }
 
 export const usersService = new UsersService()

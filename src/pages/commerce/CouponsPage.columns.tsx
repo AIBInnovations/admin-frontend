@@ -99,6 +99,14 @@ export function useCouponsColumns({ onEdit, onToggle, onDelete }: CouponsColumns
               Visible
             </Badge>
           )}
+          {c.customer_scope === 'specific' && (
+            <Badge
+              className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-200"
+              title={`Restricted to: ${(c.applicable_users || []).map((u) => u.name || u.email).join(', ')}`}
+            >
+              {(c.applicable_users || []).length} customer{(c.applicable_users || []).length === 1 ? '' : 's'} only
+            </Badge>
+          )}
         </div>
       ),
     },
