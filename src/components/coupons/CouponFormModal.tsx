@@ -28,7 +28,7 @@ const schema = z
     discount_value: z.number().min(0, 'Enter a valid discount amount'),
     max_discount_cap: z.number().min(0).optional().or(z.nan()),
     applies_to: z.enum(['all', 'type', 'products']),
-    applicable_types: z.array(z.enum(['package', 'session', 'ebook', 'book', 'form'])).optional(),
+    applicable_types: z.array(z.enum(['package', 'session', 'workshop', 'ebook', 'book', 'form'])).optional(),
     min_order_value: z.number().min(0).optional().or(z.nan()),
     max_redemptions: z.number().int().min(0).optional().or(z.nan()),
     per_user_limit: z.number().int().min(0).optional().or(z.nan()),

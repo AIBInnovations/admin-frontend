@@ -1,6 +1,6 @@
 import { apiService } from './api.service'
 
-export type EntityType = 'package' | 'series' | 'module' | 'video' | 'document' | 'livesession' | 'book' | 'form' | 'banner' | 'homesection'
+export type EntityType = 'package' | 'series' | 'module' | 'video' | 'document' | 'livesession' | 'workshop' | 'book' | 'form' | 'banner' | 'homesection'
 
 export interface PublishInfo {
   entity: { name: string; publish_status: string; is_active: boolean }

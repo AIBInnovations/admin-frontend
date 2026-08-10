@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { X, Search, Plus } from 'lucide-react'
 import { packagesService } from '@/services/packages.service'
 import { liveSessionsService } from '@/services/liveSessions.service'
+import { workshopsService } from '@/services/workshops.service'
 import { booksService } from '@/services/books.service'
 import { formsService } from '@/services/forms.service'
 import { CouponApplicableProduct, CouponProductType } from '@/services/coupons.service'
@@ -21,6 +22,7 @@ interface CouponProductPickerProps {
 const TYPE_LABELS: Record<CouponProductType, string> = {
   package: 'Package',
   session: 'Live Session',
+  workshop: 'Workshop',
   ebook: 'E-book',
   book: 'Physical Book',
   form: 'Form',
@@ -36,6 +38,13 @@ async function fetchProducts(type: CouponProductType, search: string): Promise<{
   if (type === 'session') {
     res = await liveSessionsService.getAll(params)
     return (res.data?.entities || []).map((s: any) => ({ id: s._id, label: s.title }))
+  }
+  if (type === 'workshop') {
+    res = await workshopsService.getAll(params)
+    return (res.data?.entities || []).map((w: any) => ({
+      id: w._id,
+      label: `${w.title} (${w.day_count} day${w.day_count === 1 ? '' : 's'})`,
+    }))
   }
   if (type === 'form') {
     res = await formsService.getAll(params)

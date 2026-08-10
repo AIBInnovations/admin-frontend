@@ -4,9 +4,9 @@ import type { ListResponse, BaseListParams } from '@/types/api.types'
 
 export type CouponDiscountType = 'percentage' | 'flat'
 export type CouponAppliesTo = 'all' | 'type' | 'products'
-export type CouponProductType = 'package' | 'session' | 'ebook' | 'book' | 'form'
+export type CouponProductType = 'package' | 'session' | 'workshop' | 'ebook' | 'book' | 'form'
 
-export const COUPON_PRODUCT_TYPES: CouponProductType[] = ['package', 'session', 'ebook', 'book', 'form']
+export const COUPON_PRODUCT_TYPES: CouponProductType[] = ['package', 'session', 'workshop', 'ebook', 'book', 'form']
 
 export interface CouponApplicableProduct {
   product_type: CouponProductType

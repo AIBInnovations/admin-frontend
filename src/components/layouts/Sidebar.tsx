@@ -9,6 +9,7 @@ import {
   Video,
   ShoppingBag,
   Calendar,
+  CalendarRange,
   BarChart3,
   Bell,
   Settings,
@@ -96,6 +97,7 @@ const navigation: NavItem[] = [
     ],
   },
   { name: 'Live Sessions', href: '/sessions', icon: Calendar, permission: 'live_sessions.read' },
+  { name: 'Workshops', href: '/workshops', icon: CalendarRange, permission: 'live_sessions.read' },
   { name: 'Faculty', href: '/faculty', icon: GraduationCap, permission: 'faculty.read' },
   {
     name: 'Commerce',

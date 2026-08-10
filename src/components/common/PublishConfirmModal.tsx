@@ -37,6 +37,7 @@ function formatEntityType(type: string): string {
     video: 'Video',
     document: 'Document',
     livesession: 'Live Session',
+    workshop: 'Workshop',
     book: 'Book',
     form: 'Form',
     banner: 'Banner',

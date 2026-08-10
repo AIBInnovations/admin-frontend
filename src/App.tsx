@@ -25,6 +25,9 @@ import { DocumentsPage } from '@/pages/content/DocumentsPage'
 import { SessionsPage } from '@/pages/sessions/SessionsPage'
 import { SessionDetailPage } from '@/pages/sessions/SessionDetailPage'
 import { SessionAttendeesPage } from '@/pages/sessions/SessionAttendeesPage'
+import { WorkshopsPage } from '@/pages/workshops/WorkshopsPage'
+import { WorkshopDetailPage } from '@/pages/workshops/WorkshopDetailPage'
+import { WorkshopEnrolleesPage } from '@/pages/workshops/WorkshopEnrolleesPage'
 import { FacultyPage } from '@/pages/faculty/FacultyPage'
 import { PurchasesPage } from '@/pages/commerce/PurchasesPage'
 import { PaymentsPage } from '@/pages/commerce/PaymentsPage'
@@ -120,6 +123,10 @@ function App() {
                 <Route path="/sessions" element={<SessionsPage />} />
                 <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
                 <Route path="/sessions/:sessionId/attendees" element={<SessionAttendeesPage />} />
+                {/* Workshops — multi-day programmes, gated by the same permission */}
+                <Route path="/workshops" element={<WorkshopsPage />} />
+                <Route path="/workshops/:workshopId" element={<WorkshopDetailPage />} />
+                <Route path="/workshops/:workshopId/enrollees" element={<WorkshopEnrolleesPage />} />
               </Route>
               <Route element={<ProtectedRoute requiredPermission="books.read" />}>
                 <Route path="/content/books" element={<BooksPage />} />
