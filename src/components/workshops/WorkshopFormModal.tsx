@@ -20,7 +20,7 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { FileUpload } from '@/components/common/FileUpload'
 import { ImageCropper } from '@/components/common/ImageCropper'
-import { Loader2, Check, ChevronsUpDown, X, Plus, Trash2, CalendarDays, AlertTriangle } from 'lucide-react'
+import { Loader2, Check, ChevronsUpDown, X, Plus, Trash2, CalendarDays, AlertTriangle, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarqueeText } from '@/components/common/MarqueeText'
 import { subjectsService, Subject } from '@/services/subjects.service'
@@ -186,6 +186,16 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
   const [existingThumbnailS3Key, setExistingThumbnailS3Key] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null)
+
+  // Brochure — a PDF prospectus, independent of the thumbnail image above.
+  // `brochureCleared` distinguishes "left the existing one alone" from
+  // "explicitly removed it", which a null URL alone cannot express.
+  const [brochureFile, setBrochureFile] = useState<File[]>([])
+  const [existingBrochureUrl, setExistingBrochureUrl] = useState<string | null>(null)
+  const [existingBrochureS3Key, setExistingBrochureS3Key] = useState<string | null>(null)
+  const [existingBrochureFilename, setExistingBrochureFilename] = useState<string | null>(null)
+  const [brochureCleared, setBrochureCleared] = useState(false)
+  const [brochureProgress, setBrochureProgress] = useState<number | null>(null)
   const [cropperFile, setCropperFile] = useState<File | null>(null)
   const [showCropper, setShowCropper] = useState(false)
 
@@ -316,6 +326,11 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
       setExistingThumbnailUrl(workshop.thumbnail_url)
       setExistingThumbnailS3Key(workshop.thumbnail_s3_key)
       setThumbnailFile([])
+      setExistingBrochureUrl(workshop.brochure_url)
+      setExistingBrochureS3Key(workshop.brochure_s3_key)
+      setExistingBrochureFilename(workshop.brochure_filename)
+      setBrochureFile([])
+      setBrochureCleared(false)
       setVisibleTo(workshop.visible_to || 'all')
       setSelectedSubjectIds(workshop.visible_to_subjects || [])
       setSelectedPackageIds(workshop.visible_to_packages || [])
@@ -324,6 +339,11 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
       setExistingThumbnailUrl(null)
       setExistingThumbnailS3Key(null)
       setThumbnailFile([])
+      setExistingBrochureUrl(null)
+      setExistingBrochureS3Key(null)
+      setExistingBrochureFilename(null)
+      setBrochureFile([])
+      setBrochureCleared(false)
       setVisibleTo('all')
       setSelectedSubjectIds([])
       setSelectedPackageIds([])
@@ -347,6 +367,32 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
           return
         }
         setUploadProgress(null)
+      }
+
+      // Brochure upload — independent of the thumbnail above. Three states:
+      // a new file (upload it), explicitly cleared (send null), or untouched
+      // (send the existing values back unchanged).
+      let brochureUrl: string | null | undefined = existingBrochureUrl || undefined
+      let brochureS3Key: string | null | undefined = existingBrochureS3Key || undefined
+      let brochureFilename: string | null | undefined = existingBrochureFilename || undefined
+
+      if (brochureCleared && brochureFile.length === 0) {
+        brochureUrl = null
+        brochureS3Key = null
+        brochureFilename = null
+      } else if (brochureFile.length > 0) {
+        setBrochureProgress(0)
+        try {
+          const result = await workshopsService.uploadBrochure(brochureFile[0], setBrochureProgress)
+          brochureUrl = result.brochureUrl
+          brochureS3Key = result.s3Key
+          brochureFilename = result.filename
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to upload brochure')
+          setBrochureProgress(null)
+          return
+        }
+        setBrochureProgress(null)
       }
 
       const dayPayload = data.days.map((d) => ({
@@ -376,6 +422,9 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
         days: dayPayload,
         thumbnail_url: thumbnailUrl,
         thumbnail_s3_key: thumbnailS3Key,
+        brochure_url: brochureUrl,
+        brochure_s3_key: brochureS3Key,
+        brochure_filename: brochureFilename,
         platform: data.platform,
         is_free: data.is_free,
         price: data.is_free ? 0 : data.price || 0,
@@ -493,6 +542,70 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
                 <div className="space-y-1">
                   <Progress value={uploadProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground">Uploading... {uploadProgress}%</p>
+                </div>
+              )}
+            </div>
+
+            {/* Brochure — a downloadable PDF prospectus. Separate field and
+                separate upload from the thumbnail above; clearing one leaves
+                the other untouched. */}
+            <div className="space-y-2">
+              <Label>Brochure (PDF)</Label>
+              {brochureFile.length > 0 ? (
+                <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{brochureFile[0].name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(brochureFile[0].size / (1024 * 1024)).toFixed(1)} MB · will be uploaded on save
+                    </p>
+                  </div>
+                  <Button
+                    type="button" variant="destructive" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={() => setBrochureFile([])}
+                    disabled={busy}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : existingBrochureUrl && !brochureCleared ? (
+                <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={existingBrochureUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate block text-sm font-medium text-primary hover:underline"
+                    >
+                      {existingBrochureFilename || 'View current brochure'}
+                    </a>
+                    <p className="text-xs text-muted-foreground">Current brochure. Upload a new one to replace.</p>
+                  </div>
+                  <Button
+                    type="button" variant="destructive" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={() => setBrochureCleared(true)}
+                    disabled={busy}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <FileUpload
+                  accept={{ 'application/pdf': ['.pdf'] }}
+                  maxSize={25 * 1024 * 1024}
+                  maxFiles={1}
+                  value={[]}
+                  onChange={(files) => { if (files.length > 0) { setBrochureFile([files[0]]); setBrochureCleared(false) } }}
+                  disabled={busy}
+                  label="Upload brochure"
+                  description="PDF only. Max 25MB. Shown to everyone, including before enrolling."
+                />
+              )}
+              {brochureProgress !== null && (
+                <div className="space-y-1">
+                  <Progress value={brochureProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground">Uploading brochure... {brochureProgress}%</p>
                 </div>
               )}
             </div>

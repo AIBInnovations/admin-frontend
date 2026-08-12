@@ -48,6 +48,10 @@ export interface Workshop {
   faculty_ids: PopulatedRef[] | string[]
   thumbnail_url: string | null
   thumbnail_s3_key: string | null
+  /** Brochure PDF — a separate artefact from the thumbnail image above. */
+  brochure_url: string | null
+  brochure_s3_key: string | null
+  brochure_filename: string | null
   start_date: string
   end_date: string
   day_count: number
@@ -93,6 +97,10 @@ export interface WorkshopFormData {
   days?: WorkshopDayInput[]
   thumbnail_url?: string
   thumbnail_s3_key?: string
+  /** Brochure PDF. Send null to clear it without touching the thumbnail. */
+  brochure_url?: string | null
+  brochure_s3_key?: string | null
+  brochure_filename?: string | null
   platform?: 'zoom' | 'agora' | 'teams' | 'other'
   price?: number
   is_free?: boolean
@@ -275,6 +283,41 @@ class WorkshopsService {
     })
 
     return { thumbnailUrl, s3Key }
+  }
+
+  /**
+   * Upload the workshop brochure PDF.
+   *
+   * Deliberately separate from uploadThumbnail: different endpoint, different
+   * S3 folder, different accepted type. Replacing the brochure never touches
+   * the thumbnail and vice versa.
+   */
+  async uploadBrochure(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ brochureUrl: string; s3Key: string; filename: string }> {
+    // The backend only accepts application/pdf. Some browsers report an empty
+    // type for a file dragged in from certain sources, so fall back rather
+    // than sending '' and getting a confusing 400.
+    const mimeType = file.type || 'application/pdf'
+
+    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string; brochureUrl: string }>(
+      `${this.basePath}/brochure-upload-url`,
+      { mimeType },
+    )
+    if (!urlRes.success || !urlRes.data) {
+      throw new Error(urlRes.message || 'Failed to get upload URL')
+    }
+    const { uploadUrl, s3Key, brochureUrl } = urlRes.data
+
+    await axios.put(uploadUrl, file, {
+      headers: { 'Content-Type': mimeType },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+      },
+    })
+
+    return { brochureUrl, s3Key, filename: file.name }
   }
 
   // --- Enrollees -------------------------------------------------------------
