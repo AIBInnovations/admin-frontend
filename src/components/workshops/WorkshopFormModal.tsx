@@ -743,6 +743,23 @@ export function WorkshopFormModal({ open, onClose, onSubmit, workshop, mode }: W
                       {dayError?.title && <p className="text-xs text-red-500">{dayError.title.message}</p>}
                     </div>
 
+                    {/* Day description. The schema and the payload already
+                        carried this field, but no input was ever rendered, so
+                        it could not be set or cleared from here — an empty day
+                        used to inherit the whole workshop description on the
+                        backend, and editing could never remove it. */}
+                    <div className="space-y-1">
+                      <Textarea
+                        rows={2}
+                        placeholder="What this day covers (optional)"
+                        disabled={busy}
+                        {...register(`days.${index}.description` as const)}
+                      />
+                      {dayError?.description && (
+                        <p className="text-xs text-red-500">{dayError.description.message}</p>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">Date</Label>
