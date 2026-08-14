@@ -7,19 +7,66 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Production
+    name: Build & Deploy to Production
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # The bundle is built here and shipped as an artifact — dist/ is no
+      # longer committed. Two reasons this build does not run on the server:
+      # the EC2 box is a t3.micro with no swap, so vite would risk OOM-killing
+      # the live site; and a committed dist/ meant a source-only push
+      # deployed stale UI with a green checkmark and no error anywhere.
+      - name: Upload bundle to EC2
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          tar -czf dist.tar.gz -C dist .
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            dist.tar.gz "$EC2_USERNAME@$EC2_HOST:/tmp/admin-dist.tar.gz"
+
+      - name: Swap in bundle & restart
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             cd ~/admin-frontend
+            # Unpack and sanity-check the new bundle BEFORE touching anything
+            # live: the first deploy's `git reset` deletes the previously
+            # committed dist/, so a corrupt upload must abort before that.
+            rm -rf /tmp/admin-dist-new dist.old
+            mkdir -p /tmp/admin-dist-new
+            tar -xzf /tmp/admin-dist.tar.gz -C /tmp/admin-dist-new
+            test -f /tmp/admin-dist-new/index.html
+            test -d /tmp/admin-dist-new/assets
             git fetch origin
+            # Source parity only. dist/ is gitignored now, so this no longer
+            # decides what production serves.
             git reset --hard origin/main
+            # /tmp and ~ share one filesystem, so these are renames, not
+            # copies — the swap is effectively instant.
+            if [ -d dist ]; then mv dist dist.old; fi
+            mv /tmp/admin-dist-new dist
+            rm -rf dist.old /tmp/admin-dist.tar.gz
             pm2 restart admin-frontend --update-env
             pm2 save
-            echo "Deployed commit: $(git rev-parse --short HEAD)"
+            echo "Deployed $(git rev-parse --short HEAD)"
+            ls dist/assets

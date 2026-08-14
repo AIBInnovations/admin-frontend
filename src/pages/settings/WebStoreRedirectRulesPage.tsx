@@ -19,6 +19,7 @@ import {
   RedirectPlatform,
 } from '@/services/webStoreRedirectRules.service'
 import { useWebStoreRedirectRulesColumns } from './WebStoreRedirectRulesPage.columns'
+import { describeVersionRange, getStoreKind, STORE_KIND_LABEL } from '@/lib/webStoreRedirect'
 
 export function WebStoreRedirectRulesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -164,7 +165,7 @@ export function WebStoreRedirectRulesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Web Store Redirect"
-        description="Map app version ranges to web-store base URLs. iOS reader-mode redirects use these rules."
+        description="Decide which web store each app version opens. The iPhone app cannot show prices or payment, so it sends users to a web store instead."
         breadcrumbs={[
           { label: 'Dashboard', href: '/' },
           { label: 'Settings' },
@@ -183,19 +184,19 @@ export function WebStoreRedirectRulesPage() {
             <SelectValue placeholder="Platform" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Platforms</SelectItem>
-            <SelectItem value="ios">iOS</SelectItem>
+            <SelectItem value="all">All apps</SelectItem>
+            <SelectItem value="ios">iPhone / iPad</SelectItem>
             <SelectItem value="android">Android</SelectItem>
           </SelectContent>
         </Select>
         <Select value={activeFilter} onValueChange={setActiveFilter}>
           <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Active" />
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="true">Active</SelectItem>
-            <SelectItem value="false">Inactive</SelectItem>
+            <SelectItem value="all">All rules</SelectItem>
+            <SelectItem value="true">On</SelectItem>
+            <SelectItem value="false">Off</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -236,7 +237,11 @@ export function WebStoreRedirectRulesPage() {
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={handleDeleteConfirm}
         title="Delete Redirect Rule"
-        itemName={selectedRule ? `${selectedRule.platform} ${selectedRule.min_version}..${selectedRule.max_version ?? '∞'}` : undefined}
+        itemName={
+          selectedRule
+            ? `${selectedRule.platform === 'ios' ? 'iPhone / iPad' : 'Android'} — ${describeVersionRange(selectedRule.min_version, selectedRule.max_version)} → ${STORE_KIND_LABEL[getStoreKind(selectedRule.base_url)]}`
+            : undefined
+        }
       />
     </div>
   )
