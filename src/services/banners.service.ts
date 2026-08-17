@@ -3,7 +3,13 @@ import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
 
 // Types
-export type BannerType = 'generic' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
+export type BannerType =
+  | 'generic'
+  | 'theory_package'
+  | 'practical_package'
+  | 'ebook'
+  | 'live_session'
+  | 'workshop'
 export type LinkType = 'internal' | 'external' | 'none'
 export type VisibleTo = 'all' | 'subject' | 'package'
 
@@ -19,6 +25,7 @@ export interface Banner {
   target_package_id: string | null
   target_book_id: string | null
   target_session_id: string | null
+  target_workshop_id: string | null
   visible_to: VisibleTo
   visible_to_subjects: string[]
   visible_to_packages: string[]
@@ -42,6 +49,7 @@ export interface BannerFormData {
   target_package_id?: string | null
   target_book_id?: string | null
   target_session_id?: string | null
+  target_workshop_id?: string | null
   visible_to?: VisibleTo
   visible_to_subjects?: string[]
   visible_to_packages?: string[]

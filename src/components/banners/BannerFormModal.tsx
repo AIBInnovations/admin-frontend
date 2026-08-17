@@ -22,13 +22,21 @@ import { Package, packagesService } from '@/services/packages.service'
 import { PackageType, packageTypesService } from '@/services/packageTypes.service'
 import { Book, booksService } from '@/services/books.service'
 import { LiveSession, liveSessionsService } from '@/services/liveSessions.service'
+import { Workshop, workshopsService } from '@/services/workshops.service'
 import { Subject, subjectsService } from '@/services/subjects.service'
 import { toast } from 'sonner'
 
 /** Banner aspect ratio: 16:9 standard landscape */
 const BANNER_ASPECT_RATIO = 16 / 9
 
-type LinkAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
+type LinkAction =
+  | 'none'
+  | 'external_url'
+  | 'theory_package'
+  | 'practical_package'
+  | 'ebook'
+  | 'live_session'
+  | 'workshop'
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Title is required').max(200),
@@ -57,6 +65,7 @@ function deriveLinkAction(banner: Banner): LinkAction {
   if (banner.banner_type === 'practical_package') return 'practical_package'
   if (banner.banner_type === 'ebook') return 'ebook'
   if (banner.banner_type === 'live_session') return 'live_session'
+  if (banner.banner_type === 'workshop') return 'workshop'
   if (banner.click_url && banner.link_type === 'external') return 'external_url'
   return 'none'
 }
@@ -89,6 +98,9 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const [selectedSessionId, setSelectedSessionId] = useState<string>('')
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('')
+  const [workshops, setWorkshops] = useState<Workshop[]>([])
+  const [workshopsLoading, setWorkshopsLoading] = useState(false)
 
   // Visibility state
   const [visibleTo, setVisibleTo] = useState<VisibleTo>('all')
@@ -128,6 +140,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       fetchPackagesAndTypes()
       fetchBooks()
       fetchSessions()
+      fetchWorkshops()
       fetchSubjects()
     }
   }, [open])
@@ -182,6 +195,19 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       console.error('Failed to fetch sessions')
     }
     setSessionsLoading(false)
+  }
+
+  const fetchWorkshops = async () => {
+    setWorkshopsLoading(true)
+    try {
+      const response = await workshopsService.getAll({ limit: 100, publish_status: 'published' })
+      if (response.success && response.data) {
+        setWorkshops(response.data.entities || [])
+      }
+    } catch {
+      console.error('Failed to fetch workshops')
+    }
+    setWorkshopsLoading(false)
   }
 
   const fetchSubjects = async () => {
@@ -249,6 +275,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         setSelectedPackageId(banner.target_package_id || '')
         setSelectedBookId(banner.target_book_id || '')
         setSelectedSessionId(banner.target_session_id || '')
+        setSelectedWorkshopId(banner.target_workshop_id || '')
         setVisibleTo(banner.visible_to || 'all')
         setSelectedSubjectIds(banner.visible_to_subjects || [])
         setSelectedVisibilityPackageIds(banner.visible_to_packages || [])
@@ -322,6 +349,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
       let targetPackageId: string | null = null
       let targetBookId: string | null = null
       let targetSessionId: string | null = null
+      let targetWorkshopId: string | null = null
 
       if (linkAction === 'external_url') {
         bannerType = 'generic'
@@ -343,6 +371,10 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         bannerType = 'live_session'
         linkType = 'internal'
         targetSessionId = selectedSessionId
+      } else if (linkAction === 'workshop') {
+        bannerType = 'workshop'
+        linkType = 'internal'
+        targetWorkshopId = selectedWorkshopId
       }
 
       const formData: BannerFormData = {
@@ -356,6 +388,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         target_package_id: targetPackageId,
         target_book_id: targetBookId,
         target_session_id: targetSessionId,
+        target_workshop_id: targetWorkshopId,
         visible_to: visibleTo,
         visible_to_subjects: visibleTo === 'subject' ? selectedSubjectIds : [],
         visible_to_packages: visibleTo === 'package' ? selectedVisibilityPackageIds : [],
@@ -509,6 +542,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 <SelectItem value="practical_package">Practical Package</SelectItem>
                 <SelectItem value="ebook">Book</SelectItem>
                 <SelectItem value="live_session">Live Session</SelectItem>
+                <SelectItem value="workshop">Workshop</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -629,6 +663,40 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                       <SelectItem key={session._id} value={session._id}>
                         {session.title}
                         {session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Workshop selector - shown for workshop action */}
+          {linkAction === 'workshop' && (
+            <div className="space-y-2">
+              <Label>
+                Select Workshop <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={selectedWorkshopId}
+                onValueChange={setSelectedWorkshopId}
+                disabled={isSubmitting || isUploading || workshopsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    workshopsLoading ? 'Loading workshops...' : 'Select a workshop'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {workshops.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No published workshops found
+                    </div>
+                  ) : (
+                    workshops.map((workshop) => (
+                      <SelectItem key={workshop._id} value={workshop._id}>
+                        {workshop.title}
+                        {workshop.start_date ? ` — ${new Date(workshop.start_date).toLocaleDateString()}` : ''}
                       </SelectItem>
                     ))
                   )}
