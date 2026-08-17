@@ -7,6 +7,7 @@ export type BannerType =
   | 'generic'
   | 'theory_package'
   | 'practical_package'
+  | 'combo_package'
   | 'ebook'
   | 'live_session'
   | 'workshop'
