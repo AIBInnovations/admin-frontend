@@ -34,6 +34,7 @@ type LinkAction =
   | 'external_url'
   | 'theory_package'
   | 'practical_package'
+  | 'combo_package'
   | 'ebook'
   | 'live_session'
   | 'workshop'
@@ -63,6 +64,7 @@ interface BannerFormModalProps {
 function deriveLinkAction(banner: Banner): LinkAction {
   if (banner.banner_type === 'theory_package') return 'theory_package'
   if (banner.banner_type === 'practical_package') return 'practical_package'
+  if (banner.banner_type === 'combo_package') return 'combo_package'
   if (banner.banner_type === 'ebook') return 'ebook'
   if (banner.banner_type === 'live_session') return 'live_session'
   if (banner.banner_type === 'workshop') return 'workshop'
@@ -249,7 +251,19 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   const theoryPackages = packages.filter((p) => matchesType(p, 'theory'))
   const practicalPackages = packages.filter((p) => matchesType(p, 'practical'))
 
-  const relevantPackages = linkAction === 'theory_package' ? theoryPackages : practicalPackages
+  // A combo is a package that bundles others. Detect it structurally rather
+  // than by type name: 'Combos' is admin-editable, and matchesType('theory')
+  // excluded them from both lists, so no picker could ever show one.
+  const comboPackages = packages.filter(
+    (p) => (p.bundled_package_ids || []).length > 0 || getTypeName(p).includes('combo')
+  )
+
+  const relevantPackages =
+    linkAction === 'theory_package'
+      ? theoryPackages
+      : linkAction === 'combo_package'
+        ? comboPackages
+        : practicalPackages
 
   useEffect(() => {
     if (open) {
@@ -299,7 +313,17 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
   }, [open, mode, banner, reset])
 
   const hasImage = imageFile.length > 0 || !!existingImageUrl
-  const isPackageAction = linkAction === 'theory_package' || linkAction === 'practical_package'
+  const packageActionLabel =
+    linkAction === 'theory_package'
+      ? 'Theory'
+      : linkAction === 'combo_package'
+        ? 'Combo'
+        : 'Practical'
+
+  const isPackageAction =
+    linkAction === 'theory_package' ||
+    linkAction === 'practical_package' ||
+    linkAction === 'combo_package'
 
   const handleFormSubmit = async (data: BannerFormValues) => {
     // Validate image
@@ -361,6 +385,10 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
         targetPackageId = selectedPackageId
       } else if (linkAction === 'practical_package') {
         bannerType = 'practical_package'
+        linkType = 'internal'
+        targetPackageId = selectedPackageId
+      } else if (linkAction === 'combo_package') {
+        bannerType = 'combo_package'
         linkType = 'internal'
         targetPackageId = selectedPackageId
       } else if (linkAction === 'ebook') {
@@ -540,6 +568,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                 <SelectItem value="external_url">External URL</SelectItem>
                 <SelectItem value="theory_package">Theory Package</SelectItem>
                 <SelectItem value="practical_package">Practical Package</SelectItem>
+                <SelectItem value="combo_package">Combo Package</SelectItem>
                 <SelectItem value="ebook">Book</SelectItem>
                 <SelectItem value="live_session">Live Session</SelectItem>
                 <SelectItem value="workshop">Workshop</SelectItem>
@@ -568,7 +597,7 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
           {isPackageAction && (
             <div className="space-y-2">
               <Label>
-                Select {linkAction === 'theory_package' ? 'Theory' : 'Practical'} Package{' '}
+                Select {packageActionLabel} Package{' '}
                 <span className="text-red-500">*</span>
               </Label>
               <Select
@@ -580,13 +609,13 @@ export function BannerFormModal({ open, onClose, onSubmit, banner, mode }: Banne
                   <SelectValue placeholder={
                     packagesLoading
                       ? 'Loading packages...'
-                      : `Select a ${linkAction === 'theory_package' ? 'theory' : 'practical'} package`
+                      : `Select a ${packageActionLabel.toLowerCase()} package`
                   } />
                 </SelectTrigger>
                 <SelectContent>
                   {relevantPackages.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                      No {linkAction === 'theory_package' ? 'theory' : 'practical'} packages found
+                      No {packageActionLabel.toLowerCase()} packages found
                     </div>
                   ) : (
                     relevantPackages.map((pkg) => (
