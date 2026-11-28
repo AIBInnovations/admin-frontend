@@ -6,6 +6,7 @@ import { formatCount, formatINR } from '@/lib/format'
 import { PublishStatusPill, RowMenu, RunStatus, Tag } from '@/components/forms/editor/list'
 import { istDay, istTime, minutesLabel } from '@/components/forms/editor/ist'
 import { ACCESS_MARKER, modeOf, type GatedSession } from '@/components/sessions/sessionAccess'
+import { ProductCodeText } from '@/components/common/ProductCode'
 
 const platformLabels: Record<string, string> = { zoom: 'Zoom', agora: 'Agora', teams: 'Teams', other: 'Other' }
 
@@ -37,6 +38,7 @@ export function getSessionsColumns({ canUpdate, canDelete, onEdit, onCancel, onA
           <p className="truncate text-xs text-muted-foreground">
             {typeof session.faculty_id === 'object' && session.faculty_id ? session.faculty_id.name : 'No faculty'}
           </p>
+          <ProductCodeText code={session.product_code} className="block" />
           <AccessMarker session={session as GatedSession} />
         </div>
       ),

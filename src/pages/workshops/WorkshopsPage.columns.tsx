@@ -5,6 +5,7 @@ import { Workshop } from '@/services/workshops.service'
 import { formatCount, formatINR } from '@/lib/format'
 import { PublishStatusPill, RowMenu, RunStatus, Tag } from '@/components/forms/editor/list'
 import { istDay, toIstInputs } from '@/components/forms/editor/ist'
+import { ProductCodeText } from '@/components/common/ProductCode'
 
 /**
  * "12 to 14 Mar" for a multi-day run, "12 Mar" when it's a single day (IST).
@@ -44,6 +45,7 @@ export function getWorkshopsColumns({ canUpdate, canDelete, onEdit, onCancel, on
           <div className="min-w-[180px] max-w-[320px]">
             <p className="truncate text-sm font-medium" title={workshop.title}>{workshop.title}</p>
             <p className="truncate text-xs text-muted-foreground">{faculty.length > 0 ? faculty.join(', ') : 'No faculty'}</p>
+            <ProductCodeText code={workshop.product_code} className="block" />
           </div>
         )
       },

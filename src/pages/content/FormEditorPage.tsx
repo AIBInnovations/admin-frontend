@@ -19,6 +19,7 @@ import { ImageField, NO_IMAGE, type ImageValue } from '@/components/forms/editor
 import { Tag } from '@/components/forms/editor/list'
 import { ExamSlots } from '@/components/forms/ExamSlots'
 import { FormPreview } from '@/components/forms/FormPreview'
+import { ProductCode } from '@/components/common/ProductCode'
 
 const STORE_BASE_URL = 'https://pgmeessentials.com'
 
@@ -277,6 +278,9 @@ function FormBuilder({ mode, form, templates, onReplace }: { mode: 'create' | 'e
       >
         <div ref={formRef} className="space-y-6">
           <EditorSection id="basics" title="Basics" stacked={preview}>
+            {mode === 'edit' && (
+              <p className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">Product ID</span><ProductCode code={form?.product_code} /></p>
+            )}
             <Field id="template_id" label="Template" required error={errors.template_id?.message} hint={mode === 'edit' ? 'The template cannot change after the form is created.' : undefined}>
               {(c) => (
                 <SelectControl

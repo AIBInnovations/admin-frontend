@@ -5,6 +5,8 @@ import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, 
 // Types
 export interface Book {
   _id: string
+  /** Product ID, e.g. PGMEP001 (28 Nov 2026). Absent until the backfill has run. */
+  product_code?: string | null
   title: string
   author: string
   description: string

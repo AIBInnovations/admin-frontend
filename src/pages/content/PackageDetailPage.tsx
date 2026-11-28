@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  BarChart3, BookOpen, Calendar, CalendarClock, ChevronRight, Clock, Download, Eye, FileText, Film, Hash, IndianRupee, Layers, Package, Pencil, Plus, Tag,
+  BarChart3, BookOpen, Calendar, CalendarClock, ChevronRight, Clock, Download, Eye, FileText, Film, Hash, IndianRupee, Layers, Loader2, Package, Pencil, Plus, Tag,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DetailSkeleton, ErrorState, Section, StatusPill } from '@/components/common/detail'
@@ -22,10 +22,11 @@ import { VideoFormModal } from '@/components/videos/VideoFormModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatDuration as formatPlan, formatINR } from '@/lib/format'
 import { documentsService, type DocumentFormData } from '@/services/documents.service'
-import { modulesService, type ModuleFormData } from '@/services/modules.service'
+import { modulesService, type Module, type ModuleFormData } from '@/services/modules.service'
 import { packagesService, type PackageDetail, type PackageDetailModule, type PackageDetailSeries, type PackageDetailVideo } from '@/services/packages.service'
-import { seriesService, type SeriesFormData } from '@/services/series.service'
+import { seriesService, type Series, type SeriesFormData } from '@/services/series.service'
 import { videosService, type ReleaseMode, type UpcomingVideoFormData, type Video, type VideoFormData } from '@/services/videos.service'
+import { ProductCode } from '@/components/common/ProductCode'
 
 /** Fields newer backends add: what a combo really contains. */
 type DetailWithBundle = PackageDetail & {
@@ -65,6 +66,8 @@ export function PackageDetailPage() {
   const canAddModule = hasPermission('modules.create')
   const canAddVideo = hasPermission('videos.create')
   const canEditVideo = hasPermission('videos.update')
+  const canEditSeries = hasPermission('series.update')
+  const canEditModule = hasPermission('modules.update')
   const canAddDocument = hasPermission('documents.create')
 
   const { data, loading, error, status, reload } = useResource<DetailWithBundle>(async () => unwrap(await packagesService.getDetail(packageId), 'Package not found') as DetailWithBundle, [packageId])
@@ -82,6 +85,12 @@ export function PackageDetailPage() {
   const [documentModalOpen, setDocumentModalOpen] = useState(false)
   const [targetSeriesId, setTargetSeriesId] = useState('')
   const [targetModuleId, setTargetModuleId] = useState('')
+  // Edit a series or module right here (Aviraj, 28 Nov 2026: no more going to
+  // the Series or Modules tab and searching for it). The full record is loaded
+  // first, so the form starts from everything saved.
+  const [editingSeries, setEditingSeries] = useState<Series | null>(null)
+  const [editingModule, setEditingModule] = useState<Module | null>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   // Open rows, separate for the video and the document tree
   const [openSeries, setOpenSeries] = useState<Set<string>>(new Set())
@@ -202,6 +211,32 @@ export function PackageDetailPage() {
   const openAddVideo = (moduleId: string) => { setTargetModuleId(moduleId); setEditingVideo(null); setVideoModalMode('create'); setVideoModalOpen(true) }
   const openEditVideo = (video: PackageDetailVideo) => { setEditingVideo(video); setTargetModuleId(video.module_id); setVideoModalMode('edit'); setVideoModalOpen(true) }
 
+  const openEdit = async <T,>(id: string, load: () => Promise<{ success: boolean; data?: T; message?: string }>, open: (record: T) => void, what: string) => {
+    if (openingId) return
+    setOpeningId(id)
+    try {
+      const res = await load()
+      if (!res.success || !res.data) throw new Error(res.message || `This ${what} could not be loaded`)
+      open(res.data)
+    } catch (err) {
+      toast.error(errText(err, `This ${what} could not be loaded`))
+    } finally {
+      setOpeningId(null)
+    }
+  }
+  const openEditSeries = (id: string) => openEdit<Series>(id, () => seriesService.getById(id), setEditingSeries, 'series')
+  const openEditModule = (id: string) => openEdit<Module>(id, () => modulesService.getById(id), setEditingModule, 'module')
+  const handleSeriesUpdate = (formData: SeriesFormData) => run(async () => {
+    if (!editingSeries) return null
+    unwrap(await seriesService.update(editingSeries._id, formData), 'Failed to update series')
+    return 'Series updated'
+  }, 'Failed to update series')
+  const handleModuleUpdate = (formData: ModuleFormData) => run(async () => {
+    if (!editingModule) return null
+    unwrap(await modulesService.update(editingModule._id, formData), 'Failed to update module')
+    return 'Module updated'
+  }, 'Failed to update module')
+
   if (loading && !pkg) return <DetailSkeleton />
   if (!pkg) {
     const gone = status === 404 || status === 400
@@ -273,6 +308,7 @@ export function PackageDetailPage() {
             {pkg.description && <p className="break-words text-sm text-muted-foreground">{pkg.description}</p>}
 
             <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+              <Fact icon={Hash} label="Product ID"><ProductCode code={pkg.product_code} /></Fact>
               <Fact icon={BookOpen} label="Subject">{refName(pkg.subject_id, 'Deleted subject')}</Fact>
               <Fact icon={Tag} label="Package Type">{refName(pkg.package_type_id, 'Deleted type')}</Fact>
               {isCombo && (
@@ -372,6 +408,9 @@ export function PackageDetailPage() {
                       onAddVideo={canAddVideo ? openAddVideo : undefined}
                       onAddUpcoming={canAddVideo ? (moduleId) => { setTargetModuleId(moduleId); setUpcomingVideoModalOpen(true) } : undefined}
                       onEditVideo={canEditVideo ? openEditVideo : undefined}
+                      onEdit={canEditSeries ? () => openEditSeries(s._id) : undefined}
+                      onEditModule={canEditModule ? openEditModule : undefined}
+                      openingId={openingId}
                     />
                   ))}
                 </div>
@@ -394,6 +433,8 @@ export function PackageDetailPage() {
 
       <SeriesFormModal open={seriesModalOpen} onClose={() => setSeriesModalOpen(false)} onSubmit={handleSeriesSubmit} mode="create" defaultPackageId={pkg._id} />
       <ModuleFormModal open={moduleModalOpen} onClose={() => setModuleModalOpen(false)} onSubmit={handleModuleSubmit} mode="create" defaultSeriesId={targetSeriesId} />
+      <SeriesFormModal open={!!editingSeries} onClose={() => setEditingSeries(null)} onSubmit={handleSeriesUpdate} mode="edit" series={editingSeries} />
+      <ModuleFormModal open={!!editingModule} onClose={() => setEditingModule(null)} onSubmit={handleModuleUpdate} mode="edit" module={editingModule} />
       <VideoFormModal
         open={videoModalOpen} onClose={() => { setVideoModalOpen(false); setEditingVideo(null) }} onSubmit={handleVideoSubmit}
         mode={videoModalMode} video={editingVideo as unknown as Video | null} defaultModuleId={targetModuleId}
@@ -438,18 +479,24 @@ interface SeriesBlockProps {
   onAddVideo?: (moduleId: string) => void
   onAddUpcoming?: (moduleId: string) => void
   onEditVideo?: (video: PackageDetailVideo) => void
+  /** Opens this series' edit form. */
+  onEdit?: () => void
+  onEditModule?: (moduleId: string) => void
+  /** The series or module whose edit form is loading. */
+  openingId?: string | null
 }
 
 const Chip = ({ children }: { children: React.ReactNode }) => <span className="shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-px text-xs tabular-nums text-muted-foreground">{children}</span>
 const ActivePill = ({ active }: { active: boolean }) => <StatusPill tone={active ? 'success' : 'danger'} className="h-5 px-2 text-[11px]">{active ? 'Active' : 'Inactive'}</StatusPill>
 
-function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming, onEditVideo }: SeriesBlockProps) {
+function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming, onEditVideo, onEdit, onEditModule, openingId }: SeriesBlockProps) {
   const modules = series.modules || []
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <div className="overflow-hidden rounded-lg border border-border">
+        <div className="flex items-center transition-colors hover:bg-muted/50">
         <CollapsibleTrigger asChild>
-          <button type="button" className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50">
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-3 p-4 text-left">
             <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -462,6 +509,8 @@ function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, on
             </span>
           </button>
         </CollapsibleTrigger>
+        {onEdit && <span className="pr-3"><EditButton label={`Edit series ${series.name}`} busy={openingId === series._id} onClick={onEdit} /></span>}
+        </div>
         <CollapsibleContent>
           <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
             <div className="flex items-center justify-between gap-2">
@@ -474,6 +523,7 @@ function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, on
                   <ModuleBlock
                     key={mod._id} module={mod} isOpen={openModules.has(mod._id)} onToggle={() => onToggleModule(mod._id)}
                     onAddVideo={onAddVideo ? () => onAddVideo(mod._id) : undefined} onAddUpcoming={onAddUpcoming ? () => onAddUpcoming(mod._id) : undefined} onEditVideo={onEditVideo}
+                    onEdit={onEditModule ? () => onEditModule(mod._id) : undefined} opening={openingId === mod._id}
                   />
                 ))}
               </div>
@@ -482,6 +532,19 @@ function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, on
         </CollapsibleContent>
       </div>
     </Collapsible>
+  )
+}
+
+function EditButton({ label, busy, onClick, small }: { label: string; busy?: boolean; onClick: () => void; small?: boolean }) {
+  return (
+    <Button
+      type="button" variant="ghost" size="sm" disabled={busy}
+      className={small ? 'h-7 shrink-0 px-2 text-xs' : 'h-8 shrink-0 px-2.5 text-xs'}
+      aria-label={label} title={label}
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+    >
+      {busy ? <Loader2 aria-hidden="true" className="!size-3 animate-spin" /> : <Pencil aria-hidden="true" className="!size-3" />}Edit
+    </Button>
   )
 }
 
@@ -494,16 +557,21 @@ interface ModuleBlockProps {
   onAddVideo?: () => void
   onAddUpcoming?: () => void
   onEditVideo?: (video: PackageDetailVideo) => void
+  /** Opens this module's edit form. */
+  onEdit?: () => void
+  /** Its edit form is loading. */
+  opening?: boolean
 }
 
-function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming, onEditVideo }: ModuleBlockProps) {
+function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming, onEditVideo, onEdit, opening }: ModuleBlockProps) {
   const videos = mod.videos || []
   const totalDuration = videos.reduce((sum, v) => sum + (v.duration_seconds || 0), 0)
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <div className="overflow-hidden rounded-md border border-border bg-muted/30">
+        <div className="flex items-center transition-colors hover:bg-muted/50">
         <CollapsibleTrigger asChild>
-          <button type="button" className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50">
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left">
             <ChevronRight aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
               <span className="min-w-0 break-words text-sm font-medium">{mod.name}</span>
@@ -514,6 +582,8 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming,
             </span>
           </button>
         </CollapsibleTrigger>
+        {onEdit && <span className="pr-2"><EditButton small label={`Edit module ${mod.name}`} busy={opening} onClick={onEdit} /></span>}
+        </div>
         <CollapsibleContent>
           <div className="border-t border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
@@ -533,7 +603,7 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming,
                     <TableHead scope="col" className="w-16 text-xs">Access</TableHead>
                     <TableHead scope="col" className="w-28 text-xs">Status</TableHead>
                     <TableHead scope="col" className="w-16 text-right text-xs">Views</TableHead>
-                    <TableHead scope="col" className="w-10 text-xs"><span className="sr-only">Actions</span></TableHead>
+                    <TableHead scope="col" className="w-20 text-xs"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -562,9 +632,7 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming,
                         <TableCell className="text-right text-xs text-muted-foreground"><span className="inline-flex items-center gap-1 tabular-nums"><Eye aria-hidden="true" className="h-3 w-3" />{(video.view_count || 0).toLocaleString('en-IN')}</span></TableCell>
                         <TableCell className="text-right">
                           {onEditVideo && (
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={`Edit ${video.title}`} title={video.processing_status === 'upcoming' ? 'Edit upcoming: upload file or reschedule' : 'Edit video'} onClick={(e) => { e.stopPropagation(); onEditVideo(video) }}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                            <EditButton small label={video.processing_status === 'upcoming' ? `Edit ${video.title}: upload the file or reschedule` : `Edit or replace ${video.title}`} onClick={() => onEditVideo(video)} />
                           )}
                         </TableCell>
                       </TableRow>

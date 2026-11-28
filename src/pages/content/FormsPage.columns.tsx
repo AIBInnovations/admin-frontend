@@ -5,6 +5,7 @@ import { Form } from '@/services/forms.service'
 import { formatCount, formatINR } from '@/lib/format'
 import { ActivePill, PublishStatusPill, RowMenu, Tag } from '@/components/forms/editor/list'
 import { istDay } from '@/components/forms/editor/ist'
+import { ProductCodeText } from '@/components/common/ProductCode'
 
 interface FormsColumnsProps {
   canUpdate: boolean
@@ -26,6 +27,7 @@ export function getFormsColumns({ canUpdate, canDelete, onEdit, onDelete, onTogg
         return (
           <div className="min-w-[180px] max-w-[360px]">
             <p className="truncate text-sm font-medium" title={form.title}>{form.title}</p>
+            <ProductCodeText code={form.product_code} className="block" />
             <div className="mt-1"><Tag>{template?.name ?? 'Deleted template'}</Tag></div>
           </div>
         )

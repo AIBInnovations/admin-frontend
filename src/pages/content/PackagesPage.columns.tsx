@@ -7,6 +7,7 @@ import type { ColumnDef } from '@/components/common/DataTable'
 import { dayIST, plural } from '@/components/users/lib'
 import { formatDuration, formatINR } from '@/lib/format'
 import type { Package } from '@/services/packages.service'
+import { ProductCodeText } from '@/components/common/ProductCode'
 
 interface PackagesColumnsProps {
   onNavigate: (pkg: Package) => void
@@ -33,6 +34,7 @@ export function usePackagesColumns({ onNavigate, onEdit, onToggleActive, togglin
             <div className="min-w-0 max-w-[380px]">
               <p className="break-words text-sm font-medium">{pkg.name}</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <ProductCodeText code={pkg.product_code} />
                 <span>{refName(pkg.package_type_id, 'Deleted type')}</span>
                 {bundled.length > 0 && <span className="max-w-[260px] truncate rounded-full bg-accent px-2 py-px font-medium text-accent-foreground" title={`Bundles: ${names}`}>Combo: {names}</span>}
               </div>

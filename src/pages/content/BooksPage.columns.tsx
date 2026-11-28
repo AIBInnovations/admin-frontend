@@ -11,6 +11,7 @@ import { formatCount, formatINR } from '@/lib/format'
 import { Book } from '@/services/books.service'
 import type { PopulatedRef } from '@/types/api.types'
 import { MoreVertical, Pencil, BookOpen, Package, Globe, GlobeLock, Eye } from 'lucide-react'
+import { ProductCodeText } from '@/components/common/ProductCode'
 
 interface BooksColumnsProps {
   canEdit: boolean
@@ -49,6 +50,7 @@ export function useBooksColumns({
                 {book.ebook && format.label !== 'EPUB' && <StatusPill tone={format.tone} className="h-5 shrink-0 px-2 text-[11px]">{format.label}</StatusPill>}
               </div>
               <p className="truncate text-xs text-muted-foreground">{book.author}</p>
+              <ProductCodeText code={book.product_code} className="block" />
             </div>
           </div>
         )

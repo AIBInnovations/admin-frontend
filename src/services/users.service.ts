@@ -11,7 +11,7 @@ export interface SubjectSelection {
 export interface UserPurchase {
   _id: string
   /** null when the package has been deleted since. */
-  package_id: { _id: string; name: string; price: number; duration_days: number } | string | null
+  package_id: { _id: string; name: string; price: number; duration_days: number; product_code?: string | null } | string | null
   tier_name?: string | null
   tier_duration_days?: number | null
   /** Set on a row that came with a combo purchase. */
@@ -154,7 +154,7 @@ export interface UsersListParams extends BaseListParams {
 
 export interface SessionPurchase {
   _id: string
-  session_id: { _id: string; title: string; scheduled_start_time: string; price: number } | string | null
+  session_id: { _id: string; title: string; scheduled_start_time: string; price: number; product_code?: string | null } | string | null
   gateway_amount?: number | null
   payment_gateway: 'zoho_payments' | 'razorpay'
   zoho_payment_id: string | null
@@ -172,9 +172,35 @@ export interface SessionPurchase {
   createdAt: string
 }
 
+/** A live session registration (free, included with a package, paid, or added by an admin). */
+export interface SessionEnrollment {
+  _id: string
+  /** null when the session has been deleted since. */
+  session_id: {
+    _id: string
+    title: string
+    scheduled_start_time: string
+    scheduled_end_time?: string
+    is_free?: boolean
+    price?: number
+    status?: string
+    repeat?: { weekly?: boolean; days?: number[]; start_time?: string; end_time?: string; starts_on?: string; ends_on?: string } | null
+    product_code?: string | null
+  } | string | null
+  enrollment_type: 'paid' | 'free' | 'admin_override' | 'subscription'
+  enrollment_status: 'confirmed' | 'waitlisted' | 'cancelled'
+  access_package_name?: string | null
+  enrolled_at: string
+  cancelled_at?: string | null
+  cancellation_reason?: string | null
+  attendance_id?: string | null
+  enrolled_by_admin?: boolean
+  purchase_id?: string | null
+}
+
 export interface EbookPurchase {
   _id: string
-  book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string } | string | null
+  book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string; product_code?: string | null } | string | null
   gateway_amount?: number | null
   payment_gateway: 'zoho_payments'
   zoho_payment_id: string | null
@@ -214,6 +240,8 @@ export interface BookOrder {
 export interface UserDetail extends User {
   purchases: UserPurchase[]
   session_purchases: SessionPurchase[]
+  /** Every live session registration, free ones included (28 Nov 2026; older backends leave it out). */
+  session_enrollments?: SessionEnrollment[]
   ebook_purchases: EbookPurchase[]
   book_orders: BookOrder[]
   device_sessions: DeviceSession[]

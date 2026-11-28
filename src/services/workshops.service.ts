@@ -42,6 +42,8 @@ export interface WorkshopDayInput {
 
 export interface Workshop {
   _id: string
+  /** Product ID, e.g. PGMEP001 (28 Nov 2026). Absent until the backfill has run. */
+  product_code?: string | null
   title: string
   description: string
   subject_id: PopulatedRef | string

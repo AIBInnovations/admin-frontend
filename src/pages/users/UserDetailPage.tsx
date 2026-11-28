@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  Ban, BellRing, BookOpen, Calendar, CalendarClock, CreditCard, Edit, Gift, Globe, GraduationCap, History, Loader2, Mail, MailX, MapPin,
+  Ban, BellRing, BookOpen, Calendar, CalendarCheck, CalendarClock, CreditCard, Edit, Gift, Globe, GraduationCap, History, Loader2, Mail, MailX, MapPin,
   Package, Phone, Settings, ShieldBan, ShieldCheck, ShoppingBag, Smartphone, Truck, Video,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -23,8 +23,9 @@ import { formatINR, subscriptionLabel } from '@/lib/format'
 import { formatExpiry } from '@/lib/relativeTime'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  usersService, type BookOrder, type EbookPurchase, type SessionPurchase, type UserDetail, type UserPurchase,
+  usersService, type BookOrder, type EbookPurchase, type SessionEnrollment, type SessionPurchase, type UserDetail, type UserPurchase,
 } from '@/services/users.service'
+import { ProductCodeText } from '@/components/common/ProductCode'
 import type { ReminderItem, SubscriptionRecord } from '@/services/subscriptions.service'
 
 // ── Reading a record ─────────────────────────────────────────────────────
@@ -33,6 +34,32 @@ const isObj = <T extends object>(v: T | string | null | undefined): v is T => !!
 const packageTitle = (p: UserPurchase) => subscriptionLabel(isObj(p.package_id) ? p.package_id.name : 'Deleted package', p)
 const bookTitle = (p: EbookPurchase) => (isObj(p.book_id) ? p.book_id.title : 'Deleted e-book')
 const sessionTitle = (p: SessionPurchase) => (isObj(p.session_id) ? p.session_id.title : 'Deleted session')
+const codeOf = (v: { product_code?: string | null } | string | null | undefined) => (v && typeof v === 'object' ? v.product_code ?? null : null)
+
+// ── A live session registration (28 Nov 2026) ───────────────────────────
+// A free registration has no purchase row, so Session Purchases never showed
+// it; this lists every one: free, included with a package, paid, admin-added.
+type RegSession = Exclude<SessionEnrollment['session_id'], string | null>
+const regSession = (e: SessionEnrollment): RegSession | null => (isObj(e.session_id) ? e.session_id : null)
+const regTitle = (e: SessionEnrollment) => regSession(e)?.title ?? 'Deleted session'
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const clock12 = (hhmm?: string) => {
+  const [h, m] = (hhmm || '').split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return ''
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+}
+const regWhen = (s: RegSession) => {
+  const r = s.repeat
+  if (!r?.weekly) return s.scheduled_start_time ? dayTimeIST(s.scheduled_start_time) : ''
+  const days = (r.days || []).map((d) => WEEKDAY[d]).filter(Boolean).join(', ')
+  const time = r.start_time ? `${clock12(r.start_time)}${r.end_time ? ` to ${clock12(r.end_time)}` : ''} IST` : ''
+  return ['Weekly', days && `on ${days}`, time && `, ${time}`].filter(Boolean).join(' ').replace(' ,', ',')
+}
+const REG_HOW: Record<SessionEnrollment['enrollment_type'], string> = {
+  free: 'Free', paid: 'Paid', admin_override: 'Added by admin', subscription: 'Included with a package',
+}
+const regHow = (e: SessionEnrollment) => (e.enrollment_type === 'subscription' && e.access_package_name ? `Included with ${e.access_package_name}` : REG_HOW[e.enrollment_type] ?? e.enrollment_type)
+const regRevoked = (e: SessionEnrollment) => e.enrollment_status === 'cancelled' && /^Admin revoked/i.test(e.cancellation_reason || '')
 const isBundled = (p: UserPurchase) => !!p.bundled_from_purchase_id || !!p.zoho_payment_session_id?.startsWith('BUNDLE_')
 const paid = (p: { gateway_amount?: number | null; amount_paid?: number | null }) => Number(p.gateway_amount ?? p.amount_paid ?? 0) || 0
 // A tester's INR 1 order (27 Nov 2026): labelled Test, never a paid purchase
@@ -271,7 +298,7 @@ export function UserDetailPage() {
               : p.is_admin_granted ? `Admin granted${p.admin_grant_reason ? `: ${p.admin_grant_reason}` : ''}`
                 : p.coupon_code ? `Coupon ${p.coupon_code}` : null
             return [
-              <div key="n" className="max-w-[360px]"><p className="break-words text-sm font-medium">{packageTitle(p)}<TestPill row={p} /></p>{note && <p className="truncate text-xs text-muted-foreground" title={note}>{note}</p>}</div>,
+              <div key="n" className="max-w-[360px]"><p className="break-words text-sm font-medium">{packageTitle(p)}<TestPill row={p} /></p><ProductCodeText code={codeOf(p.package_id)} />{note && <p className="truncate text-xs text-muted-foreground" title={note}>{note}</p>}</div>,
               <Amount key="a" value={paid(p)} />,
               <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
               <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
@@ -298,7 +325,7 @@ export function UserDetailPage() {
           hrefOf={(p) => `/commerce/purchases/ebook/${p._id}`} keyOf={(p) => p._id} labelOf={bookTitle}
           head={['Book', 'Amount', 'Status', 'Purchased', 'Active', '']}
           cells={(p) => [
-            <ItemName key="n" title={bookTitle(p)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />,
+            <ItemName key="n" title={bookTitle(p)} code={codeOf(p.book_id)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />,
             <Amount key="a" value={paid(p)} />,
             <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
             <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
@@ -315,7 +342,7 @@ export function UserDetailPage() {
           hrefOf={(p) => `/commerce/purchases/session/${p._id}`} keyOf={(p) => p._id} labelOf={sessionTitle}
           head={['Session', 'Amount', 'Status', 'Purchased', 'Active', '']}
           cells={(p) => [
-            <div key="n"><ItemName title={sessionTitle(p)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />{isObj(p.session_id) && p.session_id.scheduled_start_time && <p className="text-xs text-muted-foreground">{dayTimeIST(p.session_id.scheduled_start_time)}</p>}</div>,
+            <div key="n"><ItemName title={sessionTitle(p)} code={codeOf(p.session_id)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />{isObj(p.session_id) && p.session_id.scheduled_start_time && <p className="text-xs text-muted-foreground">{dayTimeIST(p.session_id.scheduled_start_time)}</p>}</div>,
             <Amount key="a" value={paid(p)} />,
             <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
             <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
@@ -327,6 +354,40 @@ export function UserDetailPage() {
               </div>
             ) : null,
           ]}
+        />
+      </Section>
+
+      <Section
+        flush
+        title={<Title icon={CalendarCheck} count={user.session_enrollments?.length || 0}>Live Session Registrations</Title>}
+        description="Every registration, free ones included. A paid seat is also listed under Session Purchases."
+      >
+        <RecordTable<SessionEnrollment>
+          rows={user.session_enrollments || []} empty={{ icon: CalendarCheck, text: 'No live session registrations' }} minWidth="min-w-[860px]" itemWord="registration"
+          hrefOf={(e) => (regSession(e) ? `/sessions/${regSession(e)!._id}` : '')} keyOf={(e) => e._id} labelOf={regTitle}
+          head={['Session', 'How', 'Status', 'Registered', 'Attended']}
+          cells={(e) => {
+            const s = regSession(e)
+            const revoked = regRevoked(e)
+            const status = e.enrollment_status === 'confirmed' ? { label: 'Registered', tone: 'success' as Tone }
+              : e.enrollment_status === 'waitlisted' ? { label: 'Waitlisted', tone: 'warning' as Tone }
+                : revoked ? { label: 'Revoked', tone: 'danger' as Tone } : { label: 'Cancelled', tone: 'neutral' as Tone }
+            const why = e.enrollment_status === 'cancelled' ? (e.cancellation_reason || '').replace(/^Admin revoked access:\s*/i, '') : ''
+            return [
+              <div key="n" className="max-w-[360px]">
+                <p className="break-words text-sm font-medium">{regTitle(e)}</p>
+                {s && regWhen(s) && <p className="text-xs text-muted-foreground">{regWhen(s)}</p>}
+                <ProductCodeText code={s?.product_code} />
+              </div>,
+              <span key="h" className="text-sm">{regHow(e)}</span>,
+              <div key="s">
+                <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                {e.enrollment_status === 'cancelled' && e.cancelled_at && <p className="mt-0.5 max-w-[200px] truncate text-xs text-muted-foreground" title={why || undefined}>{dayIST(e.cancelled_at)}{why ? ` · ${why}` : ''}</p>}
+              </div>,
+              <Muted key="r">{dayIST(e.enrolled_at)}</Muted>,
+              e.attendance_id ? <StatusPill key="a" tone="success">Yes</StatusPill> : <Muted key="a">No</Muted>,
+            ]
+          }}
         />
       </Section>
 
@@ -433,10 +494,11 @@ function Info({ icon: Icon, label, value, mono, copy }: { icon?: ComponentType<{
 const Muted = ({ children }: { children: ReactNode }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{children}</span>
 const Amount = ({ value }: { value: number }) => <span className="whitespace-nowrap text-sm tabular-nums">{value > 0 ? formatINR(value) : <span className="text-muted-foreground">Free</span>}</span>
 
-function ItemName({ title, granted, reason, test }: { title: string; granted?: boolean; reason?: string | null; test?: boolean }) {
+function ItemName({ title, code, granted, reason, test }: { title: string; code?: string | null; granted?: boolean; reason?: string | null; test?: boolean }) {
   return (
     <div className="max-w-[360px]">
       <p className="break-words text-sm font-medium">{title}{test && <StatusPill tone="warning" className="ml-1.5 align-middle">Test</StatusPill>}</p>
+      <ProductCodeText code={code} />
       {granted && <p className="truncate text-xs text-muted-foreground" title={reason || undefined}>Admin Granted{reason ? `: ${reason}` : ''}</p>}
     </div>
   )

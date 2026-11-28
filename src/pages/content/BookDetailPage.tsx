@@ -14,6 +14,7 @@ import { useBook } from '@/components/books/useBook'
 import { useBookSales } from '@/components/books/useBookSales'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatCount, formatDay, formatDayTime, formatINR } from '@/lib/format'
+import { ProductCode } from '@/components/common/ProductCode'
 
 const TABS = ['overview', 'sales', 'buyers', 'file', 'sample'] as const
 type Tab = (typeof TABS)[number]
@@ -70,6 +71,7 @@ export function BookDetailPage() {
         status={<>
           <StatusPill tone={published ? 'success' : 'warning'}>{published ? 'Published' : 'Draft'}</StatusPill>
           <StatusPill tone={format.tone}>{format.label}</StatusPill>
+          <ProductCode code={book.product_code} />
         </>}
         actions={canEdit && <>
           <Button variant="outline" onClick={() => setPublishAction(published ? 'unpublish' : 'publish')}>

@@ -15,6 +15,7 @@ import { RecordError, useRecord } from '@/components/forms/editor/EditorPage'
 import { Note } from '@/components/forms/editor/fields'
 import { PublishStatusPill, RunStatus } from '@/components/forms/editor/list'
 import { istDateTime, istSpan, minutesLabel, whenLabel } from '@/components/forms/editor/ist'
+import { ProductCode } from '@/components/common/ProductCode'
 
 const words = (s: string | null | undefined) => (s || 'Not set').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
@@ -94,6 +95,7 @@ function WorkshopDetail({ workshop, refreshError, reload }: { workshop: Workshop
       <div className="flex flex-wrap items-center gap-2">
         <RunStatus status={workshop.status} />
         <PublishStatusPill status={workshop.publish_status} />
+        <ProductCode code={workshop.product_code} />
         {workshop.is_free || !workshop.price ? <StatusPill tone="success">Free</StatusPill> : <StatusPill>{formatINR(workshop.price)}</StatusPill>}
         {workshop.certificate_enabled && <StatusPill className="gap-1"><Award aria-hidden="true" className="h-3.5 w-3.5" />Certificates on</StatusPill>}
         {workshop.archivedAt && <StatusPill tone="danger">Archived</StatusPill>}

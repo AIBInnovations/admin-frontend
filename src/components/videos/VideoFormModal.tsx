@@ -22,7 +22,8 @@ import { Switch } from '@/components/ui/switch'
 import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarqueeText } from '@/components/common/MarqueeText'
-import { Video, VideoFormData, ReleaseMode } from '@/services/videos.service'
+import { toast } from 'sonner'
+import { Video, VideoFormData, ReleaseMode, videosService } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { VideoTag, videoTagsService } from '@/services/videoTags.service'
 import { apiService } from '@/services/api.service'
@@ -92,6 +93,8 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   const [modules, setModules] = useState<Module[]>([])
   const [faculty, setFaculty] = useState<FacultyOption[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  // A new file for a ready (or failed) video: "Replace video" (Aviraj, 28 Nov 2026)
+  const [replaceFile, setReplaceFile] = useState<File | null>(null)
   const [availableTags, setAvailableTags] = useState<VideoTag[]>([])
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
@@ -125,6 +128,8 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   const scheduledValue = watch('scheduled_release_at')
 
   const isUpcomingEdit = mode === 'edit' && video?.processing_status === 'upcoming'
+  // The replace endpoint takes a ready or failed video (not one still processing)
+  const canReplace = mode === 'edit' && !!video && ['ready', 'failed'].includes(video.processing_status)
   const showReleaseControls = isUpcomingEdit && !!videoFile
 
   // Fetch dropdown data
@@ -146,6 +151,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   useEffect(() => {
     if (open) {
       setVideoFile(null)
+      setReplaceFile(null)
       setSelectedTagIds([])
       setUploadError(null)
       setUploadPhase(null)
@@ -230,6 +236,24 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
       }
       const releaseModeForUpload: ReleaseMode | undefined =
         isUpcomingEdit && videoFile ? data.release_mode : undefined
+
+      // Replace video: the new file goes up first, through the same safe
+      // replace as the Content Explorer (the current video keeps playing until
+      // the new one is ready; views, reviews and progress are kept). Then the
+      // details are saved as usual, with no file, so each page's own save is
+      // unchanged.
+      if (canReplace && replaceFile && video) {
+        const res = await videosService.replaceFile(video._id, replaceFile, {
+          onProgress: (pct) => setUploadProgress(pct),
+          onPhaseChange: (phase) => setUploadPhase(phase),
+        })
+        if (!res.success) throw new Error(res.message || 'The new video file could not be saved')
+        toast.success('New video file uploaded. Students keep the current video until the new one has finished processing.')
+        // Done: if saving the details below fails, a retry does not upload it again
+        setReplaceFile(null)
+        setUploadProgress(null)
+        setUploadPhase(null)
+      }
 
       await onSubmit(
         formData,
@@ -320,6 +344,58 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Replace video (edit of a ready or failed video) */}
+          {mode === 'edit' && video && !isUpcomingEdit && (
+            <div className="space-y-2">
+              <Label>
+                Replace video file
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(optional, leave empty to edit the details only)</span>
+              </Label>
+              {!canReplace ? (
+                <p className="rounded-lg border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                  The video can be replaced once it has finished processing.
+                </p>
+              ) : !replaceFile ? (
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-border px-4 py-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/50">
+                  <Upload className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-muted-foreground">Choose the new video file</span>
+                    <span className="block text-xs text-muted-foreground">MP4, MOV, AVI, MKV, WebM (up to 10 GB)</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => setReplaceFile(e.target.files?.[0] || null)}
+                    disabled={isSubmitting}
+                  />
+                </label>
+              ) : (
+                <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+                  <FileVideo className="h-5 w-5 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{replaceFile.name}</p>
+                    <p className="text-xs text-muted-foreground">{(replaceFile.size / (1024 * 1024)).toFixed(1)} MB, replaces the current file</p>
+                  </div>
+                  <Button
+                    type="button" variant="ghost" size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => setReplaceFile(null)}
+                    disabled={isSubmitting}
+                    aria-label="Keep the current video file"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              {canReplace && (
+                <p className="text-xs text-muted-foreground">
+                  The current video keeps playing until the new file has finished processing, then it is swapped in. Views, reviews and watch progress are kept, and the old file stays available to download.
+                </p>
               )}
             </div>
           )}
@@ -730,9 +806,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting || (mode === 'create' && !videoFile)}>
               {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' || videoFile ? `Uploading...${uploadProgress != null ? ` ${uploadProgress}%` : ''}` : 'Updating...'}</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' || videoFile || replaceFile ? `Uploading...${uploadProgress != null ? ` ${uploadProgress}%` : ''}` : 'Updating...'}</>
               ) : (
-                <>{mode === 'create' ? 'Upload Video' : videoFile ? 'Upload & Update Video' : 'Update Video'}</>
+                <>{mode === 'create' ? 'Upload Video' : videoFile ? 'Upload & Update Video' : replaceFile ? 'Replace Video & Save' : 'Update Video'}</>
               )}
             </Button>
           </DialogFooter>

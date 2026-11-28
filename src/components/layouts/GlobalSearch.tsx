@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, BookOpen, Film, Loader2, Package as PackageIcon, Plus, Search, TicketPercent, User as UserIcon, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, BookOpen, Calendar, CalendarRange, Film, Loader2, Package as PackageIcon, Plus, Search, TicketPercent, User as UserIcon, X, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { usersService } from '@/services/users.service'
@@ -8,6 +8,8 @@ import { packagesService } from '@/services/packages.service'
 import { videosService } from '@/services/videos.service'
 import { booksService } from '@/services/books.service'
 import { couponsService } from '@/services/coupons.service'
+import { liveSessionsService } from '@/services/liveSessions.service'
+import { workshopsService } from '@/services/workshops.service'
 import { visibleNavigation } from './navigation'
 
 interface Hit { key: string; label: string; hint?: string; href: string; icon: LucideIcon }
@@ -34,7 +36,7 @@ const SOURCES: { name: string; permission: string; run: (q: string) => Promise<H
     name: 'Packages', permission: 'packages.read',
     run: async (q) => ((await packagesService.getAll({ search: q, page: 1, limit: PER_TYPE } as never)).data?.entities ?? []).map((p) => {
       const subject = typeof p.subject_id === 'object' ? p.subject_id : null
-      return { key: `p${p._id}`, label: p.name, hint: subject?.name, href: `/content/packages/${p._id}`, icon: PackageIcon }
+      return { key: `p${p._id}`, label: p.name, hint: [p.product_code, subject?.name].filter(Boolean).join(' · ') || undefined, href: `/content/packages/${p._id}`, icon: PackageIcon }
     }),
   },
   {
@@ -46,7 +48,20 @@ const SOURCES: { name: string; permission: string; run: (q: string) => Promise<H
   {
     name: 'Books', permission: 'books.read',
     run: async (q) => ((await booksService.getAll({ search: q, page: 1, limit: PER_TYPE } as never)).data?.entities ?? []).map((b) => ({
-      key: `b${b._id}`, label: b.title, href: `/content/books/${b._id}`, icon: BookOpen,
+      key: `b${b._id}`, label: b.title, hint: b.product_code || undefined, href: `/content/books/${b._id}`, icon: BookOpen,
+    })),
+  },
+  // Product IDs (PGMEL..., PGMEW...) find live sessions and workshops too (28 Nov 2026)
+  {
+    name: 'Live sessions', permission: 'live_sessions.read',
+    run: async (q) => ((await liveSessionsService.getAll({ search: q, page: 1, limit: PER_TYPE } as never)).data?.entities ?? []).map((s) => ({
+      key: `s${s._id}`, label: s.title, hint: s.product_code || undefined, href: `/sessions/${s._id}`, icon: Calendar,
+    })),
+  },
+  {
+    name: 'Workshops', permission: 'live_sessions.read',
+    run: async (q) => ((await workshopsService.getAll({ search: q, page: 1, limit: PER_TYPE } as never)).data?.entities ?? []).map((w) => ({
+      key: `w${w._id}`, label: w.title, hint: w.product_code || undefined, href: `/workshops/${w._id}`, icon: CalendarRange,
     })),
   },
   {
@@ -236,7 +251,7 @@ export function GlobalSearch() {
                 </div>
               ))}
               {groups.length === 0 && !loading && (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nothing matches “{q}”. Try a name, phone number, student ID or coupon code.</p>
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nothing matches “{q}”. Try a name, phone number, student ID, product ID or coupon code.</p>
               )}
               {groups.length === 0 && loading && <p className="px-3 py-8 text-center text-sm text-muted-foreground">Searching…</p>}
             </div>

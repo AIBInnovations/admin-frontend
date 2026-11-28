@@ -24,6 +24,7 @@ import { RecordingStatus } from '@/components/recordings/RecordingStatus'
 import { istDateTime, istDay, istSpan, minutesLabel, whenLabel } from '@/components/forms/editor/ist'
 import { ACCESS_MARKER, accessSentence, modeOf, type GatedSession } from '@/components/sessions/sessionAccess'
 import { listClasses, previewText } from '@/components/sessions/weeklySchedule'
+import { ProductCode } from '@/components/common/ProductCode'
 
 const words = (s: string | null | undefined) => (s || 'Not set').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 const refName = (ref: LiveSession['subject_id'] | LiveSession['faculty_id'], missing: string) =>
@@ -139,6 +140,8 @@ function SessionDetail({ session, refreshError, reload }: { session: LiveSession
       <div className="flex flex-wrap items-center gap-2">
         <RunStatus status={shownStatus} />
         <PublishStatusPill status={session.publish_status} />
+        {/* A workshop's day sessions have none: the workshop is the product */}
+        {!(session as { workshop_id?: string | null }).workshop_id && <ProductCode code={session.product_code} />}
         {weekly && <StatusPill tone="info">Weekly</StatusPill>}
         {archivedAt && <StatusPill tone="danger">Archived</StatusPill>}
         {session.status !== 'cancelled' && (

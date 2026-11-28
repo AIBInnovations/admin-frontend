@@ -23,6 +23,8 @@ export interface FormTemplate {
 
 export interface Form {
   _id: string
+  /** Product ID, e.g. PGMEP001 (28 Nov 2026). Absent until the backfill has run. */
+  product_code?: string | null
   slug: string | null
   template_id: { _id: string; slug: string; name: string } | string
   subject_id: { _id: string; name: string } | string
