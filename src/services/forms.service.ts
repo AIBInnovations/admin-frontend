@@ -191,7 +191,7 @@ class FormsService {
   // --- Submissions ---
 
   async getSubmissions(params: FormSubmissionsListParams): Promise<ApiResponse<ListResponse<FormSubmission> & { form: Form; payment_counts?: PaymentCounts }>> {
-    const query = this.buildQuery(params as Record<string, unknown>)
+    const query = this.buildQuery({ ...params })
     return apiService.get<ListResponse<FormSubmission> & { form: Form }>(`${this.basePath}/submissions${query}`)
   }
 

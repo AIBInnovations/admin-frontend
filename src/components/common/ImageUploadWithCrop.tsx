@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { X } from 'lucide-react'
+import { toast } from 'sonner'
 import { FileUpload } from './FileUpload'
 import { ImageCropDialog } from './ImageCropDialog'
 
@@ -33,7 +35,7 @@ export function ImageUploadWithCrop({
     if (file) {
       // Check if it's an image
       if (!file.type.startsWith('image/')) {
-        alert('Please select an image file')
+        toast.error('Choose an image file (JPG, PNG or WebP).')
         return
       }
 
@@ -53,12 +55,15 @@ export function ImageUploadWithCrop({
     setSelectedImage(null)
   }
 
+  // Clearing a newly chosen file must not delete the saved image too.
   const handleRemove = () => {
-    onChange(null)
-    if (onDelete) {
-      onDelete()
-    }
+    if (value) onChange(null)
+    else onDelete?.()
   }
+
+  // One object URL per file, released when it changes.
+  const previewUrl = useMemo(() => (value ? URL.createObjectURL(value) : null), [value])
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
   const aspectRatioText =
     aspectRatio === 1 ? '1:1' : aspectRatio === 16 / 9 ? '16:9' : `${aspectRatio}:1`
@@ -82,11 +87,11 @@ export function ImageUploadWithCrop({
                 <button
                   type="button"
                   onClick={handleRemove}
-                  className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm"
+                  disabled={disabled}
+                  aria-label="Remove image"
+                  className="absolute right-1.5 top-1.5 rounded-full bg-danger p-1.5 text-white shadow-sm hover:bg-danger/90 disabled:opacity-50"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -104,19 +109,19 @@ export function ImageUploadWithCrop({
         ) : value ? (
           <div className="relative inline-block max-w-full">
             <img
-              src={URL.createObjectURL(value)}
+              src={previewUrl ?? undefined}
               alt="Preview"
               className="rounded-lg w-full border"
             />
             <button
-              type="button"
-              onClick={handleRemove}
-              className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
+                  type="button"
+                  onClick={handleRemove}
+                  disabled={disabled}
+                  aria-label="Remove chosen image"
+                  className="absolute right-1.5 top-1.5 rounded-full bg-danger p-1.5 text-white shadow-sm hover:bg-danger/90 disabled:opacity-50"
+                >
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
           </div>
         ) : (
           <FileUpload

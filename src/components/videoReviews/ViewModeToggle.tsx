@@ -20,6 +20,8 @@ export function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
       {modes.map(({ key, label, Icon }) => (
         <Button
           key={key}
+          type="button"
+          aria-pressed={value === key}
           size="sm"
           variant={value === key ? 'secondary' : 'ghost'}
           className="h-7 px-3 text-xs gap-1.5"

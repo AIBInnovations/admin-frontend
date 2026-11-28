@@ -84,9 +84,3 @@ export function buildChildUrl(focus: ExplorerFocus, childId: string): string {
     default: return EXPLORER_BASE
   }
 }
-
-export function getRefName(ref: { _id: string; name: string } | string | null | undefined): string | null {
-  if (!ref) return null
-  if (typeof ref === 'string') return null
-  return ref.name
-}

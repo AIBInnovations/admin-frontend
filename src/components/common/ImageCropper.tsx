@@ -105,7 +105,7 @@ export function ImageCropper({
           }
         `}</style>
       )}
-      <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !isCropping) onClose() }}>
+      <Dialog variant="modal" open={open} onOpenChange={(isOpen) => { if (!isOpen && !isCropping) onClose() }}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>

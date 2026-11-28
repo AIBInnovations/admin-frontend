@@ -63,6 +63,10 @@ export interface DataTableProps<TData> {
   isLoading?: boolean;
   /** Empty state configuration */
   emptyState?: EmptyStateConfig;
+  /** The last load failed. Shown instead of the empty state, so an outage never reads as "no data". */
+  error?: string | null;
+  /** Adds "Try again" to the error. */
+  onRetry?: () => void;
   /** Pagination configuration */
   pagination?: PaginationConfig;
   /** Optional row click handler */

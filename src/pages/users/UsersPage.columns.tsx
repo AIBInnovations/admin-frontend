@@ -1,20 +1,26 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
+import { StatusPill } from '@/components/common/detail'
+import { PersonAvatar, personName } from '@/components/users/kit'
+import { dayIST } from '@/components/users/lib'
+import { StudentLink } from '@/components/students/StudentLink'
 import { User } from '@/services/users.service'
-import { MoreVertical, Eye, ShieldBan, ShieldCheck, UserCircle, MailX } from 'lucide-react'
+import { MoreVertical, Eye, Pencil, ShieldBan, ShieldCheck } from 'lucide-react'
 
 interface UsersColumnsProps {
   onNavigate: (user: User) => void
-  onBlockToggle: (user: User) => void
+  /** Missing when the admin may not change users. */
+  onEdit?: (user: User) => void
+  onBlockToggle?: (user: User) => void
 }
 
 export function useUsersColumns({
   onNavigate,
+  onEdit,
   onBlockToggle,
 }: UsersColumnsProps): ColumnDef<User>[] {
   return [
@@ -22,17 +28,11 @@ export function useUsersColumns({
       id: 'user',
       header: 'User',
       cell: (user) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted overflow-hidden shrink-0">
-            {user.photo_url ? (
-              <img src={user.photo_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <UserCircle className="h-5 w-5 text-muted-foreground" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{user.name || '—'}</p>
-            <p className="text-xs text-muted-foreground truncate">{user.email || user.phone_number}</p>
+        <div className="flex min-w-[220px] items-center gap-3">
+          <PersonAvatar name={user.name} photo={user.photo_url} />
+          <div className="min-w-0 max-w-[280px]">
+            <p className="truncate text-sm"><StudentLink student={user} fallback="Unnamed User" from="Users" className="text-foreground hover:text-primary" /></p>
+            <p className="truncate text-xs text-muted-foreground">{user.email || user.phone_number}</p>
           </div>
         </div>
       ),
@@ -42,7 +42,7 @@ export function useUsersColumns({
       header: 'Phone',
       width: 'w-32',
       cell: (user) => (
-        <span className="text-sm">{user.phone_number}</span>
+        <span className="font-mono text-[13px]">{user.phone_number}</span>
       ),
     },
     {
@@ -50,25 +50,12 @@ export function useUsersColumns({
       header: 'Status',
       width: 'w-36',
       cell: (user) => (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge className={`text-[10px] ${user.is_active
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-            : 'bg-red-500/10 text-red-600 border-red-200'
-          }`}>
-            {user.is_active ? 'Active' : 'Blocked'}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusPill tone={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Blocked'}</StatusPill>
           {user.email_excluded && (
-            <Badge
-              className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200"
-              title={
-                user.email_excluded_reason === 'user_unsubscribed'
-                  ? 'Self-unsubscribed'
-                  : 'Excluded by admin'
-              }
-            >
-              <MailX className="mr-0.5 h-2.5 w-2.5" />
-              No Email
-            </Badge>
+            <span title={user.email_excluded_reason === 'user_unsubscribed' ? 'Self-unsubscribed' : 'Excluded by admin'}>
+              <StatusPill tone="warning">No Email</StatusPill>
+            </span>
           )}
         </div>
       ),
@@ -78,9 +65,7 @@ export function useUsersColumns({
       header: 'Onboarding',
       width: 'w-28',
       cell: (user) => (
-        <Badge variant={user.onboarding_completed ? 'secondary' : 'outline'} className="text-[10px]">
-          {user.onboarding_completed ? 'Done' : 'Pending'}
-        </Badge>
+        <StatusPill tone={user.onboarding_completed ? 'neutral' : 'warning'}>{user.onboarding_completed ? 'Done' : 'Pending'}</StatusPill>
       ),
     },
     {
@@ -89,13 +74,10 @@ export function useUsersColumns({
       width: 'w-28',
       cell: (user) => (
         <div className="flex items-center gap-2">
-          <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${user.profile_completion_percentage}%` }}
-            />
+          <div aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, user.profile_completion_percentage || 0))}%` }} />
           </div>
-          <span className="text-[10px] text-muted-foreground">{user.profile_completion_percentage}%</span>
+          <span className="text-xs tabular-nums text-muted-foreground">{Math.round(user.profile_completion_percentage || 0)}%</span>
         </div>
       ),
     },
@@ -104,13 +86,7 @@ export function useUsersColumns({
       header: 'Last Login',
       width: 'w-28',
       cell: (user) => (
-        <span className="text-xs text-muted-foreground">
-          {user.last_login
-            ? new Date(user.last_login).toLocaleDateString('en-IN', {
-                day: 'numeric', month: 'short', year: 'numeric',
-              })
-            : '—'}
-        </span>
+        <span className="whitespace-nowrap text-xs text-muted-foreground">{user.last_login ? dayIST(user.last_login) : '—'}</span>
       ),
     },
     {
@@ -118,31 +94,35 @@ export function useUsersColumns({
       header: '',
       width: 'w-10',
       cell: (user) => (
-        <div onClick={(e) => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onNavigate(user)}>
-                <Eye className="mr-2 h-4 w-4" />View Details
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${personName(user)}`}>
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onNavigate(user)}>
+              <Eye className="mr-2 h-4 w-4" />View Details
+            </DropdownMenuItem>
+            {onEdit && (
+              <DropdownMenuItem onClick={() => onEdit(user)}>
+                <Pencil className="mr-2 h-4 w-4" />Edit
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => onBlockToggle(user)}
-                className={user.is_active ? 'text-destructive' : ''}
-              >
-                {user.is_active ? (
-                  <><ShieldBan className="mr-2 h-4 w-4" />Block User</>
-                ) : (
-                  <><ShieldCheck className="mr-2 h-4 w-4" />Unblock User</>
-                )}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            )}
+            {onBlockToggle && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onBlockToggle(user)} className={user.is_active ? 'text-danger focus:text-danger' : ''}>
+                  {user.is_active ? (
+                    <><ShieldBan className="mr-2 h-4 w-4" />Block User</>
+                  ) : (
+                    <><ShieldCheck className="mr-2 h-4 w-4" />Unblock User</>
+                  )}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ]

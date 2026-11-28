@@ -1,12 +1,12 @@
+import type { ReactNode } from 'react'
+import { Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { X, Eye, EyeOff, Archive, Loader2 } from 'lucide-react'
 
-interface BulkAction {
+export interface BulkAction {
   label: string
-  icon: React.ReactNode
+  icon: ReactNode
   onClick: () => void
   loading?: boolean
-  variant?: 'default' | 'outline' | 'amber'
 }
 
 interface ExplorerSelectionBarProps {
@@ -15,43 +15,19 @@ interface ExplorerSelectionBarProps {
   actions: BulkAction[]
 }
 
+/** Sits under the list while rows are selected. */
 export function ExplorerSelectionBar({ count, onClear, actions }: ExplorerSelectionBarProps) {
   if (count === 0) return null
-
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white text-slate-900 rounded-xl px-4 py-2.5 shadow-lg ring-1 ring-black/10">
-      <span className="text-sm font-medium text-slate-700 mr-1">{count} selected</span>
-
-      {actions.map((action, i) => (
-        <Button
-          key={i}
-          size="sm"
-          variant="ghost"
-          disabled={action.loading}
-          onClick={action.onClick}
-          className={`h-7 gap-1.5 ${
-            action.variant === 'amber'
-              ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
-              : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          {action.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : action.icon}
-          <span className="hidden sm:inline">{action.label}</span>
+    <div role="toolbar" aria-label="Selected items" className="pg-dock flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border bg-accent px-4 py-2">
+      <span aria-live="polite" className="mr-auto text-sm font-semibold tabular-nums text-accent-foreground">{count} selected</span>
+      {actions.map((action) => (
+        <Button key={action.label} size="sm" variant="outline" disabled={action.loading} onClick={action.onClick} className="h-8 gap-1.5 bg-card">
+          {action.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : action.icon}
+          {action.label}
         </Button>
       ))}
-
-      <div className="w-px h-4 bg-slate-200 mx-1" />
-
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={onClear}
-        className="h-7 w-7 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-      >
-        <X className="w-3.5 h-3.5" />
-      </Button>
+      <Button size="icon" variant="ghost" onClick={onClear} aria-label="Clear selection" className="h-8 w-8"><X className="h-4 w-4" /></Button>
     </div>
   )
 }
-
-export { Eye, EyeOff, Archive }

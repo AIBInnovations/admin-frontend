@@ -1,63 +1,41 @@
-import { useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 
 interface KeyboardNavOptions {
-  onHelp?: () => void
-  upUrl?: string
-  searchRef?: React.RefObject<HTMLInputElement | null>
+  onHelp: () => void
+  onFind: () => void
+  onSave: () => void
+  /** Escape: close the open item, else go up one level. */
+  onEscape: () => void
 }
 
-function isInputFocused(): boolean {
-  const tag = document.activeElement?.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (document.activeElement as HTMLElement)?.isContentEditable === true
+function isTyping(): boolean {
+  const el = document.activeElement as HTMLElement | null
+  return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)
 }
 
-// Any Radix overlay (dialog, alert-dialog, popover, dropdown-menu, tooltip, etc.)
-// renders its content inside a container marked with `data-state="open"` and one
-// of these role/data attributes. If ANY of them are open, let Radix handle the
-// keypress — don't steal Escape/Backspace out from under it.
+/** An open menu, dialog or popover handles its own keys. */
 function isOverlayOpen(): boolean {
-  return document.querySelector(
-    '[data-radix-dialog-content],[data-radix-alert-dialog-content],[data-radix-popper-content-wrapper],[role="dialog"][data-state="open"],[role="menu"][data-state="open"]',
-  ) !== null
+  return document.querySelector('[role="dialog"][data-state="open"],[role="alertdialog"],[role="menu"][data-state="open"],[data-radix-popper-content-wrapper]') !== null
 }
 
-export function useKeyboardNav({ onHelp, upUrl, searchRef }: KeyboardNavOptions = {}) {
-  const navigate = useNavigate()
-
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      const metaOrCtrl = e.metaKey || e.ctrlKey
-
-      if (metaOrCtrl && e.key === 'k') {
-        e.preventDefault()
-        searchRef?.current?.focus()
-        return
-      }
-
-      if (isInputFocused()) return
-      if (isOverlayOpen()) return
-
-      switch (e.key) {
-        case '?':
-          e.preventDefault()
-          onHelp?.()
-          break
-
-        case 'Escape':
-        case 'Backspace':
-          if (upUrl) {
-            e.preventDefault()
-            navigate(upUrl)
-          }
-          break
-      }
-    },
-    [onHelp, upUrl, searchRef, navigate],
-  )
+export function useKeyboardNav(options: KeyboardNavOptions) {
+  const ref = useRef(options)
+  ref.current = options
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [handleKey])
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+        // Never the browser's "Save page as" here
+        e.preventDefault()
+        ref.current.onSave()
+        return
+      }
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTyping() || isOverlayOpen()) return
+      if (e.key === '?') { e.preventDefault(); ref.current.onHelp() }
+      else if (e.key === '/') { e.preventDefault(); ref.current.onFind() }
+      else if (e.key === 'Escape') { e.preventDefault(); ref.current.onEscape() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 }

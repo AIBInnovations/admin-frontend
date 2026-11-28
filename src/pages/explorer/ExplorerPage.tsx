@@ -1,113 +1,110 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useMemo } from 'react'
+import { Pencil } from 'lucide-react'
 import { toast } from 'sonner'
-import { parseExplorerPath, EXPLORER_BASE } from './parseExplorerPath'
-import { useExplorerData } from './hooks/useExplorerData'
-import { useProcessingPoll } from './hooks/useProcessingPoll'
-import { ExplorerLayout } from './components/ExplorerLayout'
-import { ExplorerTopBar } from './components/ExplorerTopBar'
+import { Button } from '@/components/ui/button'
+import { ActionsProvider } from './actions/ActionsContext'
+import { useExplorerAccess } from './access'
 import { ExplorerChildrenPanel } from './components/ExplorerChildrenPanel'
 import { ExplorerDetailPanel } from './components/ExplorerDetailPanel'
+import { ExplorerLayout } from './components/ExplorerLayout'
 import { ExplorerNotFound } from './components/ExplorerNotFound'
+import { ExplorerTopBar } from './components/ExplorerTopBar'
+import { CompactContext } from './context/CompactContext'
 import { PanelSelectionProvider, usePanelSelection } from './context/PanelSelectionContext'
+import { useExplorerData, type ExplorerData } from './hooks/useExplorerData'
+import { useProcessingPoll } from './hooks/useProcessingPoll'
+import { EXPLORER_BASE, parseExplorerPath, type ExplorerFocus } from './parseExplorerPath'
+import { following } from './following'
+
+const MISSING: Record<string, string> = {
+  subject: 'That subject no longer exists.',
+  package: 'That package no longer exists.',
+  series: 'That series is no longer in this package.',
+  module: 'That module is no longer in this series.',
+  video: 'That video is no longer in this module.',
+  book: 'That book no longer exists.',
+}
+
+/** Nearest place in the address that still exists. */
+function fallbackFor(missing: string, focus: ExplorerFocus): string {
+  if (missing === 'book') return `${EXPLORER_BASE}/books`
+  if (!('subjectId' in focus) || missing === 'subject') return EXPLORER_BASE
+  let url = `${EXPLORER_BASE}/subjects/${focus.subjectId}`
+  if (missing === 'package' || !('packageId' in focus)) return url
+  url += `/packages/${focus.packageId}`
+  if (missing === 'series' || !('seriesId' in focus)) return url
+  url += `/series/${focus.seriesId}`
+  if (missing === 'module' || !('moduleId' in focus)) return url
+  return `${url}/modules/${focus.moduleId}`
+}
 
 export function ExplorerPage() {
+  const { pathname, search } = useLocation()
+  const navigate = useNavigate()
+  const focus = useMemo(() => parseExplorerPath(pathname), [pathname])
+  const data = useExplorerData(focus)
+  useProcessingPoll(data.currentModule, data.refetch)
+
+  useEffect(() => {
+    if (focus.level !== 'invalid') return
+    toast.error('That address does not exist.', { id: 'explorer-address' })
+    navigate(focus.fallbackUrl, { replace: true })
+  }, [focus, navigate])
+
+  // Deleted or moved since the link was made. Said once per address.
+  const handled = useRef<string | null>(null)
+  useEffect(() => {
+    if (!data.missing || data.loading || focus.level === 'invalid' || handled.current === pathname || following.url) return
+    handled.current = pathname
+    toast.error(MISSING[data.missing])
+    navigate(fallbackFor(data.missing, focus), { replace: true })
+  }, [data.missing, data.loading, focus, navigate, pathname])
+
+  useEffect(() => {
+    if (!data.movedToSubject || !('subjectId' in focus) || handled.current === pathname) return
+    handled.current = pathname
+    toast.info('This package is in another subject now.')
+    navigate(pathname.replace(`/subjects/${focus.subjectId}/`, `/subjects/${data.movedToSubject}/`) + search, { replace: true })
+  }, [data.movedToSubject, focus, navigate, pathname, search])
+
+  if (focus.level === 'invalid') return <ExplorerNotFound />
   return (
-    <PanelSelectionProvider>
-      <ExplorerPageInner />
+    <PanelSelectionProvider focus={focus} data={data}>
+      <ActionsProvider refresh={data.refetch}>
+        <ExplorerWorkspace focus={focus} data={data} />
+      </ActionsProvider>
     </PanelSelectionProvider>
   )
 }
 
-function ExplorerPageInner() {
-  const { pathname } = useLocation()
-  const navigate = useNavigate()
-  const focus = useMemo(() => parseExplorerPath(pathname), [pathname])
-  const data = useExplorerData(focus)
-  const { setFocusDefault, clear } = usePanelSelection()
-
-  useProcessingPoll(data.currentModule, data.refetch)
-
-  // Navigating to a new node drops any manual panel selection and the stale
-  // focus default (re-set below once the new node's data resolves).
-  useEffect(() => { clear(); setFocusDefault(null) }, [pathname, clear, setFocusDefault])
-
-  // Default the panel to the focused entity (no-op while a manual pick is open).
-  useEffect(() => {
-    if (focus.level === 'subject' && data.subject) {
-      setFocusDefault({ kind: 'subject', entity: data.subject })
-    } else if (focus.level === 'package' && data.packageDetail) {
-      setFocusDefault({ kind: 'package', entity: data.packageDetail, ctx: { subjectId: focus.subjectId } })
-    } else if (focus.level === 'series' && data.currentSeries) {
-      setFocusDefault({ kind: 'series', entity: data.currentSeries, ctx: { packageId: focus.packageId } })
-    } else if (focus.level === 'module' && data.currentModule) {
-      setFocusDefault({ kind: 'module', entity: data.currentModule, ctx: { seriesId: focus.seriesId } })
-    } else if (focus.level === 'video' && data.currentVideo) {
-      setFocusDefault({ kind: 'video', entity: data.currentVideo, ctx: { moduleId: focus.moduleId } })
-    } else if (focus.level === 'book' && data.book) {
-      setFocusDefault({ kind: 'book', entity: data.book })
-    } else if (focus.level === 'root' || focus.level === 'books') {
-      setFocusDefault(null)
-    }
-  }, [focus, data.subject, data.packageDetail, data.currentSeries, data.currentModule, data.currentVideo, data.book, setFocusDefault])
-
-  useEffect(() => {
-    if (focus.level === 'invalid') {
-      const messages: Record<typeof focus.reason, string> = {
-        malformed: 'Invalid URL — redirecting to a safe location.',
-        notfound: 'Content not found.',
-        chain_mismatch: 'Path has changed — redirecting to nearest valid ancestor.',
-      }
-      toast.error(messages[focus.reason])
-      navigate(focus.fallbackUrl, { replace: true })
-    }
-  }, [focus, navigate])
-
-  // Chain-mismatch recovery: URL shape was valid but IDs don't chain
-  // together in the actual tree (e.g. series not under this package, or
-  // a deleted/moved entity). Redirect to the nearest valid ancestor.
-  useEffect(() => {
-    if (!data.missing || data.loading) return
-    let fallback = EXPLORER_BASE
-    if (data.missing === 'book') {
-      fallback = `${EXPLORER_BASE}/books`
-    } else if ('subjectId' in focus) {
-      if (data.missing === 'package' || data.missing === 'subject') {
-        fallback = `${EXPLORER_BASE}/subjects/${focus.subjectId}`
-      } else if (data.missing === 'series' && 'packageId' in focus) {
-        fallback = `${EXPLORER_BASE}/subjects/${focus.subjectId}/packages/${focus.packageId}`
-      } else if (data.missing === 'module' && 'seriesId' in focus) {
-        fallback = `${EXPLORER_BASE}/subjects/${focus.subjectId}/packages/${focus.packageId}/series/${focus.seriesId}`
-      } else if (data.missing === 'video' && 'moduleId' in focus) {
-        fallback = `${EXPLORER_BASE}/subjects/${focus.subjectId}/packages/${focus.packageId}/series/${focus.seriesId}/modules/${focus.moduleId}`
-      }
-    }
-    toast.error('Path has changed — redirecting to nearest valid ancestor.')
-    navigate(fallback, { replace: true })
-  }, [data.missing, data.loading, focus, navigate])
-
-  if (focus.level === 'invalid') {
-    return <ExplorerNotFound reason={focus.reason} fallbackUrl={focus.fallbackUrl} />
-  }
+function ExplorerWorkspace({ focus, data }: { focus: ExplorerFocus; data: ExplorerData }) {
+  const { viewer } = useExplorerAccess()
+  const { target, manual, clear, select, asking } = usePanelSelection()
+  // A phone is always compact (no room to dock the editor), so start there: the folder bar
+  // is then in place from the first frame instead of pushing the list down a moment later.
+  const [compact, setCompact] = useState(() => typeof window !== 'undefined' && window.innerWidth < 704)
+  const folder = focus.level !== 'root' && focus.level !== 'books' && target && target.id !== null ? target : null
 
   return (
-    <ExplorerLayout
-      topBar={
-        <ExplorerTopBar
-          focus={focus}
-          subjectName={data.subjectName}
-          packageName={data.packageName}
-          seriesName={data.seriesName}
-          moduleName={data.moduleName}
-          videoName={data.videoName}
-          bookName={data.bookName}
-          onRefresh={data.refetch}
-          loading={data.loading}
-        />
-      }
-      detailPanel={<ExplorerDetailPanel onRefresh={data.refetch} />}
-    >
-      <ExplorerChildrenPanel focus={focus} data={data} onRefresh={data.refetch} />
-    </ExplorerLayout>
+    <CompactContext.Provider value={compact}>
+      <ExplorerLayout
+        viewer={viewer}
+        topBar={<ExplorerTopBar focus={focus} data={data} />}
+        detailPanel={<ExplorerDetailPanel focus={focus} data={data} />}
+        sheetOpen={manual || asking}
+        onSheetClose={clear}
+        onCompactChange={setCompact}
+      >
+        {/* Narrow screens have no docked editor: this opens the folder's own details */}
+        {compact && !manual && folder && (
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2">
+            <p className="min-w-0 truncate text-[13px] text-muted-foreground">You are in a {folder.kind}</p>
+            <Button size="sm" variant="outline" onClick={() => select(folder.kind as Parameters<typeof select>[0], folder.id)}><Pencil className="h-3.5 w-3.5" /> Details</Button>
+          </div>
+        )}
+        <ExplorerChildrenPanel focus={focus} data={data} />
+      </ExplorerLayout>
+    </CompactContext.Provider>
   )
 }

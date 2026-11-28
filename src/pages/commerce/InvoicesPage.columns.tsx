@@ -1,46 +1,39 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
+import { StatusPill } from '@/components/common/detail'
+import { formatINR } from '@/lib/format'
 import { Invoice } from '@/services/invoices.service'
-import { MoreVertical, Download, RefreshCw } from 'lucide-react'
-
-const statusColors: Record<string, string> = {
-  paid: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  unpaid: 'bg-amber-500/10 text-amber-600 border-amber-200',
-  partially_paid: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  void: 'bg-red-500/10 text-red-600 border-red-200',
-}
-
-const typeColors: Record<string, string> = {
-  package: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  session: 'bg-violet-500/10 text-violet-600 border-violet-200',
-  book: 'bg-orange-500/10 text-orange-600 border-orange-200',
-  ebook: 'bg-green-500/10 text-green-600 border-green-200',
-  form: 'bg-amber-500/10 text-amber-600 border-amber-200',
-}
+import { MoreVertical, Download, Mail, RefreshCw } from 'lucide-react'
+import { INVOICE_STATUS, TYPE_LABEL, istDay } from './components/labels'
+import { StudentLink } from '@/components/students/StudentLink'
 
 interface InvoicesColumnsProps {
   onDownload: (invoice: Invoice) => void
-  onRegenerate: (invoice: Invoice) => void
+  /** Left out when the admin may not change invoices. */
+  onRegenerate?: (invoice: Invoice) => void
+  onEmail?: (invoice: Invoice) => void
+  busyId: string | null
 }
 
 export function useInvoicesColumns({
   onDownload,
   onRegenerate,
+  onEmail,
+  busyId,
 }: InvoicesColumnsProps): ColumnDef<Invoice>[] {
   return [
     {
       id: 'invoice',
       header: 'Invoice',
       cell: (inv) => (
-        <div className="min-w-0">
-          <p className="text-sm font-medium font-mono">{inv.invoice_number}</p>
-          <p className="text-xs text-muted-foreground">
-            {typeof inv.user_id === 'object' ? inv.user_id.name : '—'}
+        <div className="min-w-[160px] max-w-[280px]">
+          <p className="truncate font-mono text-sm font-medium" title={inv.invoice_number}>{inv.invoice_number}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            <StudentLink student={typeof inv.user_id === 'string' ? { _id: inv.user_id } : inv.user_id} fallback="Student" from="Invoices" className="text-xs" />
           </p>
         </div>
       ),
@@ -49,21 +42,17 @@ export function useInvoicesColumns({
       id: 'type',
       header: 'Type',
       width: 'w-24',
-      cell: (inv) => (
-        <Badge className={`text-[10px] capitalize ${typeColors[inv.purchase_type] || ''}`}>
-          {inv.purchase_type}
-        </Badge>
-      ),
+      cell: (inv) => <span className="text-sm">{TYPE_LABEL[inv.purchase_type] || inv.purchase_type}</span>,
     },
     {
       id: 'amount',
       header: 'Amount',
-      width: 'w-28',
+      width: 'w-32',
       cell: (inv) => (
-        <div>
-          <p className="text-sm font-medium">₹{inv.amount.toLocaleString('en-IN')}</p>
+        <div className="whitespace-nowrap tabular-nums">
+          <p className="text-sm font-medium">{formatINR(inv.amount)}</p>
           {inv.gst_amount > 0 && (
-            <p className="text-[10px] text-muted-foreground">+₹{inv.gst_amount.toLocaleString('en-IN')} GST</p>
+            <p className="text-xs text-muted-foreground">incl. {formatINR(inv.gst_amount)} GST</p>
           )}
         </div>
       ),
@@ -72,23 +61,16 @@ export function useInvoicesColumns({
       id: 'status',
       header: 'Status',
       width: 'w-28',
-      cell: (inv) => (
-        <Badge className={`text-[10px] capitalize ${statusColors[inv.payment_status] || ''}`}>
-          {inv.payment_status.replace('_', ' ')}
-        </Badge>
-      ),
+      cell: (inv) => {
+        const s = INVOICE_STATUS[inv.payment_status]
+        return <StatusPill tone={s?.tone}>{s?.label || inv.payment_status}</StatusPill>
+      },
     },
     {
       id: 'date',
       header: 'Date',
       width: 'w-28',
-      cell: (inv) => (
-        <span className="text-xs text-muted-foreground">
-          {new Date(inv.createdAt).toLocaleDateString('en-IN', {
-            day: 'numeric', month: 'short', year: 'numeric',
-          })}
-        </span>
-      ),
+      cell: (inv) => <span className="whitespace-nowrap text-xs text-muted-foreground">{istDay(inv.createdAt)}</span>,
     },
     {
       id: 'actions',
@@ -97,19 +79,24 @@ export function useInvoicesColumns({
       cell: (inv) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${inv.invoice_number}`} disabled={busyId === inv._id}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {inv.invoice_url && (
-              <DropdownMenuItem onClick={() => onDownload(inv)}>
-                <Download className="mr-2 h-4 w-4" />Download PDF
+            <DropdownMenuItem onClick={() => onDownload(inv)}>
+              <Download className="mr-2 h-4 w-4" />Download PDF
+            </DropdownMenuItem>
+            {onRegenerate && (
+              <DropdownMenuItem onClick={() => onRegenerate(inv)}>
+                <RefreshCw className="mr-2 h-4 w-4" />Regenerate
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => onRegenerate(inv)}>
-              <RefreshCw className="mr-2 h-4 w-4" />Regenerate
-            </DropdownMenuItem>
+            {onEmail && (
+              <DropdownMenuItem onClick={() => onEmail(inv)}>
+                <Mail className="mr-2 h-4 w-4" />Email again
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

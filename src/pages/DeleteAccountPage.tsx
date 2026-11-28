@@ -50,13 +50,11 @@ export function DeleteAccountPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
-            <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">P</span>
-            </div>
+            <img src="/favicon.svg" alt="PGME" width={48} height={48} className="h-12 w-12 rounded-full ring-1 ring-border" />
           </div>
           <CardTitle className="text-2xl font-bold text-center">Delete Your Account</CardTitle>
           <CardDescription className="text-center">

@@ -2,57 +2,292 @@
 @import "./styles/design-tokens.css";
 @config "../tailwind.config.js"; 
 
+/* ── PGME brand theme ────────────────────────────────────────────────
+   Brand colours come from the student app (app/lib/core/theme/app_theme.dart):
+   Strong Blue #0000C8 and Sky Blue #00BEFA. Everything else is derived.
+     cobalt  #0000C8  actions, selection, links
+     sky     #00BEFA  focus, live signals, chart highlight
+     ink     #0A0E2C  text and the navigation rail
+     slate   #5B6280  secondary text (6:1 on white)
+     paper   #F5F6FA  app canvas
+     line    #E2E5EE  hairlines
+   Values are HSL channels so shadcn's hsl(var(--x) / a) keeps working.
+   ──────────────────────────────────────────────────────────────────── */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  --background: 228 33% 97%;
+  --foreground: 233 63% 11%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
+  --card-foreground: 233 63% 11%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 100% 50%;
+  --popover-foreground: 233 63% 11%;
+  --primary: 240 100% 39%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 197 100% 50%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 95% 96%;
-  --accent-foreground: 240 100% 50%;
-  --destructive: 0 84.2% 60.2%;
+  --secondary: 194 100% 49%;
+  --secondary-foreground: 233 63% 11%;
+  --muted: 228 30% 95%;
+  --muted-foreground: 229 17% 43%;
+  --accent: 234 100% 97%;
+  --accent-foreground: 240 100% 39%;
+  --destructive: 0 74% 45%;
   --destructive-foreground: 0 0% 100%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 100% 50%;
+  --border: 225 26% 91%;
+  --input: 225 22% 86%;
+  --ring: 194 100% 45%;
   --radius: 0.5rem;
+
+  /* Status */
+  --success: 161 94% 24%;
+  --success-soft: 152 60% 95%;
+  --warning: 32 95% 37%;
+  --warning-soft: 43 100% 95%;
+  --danger: 0 74% 45%;
+  --danger-soft: 0 86% 97%;
+
+  /* Navigation rail */
+  --rail: 233 63% 11%;
+  --rail-foreground: 228 40% 92%;
+  --rail-muted: 230 22% 62%;
+  --rail-hover: 233 45% 17%;
+  --rail-active: 240 100% 39%;
+
+  /* Brand signature: the cobalt-to-sky rule */
+  --brand-gradient: linear-gradient(90deg, #0000C8 0%, #00BEFA 100%);
+  --brand-gradient-v: linear-gradient(180deg, #0000C8 0%, #00BEFA 100%);
+
+  --shadow-card: 0 1px 2px hsl(233 63% 11% / 0.04), 0 1px 1px hsl(233 63% 11% / 0.03);
+  --shadow-raised: 0 12px 32px -12px hsl(233 63% 11% / 0.18), 0 2px 6px hsl(233 63% 11% / 0.06);
 }
 
 .dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 240 100% 50%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 197 100% 60%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 100% 50%;
+  --background: 233 50% 7%;
+  --foreground: 228 40% 94%;
+  --card: 233 45% 10%;
+  --card-foreground: 228 40% 94%;
+  --popover: 233 45% 10%;
+  --popover-foreground: 228 40% 94%;
+  --primary: 236 100% 66%;
+  --primary-foreground: 233 63% 8%;
+  --secondary: 194 100% 49%;
+  --secondary-foreground: 233 63% 8%;
+  --muted: 233 35% 15%;
+  --muted-foreground: 230 20% 68%;
+  --accent: 236 50% 18%;
+  --accent-foreground: 228 40% 94%;
+  --destructive: 0 72% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 233 30% 20%;
+  --input: 233 30% 24%;
+  --ring: 194 100% 49%;
+  --success: 158 64% 52%;
+  --success-soft: 160 60% 12%;
+  --warning: 38 92% 60%;
+  --warning-soft: 38 60% 12%;
+  --danger: 0 72% 62%;
+  --danger-soft: 0 50% 14%;
+  --rail: 233 55% 6%;
+  --rail-foreground: 228 40% 92%;
+  --rail-muted: 230 20% 60%;
+  --rail-hover: 233 40% 13%;
+  --rail-active: 236 100% 60%;
 }
+
+/* Tailwind 4 defaults border colour to currentColor (v3 used gray-200), so
+   every bare `border` in the panel rendered near-black. Restore a hairline. */
+@layer base {
+  *, ::before, ::after, ::backdrop, ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+  /* A scroll box must contain its own absolutely placed children (sr-only text,
+     switch inputs), or they stretch the page behind it. Utilities still win. */
+  :where(.overflow-auto, .overflow-x-auto, .overflow-y-auto) { position: relative; }
+}
+
+/* ── Fonts that do not move the page when they arrive ─────────────────
+   Google Fonts load with display=swap. Until they do, text is drawn in a
+   local Arial scaled to the same width and line metrics (measured in Chrome
+   against the real faces), so the swap repaints without reflowing. */
+@font-face {
+  font-family: 'IBM Plex Sans Fallback';
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans');
+  font-weight: 100 500;
+  size-adjust: 100%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold');
+  font-weight: 600 900;
+  size-adjust: 96.9%;
+  ascent-override: 105.8%;
+  descent-override: 28.4%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Bricolage Grotesque Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold');
+  size-adjust: 91%;
+  ascent-override: 102.2%;
+  descent-override: 29.7%;
+  line-gap-override: 0%;
+}
+
+html {
+  color-scheme: light;
+  -webkit-tap-highlight-color: transparent;
+  /* Phones: the shell never rubber-bands or pulls to refresh; only the content scrolls */
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.dark { color-scheme: dark; }
 
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-feature-settings: 'rlig' 1, 'calt' 1;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'IBM Plex Sans', 'IBM Plex Sans Fallback', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+  /* A long name, email or id breaks inside its box instead of pushing it wider */
+  overflow-wrap: break-word;
 }
+
+/* The content area is the scroller. Reserving its scrollbar's room keeps a page
+   from jumping sideways when it grows past one screen (classic scrollbars). */
+#main-content:not(:has([data-explorer])),
+#workspace-root > [data-variant="page"] { scrollbar-gutter: stable; }
+
+/* ── Touch ─────────────────────────────────────────────────────────────
+   No double-tap zoom delay on anything you can press. */
+@layer base {
+  :where(a, button, input, select, textarea, label, summary, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], [role="checkbox"], [role="radio"], [tabindex]) {
+    touch-action: manipulation;
+  }
+}
+
+@media (pointer: coarse) {
+  /* iOS zooms into any field under 16px. Unlayered, so it wins over text-sm. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]),
+  select,
+  textarea,
+  [contenteditable="true"] { font-size: 16px; }
+
+  @layer base {
+    /* Every control is at least 40 x 40 on a touch screen. Pills, chips and the
+       small toggles keep their look and get a larger invisible hit area instead
+       (below). min-height never shrinks anything that is already bigger. */
+    :where(button, select, summary, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not([role="switch"], [role="checkbox"], [role="radio"], [role="slider"], [aria-hidden="true"], .sr-only, .pg-hit, [class~="rounded-full"]) {
+      min-height: 40px;
+    }
+    /* Width only for the square icon buttons: a min-width on every button would
+       let text buttons in a crowded row shrink below their label. */
+    :where(button):where([class~="w-4"], [class~="w-5"], [class~="w-6"], [class~="w-7"], [class~="w-8"], [class~="w-9"]):not([role="switch"], [role="checkbox"], [role="radio"], [aria-hidden="true"], .sr-only, .pg-hit, [class~="rounded-full"]) {
+      min-width: 40px;
+    }
+    :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"], [aria-hidden="true"]), textarea) {
+      min-height: 40px;
+    }
+
+    /* Hit area of at least 40 x 40, centred, without changing how it looks */
+    :where(.pg-hit, button[class~="rounded-full"], a[href][class~="rounded-full"], [role="switch"], [role="checkbox"], [role="radio"]):not([aria-hidden="true"], .sr-only) { position: relative; }
+    :where(.pg-hit, button[class~="rounded-full"], a[href][class~="rounded-full"], [role="switch"], [role="checkbox"], [role="radio"]):not([aria-hidden="true"], .sr-only)::after {
+      content: "";
+      position: absolute;
+      top: min(0px, calc((100% - 40px) / 2));
+      bottom: min(0px, calc((100% - 40px) / 2));
+      left: min(0px, calc((100% - 40px) / 2));
+      right: min(0px, calc((100% - 40px) / 2));
+    }
+
+    /* Text links: vertical padding widens what a finger can hit. On an inline
+       link it moves nothing on the line; on a flex or grid item the negative
+       margin gives the room back. Links that are blocks or rows size themselves. */
+    :where(a[href]):not([class~="block"], [class~="flex"], [class~="grid"], [class~="inline-grid"], [class*="bg-"], [class*="py-"], [class*="h-"], [class*="mt-"], [class*="mb-"], [class*="my-"], [class~="rounded-full"]) {
+      /* 40px tall: an inline box is its font's content area (1.3em for IBM Plex) plus padding */
+      padding-block: max(0px, calc((40.5px - 1.3em) / 2));
+      margin-block: min(0px, calc((1.3em - 40.5px) / 2));
+    }
+    /* A block link alone in a table cell: the same, with the room given back */
+    :where(td, th) :where(a[href][class~="block"]):not([class*="py-"], [class*="my-"], [class*="h-"]) {
+      padding-block: max(0px, calc((40px - 1lh) / 2));
+      margin-block: min(0px, calc((1lh - 40px) / 2));
+    }
+  }
+}
+
+/* A press shows at once on touch screens (there is no hover there). */
+@media (hover: none) {
+  @layer base {
+    :where(button, a[href], summary, [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], [role="checkbox"], tr[tabindex="0"]):not(:disabled, [aria-disabled="true"]):active {
+      opacity: 0.72;
+    }
+  }
+}
+
+/* Tables and other wide content scroll sideways inside their own box. The
+   shadow at an edge says there is more; it fades as you reach the end. */
+.pg-scroll-x {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  background-image:
+    linear-gradient(to right, hsl(var(--pg-cover, var(--card))) 30%, hsl(var(--pg-cover, var(--card)) / 0)),
+    linear-gradient(to left, hsl(var(--pg-cover, var(--card))) 30%, hsl(var(--pg-cover, var(--card)) / 0)),
+    radial-gradient(farthest-side at 0 50%, hsl(var(--foreground) / 0.2), transparent),
+    radial-gradient(farthest-side at 100% 50%, hsl(var(--foreground) / 0.2), transparent);
+  background-position: left center, right center, left center, right center;
+  background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+h1, h2, h3 { text-wrap: balance; }
+
+/* Codes, IDs and money line up in columns everywhere. */
+.font-mono, code, kbd, [data-numeric] { font-variant-numeric: tabular-nums slashed-zero; }
+
+/* One focus language for the whole panel: a sky ring that never appears on
+   mouse click, only for keyboard users. */
+:where(a, button, [role="button"], [role="tab"], [role="menuitem"], summary, input, select, textarea):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Fields that draw their own focus state opt out of the shared ring. */
+[data-own-focus]:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Scroll boxes inside the page (menus, docks, lists) keep a swipe to themselves */
+:where([role="menu"], [role="listbox"], [data-radix-popper-content-wrapper] > *, [data-variant="dock"], [role="alertdialog"]) { overscroll-behavior: contain; }
+
+/* Page-level entrance: content rises 4px and fades in, once, on route change. */
+@keyframes pg-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.pg-rise { animation: pg-rise 220ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+
+/* Surfaces. Opacity and transform only, so nothing reflows while moving. */
+@keyframes pg-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pg-page { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pg-dock { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes pg-side { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+@keyframes pg-pop  { from { opacity: 0; scale: 0.98; } to { opacity: 1; scale: 1; } }
+.pg-fade { animation: pg-fade 140ms ease-out backwards; }
+.pg-page { animation: pg-page 200ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.pg-dock { animation: pg-dock 200ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.pg-side { animation: pg-side 200ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.pg-pop  { animation: pg-pop 140ms ease-out backwards; }
 
 /* ── Dialog / Modal scroll & layout fixes ─────────────────────────────
    Ensures all modals (Dialog + AlertDialog) handle long content and
@@ -61,7 +296,7 @@ body {
 
 /* Forms inside dialogs must participate in the flex-col layout so the
    footer can stay at the bottom while the body scrolls. */
-[role="dialog"] > form,
+[role="dialog"]:not([data-variant="page"]) > form,
 [role="alertdialog"] > form {
   display: flex;
   flex-direction: column;
@@ -73,8 +308,7 @@ body {
 /* Bottom padding is set to 0 on the dialog container because browsers
    eat padding-bottom in scrollable flex containers. This ::after acts
    as the bottom spacer instead — always visible, always scrolled to. */
-[role="dialog"]::after,
-[role="alertdialog"]::after {
+[role="dialog"][data-variant="modal"]::after {
   content: '';
   display: block;
   flex: 0 0 1.5rem; /* matches the original p-6 = 24px = 1.5rem */
@@ -116,3 +350,30 @@ body {
   45%, 55% { transform: translateX(var(--marquee-distance)); }
   85%, 100% { transform: translateX(0); }
 }
+
+/* ── Coupon ticket perforation ────────────────────────────────────────
+   A dashed tear line with two punched notches, sitting on the seam between
+   the coloured stub and the ticket body. The notches take the page colour so
+   they read as holes. */
+.pg-perf {
+  position: relative;
+  width: 0;
+  margin: 14px 0;
+  border-left: 2px dashed hsl(var(--border));
+}
+.pg-perf::before,
+.pg-perf::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: hsl(var(--background));
+  box-shadow: inset 0 0 0 1px hsl(var(--border));
+}
+.pg-perf::before { top: -24px; }
+.pg-perf::after { bottom: -24px; }
+
+/* The rail scrolls on short screens; its bar stays quiet on the dark ground. */
+.pg-rail-scroll { scrollbar-width: thin; scrollbar-color: hsl(var(--rail-muted) / 0.35) transparent; }

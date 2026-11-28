@@ -279,6 +279,9 @@ class ApiService {
         const err = new Error(message);
         (err as any).status = status;
         (err as any).serverMessage = serverMsg;
+        // Structured reasons a screen can act on (e.g. OTHER_ACTIVE_PURCHASES)
+        (err as any).code = (axiosError.response.data as any)?.error_code;
+        (err as any).details = (axiosError.response.data as any)?.details;
         return err;
       } else if (axiosError.request) {
         // Request made but no response received

@@ -1,132 +1,64 @@
-import { useEffect, useState } from 'react'
+import { Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { AlertCircle, Archive, Info, Loader2 } from 'lucide-react'
-import type { ApiResponse } from '@/services/api.service'
-import type { DeleteImpactResponse } from '@/types/api.types'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { documentsService } from '@/services/documents.service'
+import { videosService } from '@/services/videos.service'
+import { useExplorerMutation } from '../hooks/useExplorerMutation'
+import { Checking, ImpactBox } from './Impact'
+import { useImpact } from './useImpact'
 
-interface ArchiveWithImpactDialogProps {
-  open: boolean
+interface Props {
+  kind: 'video' | 'document'
+  id: string
+  name: string
   onClose: () => void
-  onConfirm: () => Promise<unknown> | void
-  /** Fetches the impact / blocking dependencies for this entity. */
-  fetchImpact: () => Promise<ApiResponse<DeleteImpactResponse>>
-  /** User-facing entity name for copy. */
-  entityName: string
-  /** Entity label for the title ("video", "document"). */
-  entityType: 'video' | 'document'
-  loading?: boolean
+  onSuccess: () => Promise<void> | void
 }
 
-/**
- * Pre-archive confirmation for Videos and Documents. Before allowing archive,
- * fetches `/:id/delete-impact` and shows blocking deps (e.g. active purchases)
- * that prevent archive; or non-blocking warnings (e.g. enrolled users) that
- * proceed with confirmation. Matches legacy VideosPage / DocumentsPage
- * archive behaviour.
- */
-export function ArchiveWithImpactDialog({
-  open,
-  onClose,
-  onConfirm,
-  fetchImpact,
-  entityName,
-  entityType,
-  loading,
-}: ArchiveWithImpactDialogProps) {
-  const [impact, setImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingImpact, setLoadingImpact] = useState(false)
-
-  useEffect(() => {
-    if (!open) { setImpact(null); return }
-    setLoadingImpact(true)
-    fetchImpact()
-      .then((res) => { if (res.success && res.data) setImpact(res.data) })
-      .finally(() => setLoadingImpact(false))
-  }, [open, fetchImpact])
-
-  const isBlocked = impact?.blocked ?? false
-  const blockingDeps = impact?.dependencies.filter((d) => d.blocking) ?? []
-  const warningDeps = impact?.dependencies.filter((d) => !d.blocking) ?? []
+/** Archive one video or document, after showing what depends on it. */
+export function ArchiveWithImpactDialog({ kind, id, name, onClose, onSuccess }: Props) {
+  const service = kind === 'video' ? videosService : documentsService
+  const { impact, loading, error, retry } = useImpact(async () => (await service.getDeleteImpact(id)).data, `archiving ${kind}s`)
+  const archive = useExplorerMutation({
+    name: `Archive ${kind}`,
+    what: `archiving ${kind}s`,
+    fn: () => service.archive(id),
+    onSuccess: () => onSuccess(),
+    successMessage: `"${name}" archived`,
+  })
+  const blocking = impact?.dependencies.filter((d) => d.blocking) ?? []
+  const affected = impact?.dependencies.filter((d) => !d.blocking) ?? []
+  const blocked = impact?.blocked ?? false
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog variant="dock" open onOpenChange={(v) => { if (!v && !archive.loading) onClose() }}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Archive {entityType}</DialogTitle>
+          <DialogTitle>Archive this {kind}?</DialogTitle>
           <DialogDescription>
-            <strong>"{entityName}"</strong> will be hidden from students. You can restore it
-            from the Archived view within 30 days.
+            <strong className="break-words font-medium text-foreground">{name}</strong> will be hidden from students. It can be restored from Archives for 30 days.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="py-2 space-y-2">
-          {loadingImpact ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Checking dependencies…
-            </div>
-          ) : (
-            <>
-              {isBlocked && blockingDeps.length > 0 && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    Cannot archive — dependencies exist
-                  </div>
-                  <ul className="text-sm text-muted-foreground space-y-1 pl-6 list-disc">
-                    {blockingDeps.map((d) => (
-                      <li key={d.type}>{d.count} {d.label}</li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-muted-foreground">
-                    Remove the blockers above before archiving.
-                  </p>
-                </div>
-              )}
-
-              {!isBlocked && warningDeps.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
-                    <Info className="w-4 h-4 shrink-0" />
-                    The following will be affected
-                  </div>
-                  <ul className="text-sm text-amber-800/80 space-y-1 pl-6 list-disc">
-                    {warningDeps.map((d) => (
-                      <li key={d.type}>{d.count} {d.label}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {!isBlocked && warningDeps.length === 0 && impact && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                  No dependencies found. Safe to archive.
-                </div>
-              )}
-            </>
+        <div aria-live="polite" className="space-y-2">
+          {loading && <Checking>Checking what depends on it</Checking>}
+          {error && <ImpactBox tone="danger" title="The check did not work">{error} <button type="button" onClick={retry} className="font-medium text-primary underline-offset-2 hover:underline">Try again</button></ImpactBox>}
+          {blocked && (
+            <ImpactBox tone="danger" title="It cannot be archived yet">
+              <ul className="list-disc pl-4">{blocking.map((d) => <li key={d.type}>{d.count} {d.label}</li>)}</ul>
+              <p className="mt-1">Remove these first.</p>
+            </ImpactBox>
           )}
+          {!blocked && affected.length > 0 && (
+            <ImpactBox tone="warning" title="This also affects">
+              <ul className="list-disc pl-4">{affected.map((d) => <li key={d.type}>{d.count} {d.label}</li>)}</ul>
+            </ImpactBox>
+          )}
+          {impact && !blocked && affected.length === 0 && <ImpactBox tone="success" title="Nothing else uses it." />}
         </div>
-
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            className="text-amber-700 border-amber-300 hover:bg-amber-50"
-            onClick={() => void onConfirm()}
-            disabled={isBlocked || loadingImpact || !impact || loading}
-          >
-            {loading
-              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Archiving…</>
-              : <><Archive className="w-3.5 h-3.5 mr-1.5" /> Archive</>}
+          <Button variant="outline" onClick={onClose} disabled={archive.loading}>Keep {kind}</Button>
+          <Button variant="destructive" onClick={() => void archive.execute()} disabled={blocked || !impact || archive.loading}>
+            {archive.loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Archiving…</> : <><Archive className="h-4 w-4" /> Archive {kind}</>}
           </Button>
         </DialogFooter>
       </DialogContent>

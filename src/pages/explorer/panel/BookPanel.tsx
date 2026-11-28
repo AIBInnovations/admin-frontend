@@ -1,59 +1,65 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookText, FileText, ImagePlus, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { PanelShell } from './PanelShell'
-import { PanelField, PanelSectionTitle, PanelSelect, PanelSwitchRow, PanelText, PanelTextarea } from './fields'
-import { EntityHeaderActions } from './EntityHeaderActions'
-import { PublishBadge, SaleBadge } from '../ui/StatusBadge'
-import { Badge } from '@/components/ui/badge'
-import { ImageCropField } from '../media/ImageCropField'
-import { FileUploadField } from '../media/FileUploadField'
-import { usePanelForm } from '../hooks/usePanelForm'
-import { useExplorerMutation } from '../hooks/useExplorerMutation'
-import { useMediaUpload } from '../hooks/useMediaUpload'
-import { booksService, type Book } from '@/services/books.service'
+import { booksService, type Book, type BookFormData } from '@/services/books.service'
 import { documentsService } from '@/services/documents.service'
 import { subjectsService, type Subject } from '@/services/subjects.service'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
+import { useExplorerAccess } from '../access'
+import { usePanelSelection } from '../context/PanelSelectionContext'
+import { useEntityForm } from '../hooks/useEntityForm'
+import { useExplorerMutation } from '../hooks/useExplorerMutation'
+import { useMediaUpload } from '../hooks/useMediaUpload'
+import { FileUploadField } from '../media/FileUploadField'
+import { ImageCropField } from '../media/ImageCropField'
+import { EbookBadge, PublishBadge, SaleBadge, UnavailableBadge } from '../ui/StatusBadge'
+import { Thumb } from '../ui/Thumb'
+import { fileSize } from '../ui/text'
+import { EntityHeaderActions } from './EntityHeaderActions'
+import { PanelShell } from './PanelShell'
+import { AreaField, PanelField, PanelSectionTitle, PanelSelect, PanelSwitchRow, SelectField, SwitchField, TextField } from './fields'
+import { idOf, isWhole, ORDER_ERROR, payload, refId, toNumber } from './helpers'
 
-interface BookPanelProps {
-  entity: Book | null
-  onRefresh?: () => void
-  onClose?: () => void
-}
+interface Props { entity: Book | null; onRefresh: () => Promise<void> }
 
-function subjectIdOf(book: Book | null): string {
-  if (!book || !book.subject_id) return ''
-  return typeof book.subject_id === 'object' ? book.subject_id._id : book.subject_id
-}
+const wholeAtLeast = (v: string, min: number) => v.trim() === '' || (Number.isInteger(Number(v)) && Number(v) >= min)
 
-export function BookPanel({ entity, onRefresh, onClose }: BookPanelProps) {
+export function BookPanel({ entity, onRefresh }: Props) {
+  const { can } = useExplorerAccess()
+  const { select } = usePanelSelection()
   const isEdit = !!entity
-  const media = useMediaUpload()
+  const canEdit = can('book', isEdit ? 'update' : 'create')
+  const cover = useMediaUpload()
   const ebookUpload = useMediaUpload()
-  const imageUpload = useMediaUpload()
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const gallery = useMediaUpload()
+  const imageInput = useRef<HTMLInputElement>(null)
 
-  // ebook → document controls
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  useEffect(() => {
+    let live = true
+    subjectsService.getSubjects({ page: 1, limit: 200, sort_by: 'name', sort_order: 'asc' }).then((res) => { if (live && res.data) setSubjects(res.data.entities) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
+  // eBook as a document inside a subject
   const [linkSubjectId, setLinkSubjectId] = useState('')
   const [linkFree, setLinkFree] = useState(false)
-  const [linking, setLinking] = useState(false)
 
-  useEffect(() => {
-    if (subjects.length > 0) return
-    subjectsService.getSubjects({ limit: 200, sort_by: 'name', sort_order: 'asc' }).then((res) => {
-      if (res.success && res.data) setSubjects(res.data.entities)
-    })
-  }, [subjects.length])
+  // The upload goes on when another row is opened; closing the tab would stop it.
+  useUnsavedChanges(ebookUpload.uploading)
 
-  const form = usePanelForm(
-    () => ({
+  const form = useEntityForm({
+    id: 'book',
+    what: 'book',
+    label: (v) => v.title || 'New book',
+    readOnly: !canEdit,
+    initial: () => ({
       title: entity?.title ?? '',
       author: entity?.author ?? '',
       description: entity?.description ?? '',
       isbn: entity?.isbn ?? '',
       category: entity?.category ?? '',
-      subject_id: subjectIdOf(entity),
+      subject_id: refId(entity?.subject_id),
       publisher: entity?.publisher ?? '',
       publication_year: entity?.publication_year?.toString() ?? '',
       pages: entity?.pages?.toString() ?? '',
@@ -67,306 +73,192 @@ export function BookPanel({ entity, onRefresh, onClose }: BookPanelProps) {
       is_available: entity?.is_available ?? true,
       ebook: entity?.ebook ?? false,
     }),
-    entity?._id ?? 'new-book',
-  )
+    validate: (v) => ({
+      ...(v.title.trim().length < 2 ? { title: 'Use at least 2 characters.' } : v.title.length > 200 ? { title: 'Use at most 200 characters.' } : {}),
+      ...(v.author.trim().length < 2 ? { author: 'Use at least 2 characters.' } : v.author.length > 100 ? { author: 'Use at most 100 characters.' } : {}),
+      ...(v.description.length > 2000 ? { description: 'Use at most 2,000 characters.' } : {}),
+      ...(v.publication_year.trim() && !(Number(v.publication_year) >= 1900 && Number(v.publication_year) <= new Date().getFullYear() + 1) ? { publication_year: 'Enter a year from 1900.' } : {}),
+      ...(!wholeAtLeast(v.pages, 1) ? { pages: 'Use a whole number.' } : {}),
+      ...(!wholeAtLeast(v.weight_grams, 0) ? { weight_grams: 'Use whole grams.' } : {}),
+      ...(!isWhole(v.display_order) ? { display_order: ORDER_ERROR } : {}),
+      ...(v.price.trim() === '' || !(Number(v.price) >= 0) ? { price: 'Enter a price, 0 or more.' } : {}),
+      ...(v.original_price.trim() && !(Number(v.original_price) >= 0) ? { original_price: 'Enter a price, 0 or more.' } : {}),
+      ...(v.is_on_sale && !(Number(v.sale_price) > 0) ? { sale_price: 'Enter the sale price.' } : v.is_on_sale && Number(v.sale_price) >= Number(v.price) ? { sale_price: 'It must be less than the price.' } : {}),
+      ...(!wholeAtLeast(v.stock_quantity, 0) ? { stock_quantity: ORDER_ERROR } : {}),
+    }),
+    submit: (v, changed) => {
+      // On an edit, emptying a field clears it; on a create it is left out.
+      const empty = isEdit ? null : undefined
+      const text = (x: string) => x.trim() || empty
+      const num = (x: string) => toNumber(x) ?? empty
+      const data = payload<typeof v>(isEdit ? changed : v, {
+        title: (x) => x.trim(), author: (x) => x.trim(), description: text, isbn: text, category: text, publisher: text,
+        subject_id: (x) => x || empty, publication_year: num, pages: num, weight_grams: num, original_price: num,
+        display_order: toNumber, price: Number, stock_quantity: (x) => toNumber(x) ?? 0, sale_price: num,
+      })
+      if (!v.is_on_sale) delete data.sale_price
+      return isEdit ? booksService.update(entity._id, data as Partial<BookFormData>) : booksService.create(data as unknown as BookFormData)
+    },
+    onSaved: async (result) => {
+      await onRefresh()
+      const id = idOf(result)
+      if (!isEdit && id) select('book', id)
+    },
+    savedMessage: (v) => (isEdit ? `"${v.title}" saved` : `"${v.title}" created`),
+  })
   const v = form.values
 
-  const save = useExplorerMutation({
-    name: isEdit ? 'Update book' : 'Create book',
-    fn: () => {
-      const data = {
-        title: v.title.trim(),
-        author: v.author.trim(),
-        description: v.description.trim() || undefined,
-        isbn: v.isbn.trim() || undefined,
-        category: v.category.trim() || undefined,
-        subject_id: v.subject_id || undefined,
-        publisher: v.publisher.trim() || undefined,
-        publication_year: v.publication_year ? Number(v.publication_year) : undefined,
-        pages: v.pages ? Number(v.pages) : undefined,
-        weight_grams: v.weight_grams ? Number(v.weight_grams) : undefined,
-        display_order: v.display_order ? Number(v.display_order) : undefined,
-        price: Number(v.price),
-        original_price: v.original_price ? Number(v.original_price) : undefined,
-        is_on_sale: v.is_on_sale,
-        sale_price: v.is_on_sale && v.sale_price ? Number(v.sale_price) : undefined,
-        stock_quantity: v.stock_quantity ? Number(v.stock_quantity) : 0,
-        is_available: v.is_available,
-        ebook: v.ebook,
-      }
-      return isEdit ? booksService.update(entity!._id, data) : booksService.create(data)
-    },
-    onSuccess: () => { form.commit(v); onRefresh?.(); if (!isEdit) onClose?.() },
-    successMessage: isEdit ? 'Book updated' : 'Book created',
+  const makeDocument = useExplorerMutation({
+    name: 'Make eBook a document',
+    what: 'creating documents',
+    fn: () => documentsService.createLinked({ source_book_id: entity!._id, subject_id: linkSubjectId || undefined, is_free: linkFree }),
+    onSuccess: () => onRefresh(),
+    successMessage: 'eBook added as a document',
   })
-
-  const priceNum = v.price.trim() === '' ? NaN : Number(v.price)
-  const saleOk = !v.is_on_sale || (v.sale_price.trim() !== '' && Number(v.sale_price) > 0)
-  const valid =
-    v.title.trim().length >= 2 &&
-    v.author.trim().length >= 2 &&
-    Number.isFinite(priceNum) && priceNum >= 0 &&
-    saleOk
-
-  async function makeDocument() {
-    if (!entity) return
-    setLinking(true)
-    try {
-      const res = await documentsService.createLinked({
-        source_book_id: entity._id,
-        subject_id: linkSubjectId || undefined,
-        is_free: linkFree,
-      })
-      if (res.success) {
-        const { toast } = await import('sonner')
-        toast.success('eBook added as a Document')
-        onRefresh?.()
-      }
-    } catch (e) {
-      const { toast } = await import('sonner')
-      toast.error('Failed to create document', { description: e instanceof Error ? e.message : String(e) })
-    } finally {
-      setLinking(false)
-    }
-  }
 
   async function addGalleryImage(file: File) {
     if (!entity) return
-    const up = await imageUpload.run('Uploading image', async () => booksService.uploadThumbnail(file))
-    if (up) {
-      await booksService.addImages(entity._id, [up.thumbnailUrl])
-      onRefresh?.()
-    }
+    await gallery.run('Add image', async () => {
+      const up = await booksService.uploadThumbnail(file)
+      return booksService.addImages(entity._id, [up.thumbnailUrl])
+    })
+    await onRefresh()
   }
   async function removeGalleryImage(index: number) {
     if (!entity) return
-    await imageUpload.run('Removing image', async () => { await booksService.removeImage(entity._id, index) })
-    onRefresh?.()
+    await gallery.run('Remove image', async () => booksService.removeImage(entity._id, index))
+    await onRefresh()
   }
 
-  const canMakeDoc = isEdit && entity!.ebook && !!entity!.ebook_file_url
+  const canMakeDoc = isEdit && entity.ebook && !!entity.ebook_file_url && can('document', 'create')
 
   return (
     <PanelShell
-      icon={
-        <div className="w-9 h-12 rounded-md overflow-hidden bg-amber-100 flex items-center justify-center">
-          {entity?.thumbnail_url
-            ? <img src={entity.thumbnail_url} alt={v.title} className="w-full h-full object-cover" />
-            : <BookText className="w-4 h-4 text-amber-700" />}
-        </div>
-      }
+      icon={<Thumb src={entity?.thumbnail_url} fallback={<BookText className="h-4 w-4" />} className="h-12 w-9" />}
       title={isEdit ? v.title || 'Book' : 'New book'}
-      subtitle={isEdit ? v.author : 'Create a new book'}
-      badges={isEdit ? <>
-        {entity!.is_on_sale && <SaleBadge />}
-        {!entity!.is_available && <Badge className="text-xs font-medium border-0 bg-gray-100 text-gray-500">Unavailable</Badge>}
-        <PublishBadge status={entity!.publish_status} />
-      </> : undefined}
-      headerActions={isEdit ? (
-        <EntityHeaderActions
-          entityType="book"
-          entityId={entity!._id}
-          entityName={entity!.title}
-          publishStatus={entity!.publish_status}
-          rawData={entity}
-          onRefresh={onRefresh}
-          idLabel="Book ID"
-        />
+      subtitle={isEdit ? v.author : 'Cover, gallery and eBook can be added after it is created'}
+      badges={isEdit ? (
+        <>
+          {entity.ebook && <EbookBadge />}
+          {entity.is_on_sale && <SaleBadge />}
+          {!entity.is_available && <UnavailableBadge />}
+          <PublishBadge status={entity.publish_status} />
+        </>
       ) : undefined}
-      onClose={onClose}
-      dirty={form.dirty}
-      saving={save.loading}
-      canSave={valid}
+      headerActions={isEdit && <EntityHeaderActions kind="book" entityType="book" id={entity._id} name={entity.title} publishStatus={entity.publish_status} data={entity} idLabel="Book ID" />}
+      form={form}
       saveLabel={isEdit ? 'Save changes' : 'Create book'}
-      onSave={save.execute}
-      onCancel={form.reset}
+      savingLabel={isEdit ? 'Saving…' : 'Creating…'}
     >
-      {/* Properties */}
-      <PanelField label="Title" required htmlFor="bp-title">
-        <PanelText id="bp-title" value={v.title} onChange={(x) => form.set('title', x)} autoFocus={!isEdit} />
-      </PanelField>
-      <PanelField label="Author" required htmlFor="bp-author">
-        <PanelText id="bp-author" value={v.author} onChange={(x) => form.set('author', x)} />
-      </PanelField>
-      <PanelField label="Description" htmlFor="bp-desc">
-        <PanelTextarea id="bp-desc" value={v.description} onChange={(x) => form.set('description', x)} />
-      </PanelField>
+      <TextField form={form} name="title" label="Title" required autoFocus={!isEdit} />
+      <TextField form={form} name="author" label="Author" required />
+      <AreaField form={form} name="description" label="Description" />
       <div className="grid grid-cols-2 gap-3">
-        <PanelField label="ISBN" htmlFor="bp-isbn">
-          <PanelText id="bp-isbn" value={v.isbn} onChange={(x) => form.set('isbn', x)} />
-        </PanelField>
-        <PanelField label="Category" htmlFor="bp-cat">
-          <PanelText id="bp-cat" value={v.category} onChange={(x) => form.set('category', x)} />
-        </PanelField>
+        <TextField form={form} name="isbn" label="ISBN" />
+        <TextField form={form} name="category" label="Category" />
       </div>
-      <PanelField label="Subject" htmlFor="bp-subj">
-        <PanelSelect id="bp-subj" value={v.subject_id} onChange={(x) => form.set('subject_id', x)}>
-          <option value="">None</option>
-          {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-        </PanelSelect>
-      </PanelField>
+      <SelectField form={form} name="subject_id" label="Subject">
+        <option value="">None</option>
+        {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+        {v.subject_id && !subjects.some((s) => s._id === v.subject_id) && <option value={v.subject_id}>{(entity?.subject_id as { name?: string } | null)?.name ?? 'Deleted subject'}</option>}
+      </SelectField>
       <div className="grid grid-cols-2 gap-3">
-        <PanelField label="Publisher" htmlFor="bp-pub">
-          <PanelText id="bp-pub" value={v.publisher} onChange={(x) => form.set('publisher', x)} />
-        </PanelField>
-        <PanelField label="Publication year" htmlFor="bp-year">
-          <PanelText id="bp-year" type="number" value={v.publication_year} onChange={(x) => form.set('publication_year', x)} />
-        </PanelField>
+        <TextField form={form} name="publisher" label="Publisher" />
+        <TextField form={form} name="publication_year" label="Publication year" type="number" />
       </div>
       <div className="grid grid-cols-3 gap-3">
-        <PanelField label="Pages" htmlFor="bp-pages">
-          <PanelText id="bp-pages" type="number" value={v.pages} onChange={(x) => form.set('pages', x)} />
-        </PanelField>
-        <PanelField label="Weight (g)" htmlFor="bp-wt">
-          <PanelText id="bp-wt" type="number" value={v.weight_grams} onChange={(x) => form.set('weight_grams', x)} />
-        </PanelField>
-        <PanelField label="Order" htmlFor="bp-ord">
-          <PanelText id="bp-ord" type="number" value={v.display_order} onChange={(x) => form.set('display_order', x)} />
-        </PanelField>
+        <TextField form={form} name="pages" label="Pages" type="number" min={1} />
+        <TextField form={form} name="weight_grams" label="Weight (g)" type="number" min={0} />
+        <TextField form={form} name="display_order" label="Order" type="number" min={0} />
       </div>
 
-      {/* Pricing */}
-      <div className="space-y-3 pt-1">
-        <PanelSectionTitle>Pricing</PanelSectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <PanelField label="Price (₹)" required htmlFor="bp-price">
-            <PanelText id="bp-price" type="number" value={v.price} onChange={(x) => form.set('price', x)} />
-          </PanelField>
-          <PanelField label="Original price (₹)" htmlFor="bp-orig">
-            <PanelText id="bp-orig" type="number" value={v.original_price} onChange={(x) => form.set('original_price', x)} />
-          </PanelField>
-        </div>
-        <PanelSwitchRow label="On sale" checked={v.is_on_sale} onChange={(x) => form.set('is_on_sale', x)} />
-        {v.is_on_sale && (
-          <PanelField label="Sale price (₹)" required htmlFor="bp-sale">
-            <PanelText id="bp-sale" type="number" value={v.sale_price} onChange={(x) => form.set('sale_price', x)} />
-          </PanelField>
-        )}
+      <PanelSectionTitle>Pricing</PanelSectionTitle>
+      <div className="grid grid-cols-2 gap-3">
+        <TextField form={form} name="price" label="Price (₹)" required type="number" min={0} />
+        <TextField form={form} name="original_price" label="Original price (₹)" type="number" min={0} />
       </div>
+      <SwitchField form={form} name="is_on_sale" label="On sale" />
+      {v.is_on_sale && <TextField form={form} name="sale_price" label="Sale price (₹)" required type="number" min={0} />}
 
-      {/* Stock */}
-      <div className="space-y-3 pt-1">
-        <PanelSectionTitle>Stock</PanelSectionTitle>
-        <div className="grid grid-cols-2 gap-3 items-start">
-          <PanelField label="Stock quantity" htmlFor="bp-stock">
-            <PanelText id="bp-stock" type="number" value={v.stock_quantity} onChange={(x) => form.set('stock_quantity', x)} />
-          </PanelField>
-          <PanelSwitchRow label="Available" hint="Visible to students" checked={v.is_available} onChange={(x) => form.set('is_available', x)} />
-        </div>
-      </div>
+      <PanelSectionTitle>Stock</PanelSectionTitle>
+      <TextField form={form} name="stock_quantity" label="Stock quantity" type="number" min={0} className="w-40" />
+      <SwitchField form={form} name="is_available" label="Available" hint="Visible to students" />
 
-      {/* Media + Ebook + Linked docs only in edit mode (need an id for uploads) */}
       {isEdit && (
         <>
-          <div className="space-y-3 pt-1">
-            <PanelSectionTitle>Cover</PanelSectionTitle>
-            <ImageCropField
-              label="Cover image"
-              aspect={16 / 9}
-              hint="16:9 · JPEG/PNG/WebP · max 5MB"
-              previewClassName="aspect-video"
-              value={entity!.thumbnail_url}
-              uploading={media.uploading}
-              uploadProgress={media.progress}
-              onUpload={async (file) => {
-                const res = await media.run('Uploading cover', async () => booksService.uploadThumbnail(file))
-                if (res) {
-                  await booksService.update(entity!._id, { thumbnail_url: res.thumbnailUrl, thumbnail_s3_key: res.s3Key })
-                  onRefresh?.()
-                }
-              }}
-            />
-            <div>
-              <p className="text-[11px] text-slate-400 mb-1">Gallery images ({entity!.images.length})</p>
-              <div className="flex gap-1.5 flex-wrap">
-                {entity!.images.map((src, i) => (
-                  <div key={i} className="relative">
-                    <img src={src} alt="" className="w-14 h-14 rounded-md object-cover ring-1 ring-slate-200" />
-                    <button
-                      type="button"
-                      onClick={() => void removeGalleryImage(i)}
-                      disabled={imageUpload.uploading}
-                      className="absolute -top-1 -right-1 bg-white rounded-full ring-1 ring-slate-200 p-0.5 text-slate-400 hover:text-red-500 shadow-sm disabled:opacity-50"
-                      title="Remove image"
-                    >
-                      <X className="w-3 h-3" />
+          <PanelSectionTitle>Cover</PanelSectionTitle>
+          <ImageCropField
+            label="Cover image"
+            aspect={16 / 9}
+            hint="16:9. JPEG, PNG or WebP, up to 5 MB."
+            value={entity.thumbnail_url}
+            disabled={!canEdit}
+            uploading={cover.uploading}
+            uploadProgress={cover.progress}
+            onUpload={async (file) => {
+              await cover.run('Upload cover', async () => {
+                const res = await booksService.uploadThumbnail(file)
+                return booksService.update(entity._id, { thumbnail_url: res.thumbnailUrl, thumbnail_s3_key: res.s3Key })
+              })
+              await onRefresh()
+            }}
+          />
+          <div className="space-y-1.5">
+            <p className="text-[13px] font-medium text-foreground">Gallery images ({entity.images?.length ?? 0})</p>
+            <div className="flex flex-wrap gap-2">
+              {(entity.images ?? []).map((src, i) => (
+                <div key={`${src}-${i}`} className="relative">
+                  <Thumb src={src} fallback={<BookText className="h-4 w-4" />} className="h-14 w-14 border border-border" />
+                  {canEdit && (
+                    <button type="button" aria-label={`Remove image ${i + 1}`} onClick={() => void removeGalleryImage(i)} disabled={gallery.uploading} className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-card p-0.5 text-muted-foreground shadow-card transition-colors hover:text-danger disabled:opacity-50">
+                      <X aria-hidden="true" className="h-3.5 w-3.5" />
                     </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={imageUpload.uploading}
-                  className="w-14 h-14 rounded-md ring-1 ring-dashed ring-slate-300 flex items-center justify-center text-slate-400 hover:bg-slate-50 disabled:opacity-50"
-                  title="Add image"
-                >
-                  {imageUpload.uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                  )}
+                </div>
+              ))}
+              {canEdit && (
+                <button type="button" aria-label="Add gallery image" onClick={() => imageInput.current?.click()} disabled={gallery.uploading} className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-input text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50">
+                  {gallery.uploading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : <ImagePlus aria-hidden="true" className="h-4 w-4" />}
                 </button>
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void addGalleryImage(f) }}
-                />
-              </div>
+              )}
+              <input ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void addGalleryImage(f) }} />
             </div>
           </div>
 
-          <div className="space-y-3 pt-1">
-            <PanelSectionTitle>eBook</PanelSectionTitle>
-            <PanelSwitchRow label="This title has an eBook" checked={v.ebook} onChange={(x) => form.set('ebook', x)} />
-            {v.ebook && (
-              <>
-                {entity!.ebook_file_url && (
-                  <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200 px-3 py-2 text-xs text-slate-600 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-slate-400" />
-                    {entity!.ebook_file_format?.toUpperCase() ?? 'FILE'} · {entity!.ebook_file_size_mb?.toFixed(1) ?? '?'} MB
-                  </div>
-                )}
-                <FileUploadField
-                  label={entity!.ebook_file_url ? 'Replace eBook file' : 'Upload eBook file'}
-                  accept=".pdf,.epub"
-                  maxMb={500}
-                  buttonLabel={entity!.ebook_file_url ? 'Replace eBook' : 'Upload eBook'}
-                  hint="PDF or EPUB · max 500MB"
-                  uploading={ebookUpload.uploading}
-                  uploadProgress={ebookUpload.progress}
-                  onPick={async (file) => {
-                    await ebookUpload.run('Uploading eBook', (onProgress) => booksService.uploadEbook(entity!._id, file, onProgress))
-                    onRefresh?.()
-                  }}
-                />
-              </>
-            )}
-          </div>
+          <PanelSectionTitle>eBook</PanelSectionTitle>
+          <SwitchField form={form} name="ebook" label="This title has an eBook" />
+          {v.ebook && entity.ebook_file_url && <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-[13px] text-foreground"><FileText aria-hidden="true" className="h-4 w-4 text-muted-foreground" />{entity.ebook_file_format?.toUpperCase() ?? 'File'}, {fileSize(entity.ebook_file_size_mb)}</p>}
+          {v.ebook && canEdit && (
+            <FileUploadField
+              label={entity.ebook_file_url ? 'Replace eBook file' : 'Upload eBook file'}
+              accept=".pdf,.epub"
+              maxMb={500}
+              buttonLabel={entity.ebook_file_url ? 'Replace eBook' : 'Upload eBook'}
+              hint="PDF or EPUB, up to 500 MB."
+              uploading={ebookUpload.uploading}
+              uploadProgress={ebookUpload.progress}
+              onPick={async (file) => { await ebookUpload.run('Upload eBook', (onProgress) => booksService.uploadEbook(entity._id, file, onProgress)); await onRefresh() }}
+            />
+          )}
 
-          {/* eBook → Document */}
-          <div className="space-y-2 pt-1">
-            <PanelSectionTitle>Linked documents</PanelSectionTitle>
-            {canMakeDoc ? (
-              <div className="rounded-lg ring-1 ring-slate-200 bg-slate-50/60 p-3 space-y-2">
-                <p className="text-xs text-slate-500">
-                  Publish this eBook as a Document so students can read it inside a subject. Title, file
-                  and cover stay in sync with this book.
-                </p>
-                <PanelField label="Attach to subject (optional)">
-                  <PanelSelect value={linkSubjectId} onChange={setLinkSubjectId}>
-                    <option value="">No subject (library)</option>
-                    {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                  </PanelSelect>
-                </PanelField>
-                <PanelSwitchRow label="Free document" checked={linkFree} onChange={setLinkFree} />
-                <Button size="sm" className="gap-1.5" onClick={makeDocument} disabled={linking}>
-                  {linking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating…</> : <><FileText className="w-3.5 h-3.5" /> Make eBook a Document</>}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400">
-                Enable the eBook flag and upload a PDF/EPUB above to publish it as a Document.
-              </p>
-            )}
-          </div>
+          <PanelSectionTitle>Linked documents</PanelSectionTitle>
+          {canMakeDoc ? (
+            <div className="space-y-3">
+              <p className="text-[13px] text-muted-foreground">Publish this eBook as a document so students can read it inside a subject. Title, file and cover stay in sync with this book.</p>
+              <PanelField label="Attach to subject (optional)" htmlFor="book-link-subject">
+                <PanelSelect id="book-link-subject" value={linkSubjectId} onChange={setLinkSubjectId}>
+                  <option value="">No subject (library)</option>
+                  {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                </PanelSelect>
+              </PanelField>
+              <PanelSwitchRow id="book-link-free" label="Free document" checked={linkFree} onChange={setLinkFree} />
+              <Button type="button" size="sm" onClick={() => void makeDocument.execute()} disabled={makeDocument.loading}>
+                {makeDocument.loading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating…</> : <><FileText className="h-3.5 w-3.5" /> Make eBook a document</>}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">Turn on the eBook and upload a PDF or EPUB above to publish it as a document.</p>
+          )}
         </>
       )}
     </PanelShell>

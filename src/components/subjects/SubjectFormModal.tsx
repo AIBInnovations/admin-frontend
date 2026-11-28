@@ -121,7 +121,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
           {/* Name Field */}
           <div className="space-y-2">
             <Label htmlFor="name">
-              Name <span className="text-red-500">*</span>
+              Name <span className="text-danger">*</span>
             </Label>
             <Input
               id="name"
@@ -130,7 +130,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
               {...register('name')}
             />
             {errors.name && (
-              <p className="text-sm text-red-500">{errors.name.message}</p>
+              <p className="text-sm text-danger">{errors.name.message}</p>
             )}
           </div>
 
@@ -145,7 +145,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
               {...register('description')}
             />
             {errors.description && (
-              <p className="text-sm text-red-500">{errors.description.message}</p>
+              <p className="text-sm text-danger">{errors.description.message}</p>
             )}
           </div>
 
@@ -160,7 +160,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
               {...register('whatsapp_community_link')}
             />
             {errors.whatsapp_community_link && (
-              <p className="text-sm text-red-500">{errors.whatsapp_community_link.message}</p>
+              <p className="text-sm text-danger">{errors.whatsapp_community_link.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Optional: Link to WhatsApp community group for this subject
@@ -179,7 +179,7 @@ export function SubjectFormModal({ open, onClose, onSubmit, subject, mode }: Sub
               {...register('display_order', { valueAsNumber: true })}
             />
             {errors.display_order && (
-              <p className="text-sm text-red-500">{errors.display_order.message}</p>
+              <p className="text-sm text-danger">{errors.display_order.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Leave empty to auto-assign the next available order

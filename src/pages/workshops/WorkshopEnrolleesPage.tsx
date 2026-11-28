@@ -1,165 +1,119 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from '@/components/ui/dialog'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Users, ArrowLeft, MoreHorizontal, ShieldOff, Loader2, Check, Minus, Award, Download,
-} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Award, Check, Download, Minus, RotateCw, ShieldOff, Users } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  workshopsService, WorkshopEnrollee, WorkshopEnrolleesResponse,
-} from '@/services/workshops.service'
+import { PageHeader } from '@/components/common/PageHeader'
+import { EmptyState } from '@/components/common/EmptyState'
+import { DetailSkeleton, Section, Stat, StatusPill, apiErrorInfo, apiErrorMessage, type Tone } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAuth } from '@/contexts/AuthContext'
+import { formatCount } from '@/lib/format'
+import { workshopsService, WorkshopEnrollee, WorkshopEnrolleesResponse } from '@/services/workshops.service'
+import { ConfirmDock, must } from '@/components/forms/editor/ConfirmDock'
+import { Note } from '@/components/forms/editor/fields'
+import { RecordError } from '@/components/forms/editor/EditorPage'
+import { RowMenu, Tag } from '@/components/forms/editor/list'
+import { csvLine } from '@/components/workshops/csv'
+import { StudentLink, useStudentPage } from '@/components/students/StudentLink'
 
-const typeColors: Record<string, string> = {
-  paid: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  free: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  admin_override: 'bg-purple-500/10 text-purple-600 border-purple-200',
-}
-
-const statusColors: Record<string, string> = {
-  confirmed: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  waitlisted: 'bg-amber-500/10 text-amber-600 border-amber-200',
-  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
-}
-
-/** CSV-escape a cell: quote it, and double any embedded quotes. */
-function csvCell(value: unknown): string {
-  const s = value === null || value === undefined ? '' : String(value)
-  return `"${s.replace(/"/g, '""')}"`
-}
+const STATUS_TONE: Record<string, Tone> = { confirmed: 'success', waitlisted: 'warning', cancelled: 'danger' }
+const STATUSES = ['confirmed', 'waitlisted', 'cancelled'] as const
+const words = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
 export function WorkshopEnrolleesPage() {
   const { workshopId } = useParams<{ workshopId: string }>()
-  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canRevoke = hasPermission('live_sessions.update')
+  const student = useStudentPage('Enrollees')
+  const [params, setParams] = useSearchParams()
+  const status = STATUSES.find((s) => s === params.get('status')) ?? 'all'
+  const [search, setSearch] = useState(params.get('search') ?? '')
 
+  // Every registration is loaded once and filtered here, so the counts stay
+  // right while a filter is on.
   const [data, setData] = useState<WorkshopEnrolleesResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [search, setSearch] = useState('')
-
-  const [revokeTarget, setRevokeTarget] = useState<WorkshopEnrollee | null>(null)
-  const [revokeReason, setRevokeReason] = useState('')
-  const [revoking, setRevoking] = useState(false)
-
-  const fetchEnrollees = useCallback(async () => {
+  const [error, setError] = useState<{ status?: number; message: string } | null>(null)
+  const call = useRef(0)
+  const load = useCallback(async () => {
     if (!workshopId) return
+    const n = ++call.current
+    setLoading(true); setError(null)
     try {
-      setLoading(true)
-      const response = await workshopsService.getEnrollees(
-        workshopId,
-        statusFilter === 'all' ? undefined : statusFilter,
-      )
-      if (response.success && response.data) {
-        setData(response.data)
-      } else {
-        toast.error(response.message || 'Failed to load enrollees')
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load enrollees')
+      const res = await workshopsService.getEnrollees(workshopId)
+      if (n !== call.current) return
+      if (!res.success || !res.data) throw new Error(res.message || 'Failed to load enrollees')
+      setData(res.data)
+    } catch (e) {
+      if (n === call.current) setError({ status: apiErrorInfo(e).status, message: apiErrorMessage(e, 'Failed to load enrollees') })
     } finally {
-      setLoading(false)
+      if (n === call.current) setLoading(false)
     }
-  }, [workshopId, statusFilter])
+  }, [workshopId])
+  useEffect(() => { load(); return () => { call.current += 1 } }, [load])
 
-  useEffect(() => { fetchEnrollees() }, [fetchEnrollees])
+  // Search in the URL, without an entry per letter
+  useEffect(() => {
+    const t = setTimeout(() => setParams((prev) => {
+      const p = new URLSearchParams(prev)
+      if (search.trim()) p.set('search', search.trim())
+      else p.delete('search')
+      return p
+    }, { replace: true }), 300)
+    return () => clearTimeout(t)
+  }, [search, setParams])
 
-  const handleRevoke = async () => {
-    if (!workshopId || !revokeTarget) return
-    setRevoking(true)
-    try {
-      const response = await workshopsService.revokeEnrollment(
-        workshopId,
-        revokeTarget._id,
-        revokeReason || undefined,
-      )
-      if (response.success) {
-        toast.success('Registration revoked')
-        setRevokeTarget(null)
-        setRevokeReason('')
-        fetchEnrollees()
-      } else {
-        toast.error(response.message || 'Failed to revoke registration')
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to revoke registration')
-    } finally {
-      setRevoking(false)
-    }
-  }
+  const [target, setTarget] = useState<WorkshopEnrollee | null>(null)
 
   const filtered = useMemo(() => {
-    const rows = data?.enrollees || []
     const q = search.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(
-      (e) =>
-        e.user_id.name?.toLowerCase().includes(q) ||
-        e.user_id.email?.toLowerCase().includes(q) ||
-        e.user_id.phone_number?.toLowerCase().includes(q) ||
-        e.user_id.student_id?.toLowerCase().includes(q),
-    )
-  }, [data, search])
+    return (data?.enrollees ?? []).filter((e) => {
+      if (status !== 'all' && e.enrollment_status !== status) return false
+      if (!q) return true
+      const u = e.user_id
+      return [u?.name, u?.email, u?.phone_number, u?.student_id].some((x) => x?.toLowerCase().includes(q))
+    })
+  }, [data, search, status])
 
-  /** Client-side CSV so an admin can pull the attendance matrix without a backend export. */
-  const handleExportCsv = () => {
-    if (!data) return
-    const dayHeaders = data.days.map((d) => `Day ${d.day_number}`)
-    const header = [
-      'Name', 'Email', 'Phone', 'Student ID', 'Type', 'Status',
-      ...dayHeaders, 'Days Attended', 'Certificate',
+  if (loading && !data) return <DetailSkeleton />
+  if (!data) return <RecordError status={error?.status ?? null} message={error?.message ?? ''} noun="workshop" back={{ label: 'Back to workshops', href: '/workshops' }} onRetry={load} />
+
+  const { workshop, days } = data
+  const counts = { confirmed: 0, waitlisted: 0, cancelled: 0 }
+  for (const e of data.enrollees) if (e.enrollment_status in counts) counts[e.enrollment_status] += 1
+  const heldDays = days.filter((d) => d.status !== 'cancelled').length
+
+  const setStatus = (next: string) => setParams((prev) => {
+    const p = new URLSearchParams(prev)
+    if (next === 'all') p.delete('status')
+    else p.set('status', next)
+    return p
+  }, { replace: true })
+  const clear = () => { setSearch(''); setStatus('all') }
+
+  /** Client-side CSV of the rows on screen, with the attendance of each day. */
+  const exportCsv = () => {
+    const rows = [
+      ['Name', 'Email', 'Phone', 'Student ID', 'Type', 'Status', ...days.map((d) => `Day ${d.day_number}`), 'Days Attended', 'Certificate'],
+      ...filtered.map((e) => [
+        e.user_id?.name, e.user_id?.email, e.user_id?.phone_number, e.user_id?.student_id || '', e.enrollment_type, e.enrollment_status,
+        ...days.map((d) => (e.attended_day_numbers.includes(d.day_number) ? 'Yes' : 'No')),
+        e.days_attended,
+        e.certificate ? (e.certificate.revoked ? 'Revoked' : e.certificate.certificate_number) : '',
+      ]),
     ]
-    const rows = filtered.map((e) => [
-      e.user_id.name,
-      e.user_id.email,
-      e.user_id.phone_number,
-      e.user_id.student_id || '',
-      e.enrollment_type,
-      e.enrollment_status,
-      ...data.days.map((d) => (e.attended_day_numbers.includes(d.day_number) ? 'Yes' : 'No')),
-      e.days_attended,
-      e.certificate ? (e.certificate.revoked ? 'Revoked' : e.certificate.certificate_number) : '',
-    ])
-
-    const csv = [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n')
-    const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob([`﻿${rows.map(csvLine).join('\r\n')}`], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `workshop-enrollees-${workshopId}.csv`
     link.click()
     URL.revokeObjectURL(url)
+    toast.success(`Exported ${filtered.length} registration${filtered.length === 1 ? '' : 's'}`)
   }
-
-  if (loading && !data) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    )
-  }
-
-  if (!data) return null
-
-  const { workshop, days, by_status: byStatus } = data
 
   return (
     <div className="space-y-6">
@@ -173,59 +127,30 @@ export function WorkshopEnrolleesPage() {
           { label: 'Enrollees' },
         ]}
         action={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/workshops/${workshopId}`)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />Back
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={filtered.length === 0}>
-              <Download className="mr-2 h-4 w-4" />Export CSV
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/workshops/${workshopId}`}><ArrowLeft aria-hidden="true" />Back</Link></Button>
+            <Button variant="outline" size="sm" className="bg-card" onClick={exportCsv} disabled={filtered.length === 0}><Download aria-hidden="true" />Export CSV</Button>
           </div>
         }
       />
 
-      {/* Summary */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-2xl font-semibold">{data.total_enrollees}</p>
-            <p className="text-xs text-muted-foreground">Total registrations</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-2xl font-semibold text-emerald-600">{byStatus.confirmed}</p>
-            <p className="text-xs text-muted-foreground">
-              Confirmed{workshop.max_seats ? ` of ${workshop.max_seats} seats` : ''}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-2xl font-semibold text-amber-600">{byStatus.waitlisted}</p>
-            <p className="text-xs text-muted-foreground">Waitlisted</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-2xl font-semibold text-red-600">{byStatus.cancelled}</p>
-            <p className="text-xs text-muted-foreground">Cancelled</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Total registrations" value={formatCount(data.enrollees.length)} />
+        <Stat label="Confirmed" value={formatCount(counts.confirmed)} hint={workshop.max_seats ? `of ${formatCount(workshop.max_seats)} seats` : undefined} />
+        <Stat label="Waitlisted" value={formatCount(counts.waitlisted)} />
+        <Stat label="Cancelled" value={formatCount(counts.cancelled)} />
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Input
+          aria-label="Search enrollees"
           placeholder="Search by name, email, phone or student ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="h-9 w-full bg-card sm:max-w-sm"
         />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="h-9 w-[180px] bg-card" aria-label="Filter by status"><SelectValue placeholder="Filter by status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="confirmed">Confirmed</SelectItem>
@@ -233,156 +158,111 @@ export function WorkshopEnrolleesPage() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-[13px] tabular-nums text-muted-foreground" aria-live="polite">{filtered.length === data.enrollees.length ? '' : `${formatCount(filtered.length)} of ${formatCount(data.enrollees.length)}`}</p>
       </div>
 
-      {/* Attendance matrix */}
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
+      {error && <Note tone="danger">{error.message} Showing the last results. <button type="button" className="inline-flex items-center gap-1 font-medium underline underline-offset-2" onClick={load}><RotateCw aria-hidden="true" className="h-3.5 w-3.5" />Try again</button></Note>}
+
+      <Section flush>
+        {filtered.length === 0 ? (
+          data.enrollees.length === 0
+            ? <EmptyState icon={Users} title="Nobody has registered yet" description="Students appear here as they register." />
+            : <EmptyState icon={Users} title="No enrollees match your filters" action={<Button variant="outline" size="sm" onClick={clear}>Clear filters</Button>} />
+        ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[220px]">Student</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="min-w-[200px] pl-5">Student</TableHead>
                 <TableHead className="w-24">Type</TableHead>
                 <TableHead className="w-28">Status</TableHead>
                 {days.map((d) => (
-                  <TableHead key={d.session_id} className="w-16 text-center">
-                    <span className={d.status === 'cancelled' ? 'line-through text-muted-foreground' : ''}>
-                      D{d.day_number}
-                    </span>
+                  <TableHead key={d.session_id} className="w-14 text-center" title={`${d.title}${d.status === 'cancelled' ? ' (cancelled)' : ''}`}>
+                    <span className={d.status === 'cancelled' ? 'text-muted-foreground line-through' : ''}>D{d.day_number}</span>
                   </TableHead>
                 ))}
                 <TableHead className="w-20 text-center">Attended</TableHead>
                 <TableHead className="w-36">Certificate</TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="w-10 pr-5"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={days.length + 6} className="h-32 text-center text-muted-foreground">
-                    <Users className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                    {search || statusFilter !== 'all'
-                      ? 'No enrollees match your filters'
-                      : 'Nobody has registered yet'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((e) => (
-                  <TableRow key={e._id}>
-                    <TableCell>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{e.user_id.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {e.user_id.email}
-                          {e.user_id.student_id ? ` · ${e.user_id.student_id}` : ''}
-                        </p>
+              {filtered.map((e) => {
+                const user = e.user_id
+                const open = student.hrefOf(user) ? () => student.open(user) : undefined
+                return (
+                  <TableRow
+                    key={e._id}
+                    tabIndex={open ? 0 : undefined}
+                    className={open ? 'cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))]' : undefined}
+                    onClick={(ev) => { if (open && !(ev.target as HTMLElement).closest('button, a, [role="menuitem"]')) open() }}
+                    onKeyDown={(ev) => { if (open && ev.key === 'Enter' && ev.target === ev.currentTarget) open() }}
+                  >
+                    <TableCell className="pl-5">
+                      <div className="max-w-[260px]">
+                        <p className="truncate text-sm"><StudentLink student={user} from="Enrollees" className="text-foreground hover:text-primary" /></p>
+                        <p className="truncate text-xs text-muted-foreground">{[user?.email, user?.student_id].filter(Boolean).join(' · ')}</p>
                       </div>
                     </TableCell>
+                    <TableCell><Tag>{words(e.enrollment_type)}</Tag></TableCell>
                     <TableCell>
-                      <Badge className={`text-[10px] capitalize ${typeColors[e.enrollment_type] || ''}`}>
-                        {e.enrollment_type.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={`text-[10px] capitalize ${statusColors[e.enrollment_status] || ''}`}>
-                        {e.enrollment_status}
-                        {e.enrollment_status === 'waitlisted' && e.waitlist_position
-                          ? ` #${e.waitlist_position}`
-                          : ''}
-                      </Badge>
+                      <StatusPill tone={STATUS_TONE[e.enrollment_status] ?? 'neutral'}>
+                        {words(e.enrollment_status)}{e.enrollment_status === 'waitlisted' && e.waitlist_position ? ` #${e.waitlist_position}` : ''}
+                      </StatusPill>
                     </TableCell>
                     {days.map((d) => {
                       const attended = e.attended_day_numbers.includes(d.day_number)
                       return (
                         <TableCell key={d.session_id} className="text-center">
-                          {attended ? (
-                            <Check className="mx-auto h-4 w-4 text-emerald-600" />
-                          ) : (
-                            <Minus className="mx-auto h-4 w-4 text-muted-foreground/40" />
-                          )}
+                          {attended
+                            ? <Check role="img" aria-label="Attended" className="mx-auto h-4 w-4 text-success" />
+                            : <Minus role="img" aria-label="Not attended" className="mx-auto h-4 w-4 text-muted-foreground/50" />}
                         </TableCell>
                       )
                     })}
-                    <TableCell className="text-center text-sm">
-                      {e.days_attended}/{days.filter((d) => d.status !== 'cancelled').length}
-                    </TableCell>
+                    <TableCell className="text-center text-sm tabular-nums">{e.days_attended}/{heldDays}</TableCell>
                     <TableCell>
                       {e.certificate ? (
-                        e.certificate.revoked ? (
-                          <Badge className="bg-red-500/10 text-red-600 border-red-200 text-[10px]">Revoked</Badge>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs">
-                            <Award className="h-3 w-3 text-emerald-600" />
-                            <span className="font-mono truncate max-w-[110px]">
-                              {e.certificate.certificate_number}
-                            </span>
-                          </span>
-                        )
+                        e.certificate.revoked
+                          ? <StatusPill tone="danger">Revoked</StatusPill>
+                          : <span className="flex items-center gap-1.5 text-xs"><Award aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-success" /><span className="max-w-[130px] truncate font-mono" title={e.certificate.certificate_number}>{e.certificate.certificate_number}</span></span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {e.enrollment_status !== 'cancelled' && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setRevokeTarget(e)} className="text-red-600">
-                              <ShieldOff className="mr-2 h-4 w-4" />Revoke access
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                    <TableCell className="pr-5">
+                      <RowMenu
+                        label={`Actions for ${user?.name || 'this student'}`}
+                        actions={[{ label: 'Revoke access', icon: ShieldOff, tone: 'danger', onSelect: () => setTarget(e), hidden: !canRevoke || e.enrollment_status === 'cancelled' }]}
+                      />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                )
+              })}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        )}
+      </Section>
 
-      {/* Revoke modal */}
-      <Dialog open={!!revokeTarget} onOpenChange={(open) => { if (!open) setRevokeTarget(null) }}>
-        <DialogContent className="sm:max-w-[460px]">
-          <DialogHeader>
-            <DialogTitle>Revoke workshop access</DialogTitle>
-            <DialogDescription>
-              {revokeTarget?.user_id.name} will lose access to every remaining day, any recordings, and their
-              certificate. If they held a confirmed seat, the next waitlisted student is promoted automatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="revoke_reason">Reason (optional)</Label>
-            <Textarea
-              id="revoke_reason"
-              rows={3}
-              placeholder="e.g., Refund processed"
-              value={revokeReason}
-              onChange={(ev) => setRevokeReason(ev.target.value)}
-              disabled={revoking}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRevokeTarget(null)} disabled={revoking}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleRevoke} disabled={revoking}>
-              {revoking ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
-              ) : (
-                <><ShieldOff className="mr-2 h-4 w-4" />Revoke access</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDock
+        open={!!target}
+        onClose={() => setTarget(null)}
+        title="Revoke workshop access"
+        confirmLabel="Revoke access"
+        busyLabel="Revoking..."
+        tone="danger"
+        reason={{ label: 'Reason', placeholder: 'e.g., Refund processed' }}
+        onConfirm={async (reason) => {
+          if (!target || !workshopId) return
+          must(await workshopsService.revokeEnrollment(workshopId, target._id, reason || undefined), 'Failed to revoke registration')
+          toast.success('Registration revoked')
+          load()
+        }}
+      >
+        <p>
+          <span className="font-medium text-foreground">{target?.user_id?.name || 'This student'}</span> will lose access to every remaining day, any recordings, and their certificate.
+          {target?.enrollment_status === 'confirmed' ? ' The next waitlisted student is promoted automatically.' : ''}
+        </p>
+      </ConfirmDock>
     </div>
   )
 }

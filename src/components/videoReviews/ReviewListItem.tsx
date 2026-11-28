@@ -1,19 +1,15 @@
 import { useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { StatusPill } from '@/components/common/detail'
 import { StarDisplay } from './StarDisplay'
+import { istDay, STATUS_LABEL, STATUS_TONE } from '@/pages/feedback/lib'
 import type { VideoReview } from '@/services/videoReviews.service'
 import { ChevronDown, ChevronUp, Video as VideoIcon } from 'lucide-react'
+import { StudentLink, openableRow } from '@/components/students/StudentLink'
 
 interface ReviewListItemProps {
   review: VideoReview
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
 }
 
 function getInitials(name?: string | null) {
@@ -29,9 +25,14 @@ function getInitials(name?: string | null) {
 export function ReviewListItem({ review }: ReviewListItemProps) {
   const [expanded, setExpanded] = useState(false)
   const hasFeedback = !!review.feedback
+  const location = useLocation()
+  const navigate = useNavigate()
+  const from = location.pathname + location.search
+  // The whole row opens the review; the student's name opens the student
+  const row = openableRow(() => navigate(`/feedback/${review._id}`, { state: { from } }), 'flex gap-4 border-b border-border py-4 last:border-0')
 
   return (
-    <div className="flex gap-4 border-b border-border py-4 last:border-0">
+    <div {...row}>
       {/* Video thumbnail */}
       <div className="h-14 w-20 shrink-0 overflow-hidden rounded bg-muted flex items-center justify-center">
         {review.video.thumbnail_url ? (
@@ -48,7 +49,11 @@ export function ReviewListItem({ review }: ReviewListItemProps) {
       {/* Main content */}
       <div className="min-w-0 flex-1">
         {/* Video title */}
-        <p className="text-sm font-medium leading-tight truncate">{review.video.title}</p>
+        <p className="text-sm font-medium leading-tight truncate">
+          <Link to={`/feedback/${review._id}`} state={{ from }} className="hover:text-primary hover:underline" title="Open this feedback">
+            {review.video.title}
+          </Link>
+        </p>
 
         {/* Teacher row */}
         {review.faculty && (
@@ -66,7 +71,7 @@ export function ReviewListItem({ review }: ReviewListItemProps) {
         )}
 
         {/* Context breadcrumb */}
-        <p className="mt-0.5 text-xs text-muted-foreground/70 truncate">
+        <p className="mt-0.5 text-xs text-muted-foreground truncate" title={`${review.package.name} › ${review.series.name} › ${review.module.name}`}>
           {review.package.name} › {review.series.name} › {review.module.name}
         </p>
 
@@ -82,6 +87,8 @@ export function ReviewListItem({ review }: ReviewListItemProps) {
             </p>
             {(review.feedback?.length ?? 0) > 80 && (
               <button
+                type="button"
+                aria-expanded={expanded}
                 onClick={() => setExpanded((e) => !e)}
                 className="mt-0.5 flex items-center gap-0.5 text-xs text-primary hover:underline"
               >
@@ -101,15 +108,16 @@ export function ReviewListItem({ review }: ReviewListItemProps) {
       </div>
 
       {/* Right column */}
-      <div className="shrink-0 text-right space-y-1">
+      <div className="shrink-0 space-y-1 text-right">
         {review.rating !== null ? (
           <StarDisplay rating={review.rating} size="sm" className="justify-end" />
         ) : (
-          <span className="text-xs text-muted-foreground/50">No rating</span>
+          <span className="text-xs text-muted-foreground">No rating</span>
         )}
-        <p className="text-xs font-medium truncate max-w-[120px] ml-auto">{review.user.name}</p>
+        {review.status && <StatusPill tone={STATUS_TONE[review.status]}>{STATUS_LABEL[review.status]}</StatusPill>}
+        <p className="ml-auto max-w-[120px] truncate text-xs"><StudentLink student={review.user} fallback="Unnamed student" from="Video reviews" className="text-xs" /></p>
         <p className="text-xs text-muted-foreground">
-          {formatDate(review.feedback_submitted_at ?? review.rating_submitted_at ?? review.createdAt)}
+          {istDay(review.feedback_submitted_at ?? review.rating_submitted_at ?? review.createdAt)}
         </p>
       </div>
     </div>

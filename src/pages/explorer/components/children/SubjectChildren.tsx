@@ -1,214 +1,100 @@
-import { useState } from 'react'
-import { Input } from '@/components/ui/input'
+import { FileText, Package, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Search, Plus, Package, FileText, Eye, EyeOff, Archive } from 'lucide-react'
-import { PackageRow } from '../rows/PackageRow'
-import { DocumentRow } from '../rows/DocumentRow'
-import { ExplorerEmptyState } from '../ExplorerEmptyState'
-import { ChildrenListSkeleton } from '../ExplorerSkeleton'
-import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
-import { CreateDocumentDialog } from '../../forms/CreateDocumentDialog'
-import { BulkImpactDialog } from '../../dialogs/BulkImpactDialog'
-import { classifyPublish, classifyUnpublish, classifyArchive } from '../../dialogs/bulkImpact'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
+import { ErrorState } from '@/components/common/detail'
+import { useActions } from '../../actions/ActionsContext'
+import { useExplorerAccess } from '../../access'
 import { usePanelSelection } from '../../context/PanelSelectionContext'
+import type { ExplorerData } from '../../hooks/useExplorerData'
 import { useSelection } from '../../hooks/useSelection'
-import { documentsService } from '@/services/documents.service'
-import { publishService } from '@/services/publish.service'
-import type { Package as PkgType } from '@/services/packages.service'
-import type { Document } from '@/services/documents.service'
+import { useUrlState } from '../../hooks/useUrlState'
 import type { ExplorerFocus } from '../../parseExplorerPath'
+import { ExplorerEmptyState, NoAccess } from '../ExplorerEmptyState'
+import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
+import { ChildrenListSkeleton } from '../ExplorerSkeleton'
+import { ListToolbar } from '../ListToolbar'
+import { DocumentRow, PackageRow } from '../rows/rows'
+import { FolderTabs, matches, readableTabs, selectAllProps, useBulkActions } from './shared'
 
-interface SubjectChildrenProps {
-  packages: PkgType[] | undefined
-  loading: boolean
-  focus: ExplorerFocus
-  onRefresh?: () => void
-  subjectDocuments?: Document[]
-}
+export function SubjectChildren({ data, focus }: { data: ExplorerData; focus: Extract<ExplorerFocus, { level: 'subject' }> }) {
+  const { can } = useExplorerAccess()
+  const { create } = usePanelSelection()
+  const { open } = useActions()
+  const [tab, setTab] = useUrlState('tab', 'packages')
+  const [search, setSearch] = useUrlState('q')
+  const [docSearch, setDocSearch] = useUrlState('dq')
+  const { packages, subjectDocuments } = data
+  const docs = subjectDocuments ?? []
+  const selection = useSelection(docs)
+  const bulk = useBulkActions('document', selection, docs.map((d) => ({ id: d._id, name: d.title })))
 
-export function SubjectChildren({ packages, loading, focus, onRefresh, subjectDocuments }: SubjectChildrenProps) {
-  const [search, setSearch] = useState('')
-  const [docSearch, setDocSearch] = useState('')
-  const [docCreateOpen, setDocCreateOpen] = useState(false)
-  const docSelection = useSelection()
-  const { select } = usePanelSelection()
+  const seePackages = can('package', 'read')
+  const seeDocs = can('document', 'read')
+  const filtered = (packages ?? []).filter((p) => matches(p.name, search))
+  const filteredDocs = docs.filter((d) => matches(d.title, docSearch))
+  const addDocument = () => open({ type: 'newDocument', place: { subjectId: focus.subjectId, packageOptions: (packages ?? []).map((p) => ({ _id: p._id, name: p.name })) } })
+  const canAddDocument = can('document', 'create') && can('series', 'read')
 
-  const subjectId = focus.level === 'subject' ? focus.subjectId : ''
-  const newPackage = () => select({ kind: 'package', entity: null, ctx: { subjectId } })
-
-  const filtered = packages?.filter((p) =>
-    search.length < 1 ? true : p.name.toLowerCase().includes(search.toLowerCase()),
-  )
-
-  const filteredDocs = (subjectDocuments ?? []).filter((d) =>
-    docSearch.length < 1 ? true : d.title.toLowerCase().includes(docSearch.toLowerCase()),
-  )
-  const filteredDocIds = filteredDocs.map((d) => d._id)
-
-  const [docBulkOp, setDocBulkOp] = useState<'publish' | 'unpublish' | 'archive' | null>(null)
-  const selectedDocItems = filteredDocs.filter((d) => docSelection.isSelected(d._id)).map((d) => ({ id: d._id, name: d.title }))
-
-  const docCfg =
-    docBulkOp === 'publish'
-      ? { title: 'Publish documents', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('document', id), runOne: (id: string) => publishService.publish('document', id) }
-      : docBulkOp === 'unpublish'
-      ? { title: 'Unpublish documents', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('document', id), runOne: (id: string) => publishService.unpublish('document', id) }
-      : docBulkOp === 'archive'
-      ? { title: 'Archive documents', actionLabel: 'Archive', destructive: true, classify: (id: string) => classifyArchive(documentsService.getDeleteImpact.bind(documentsService), id), runOne: (id: string) => documentsService.archive(id) }
-      : null
+  const tabs = readableTabs([
+    { value: 'packages', label: 'Packages', count: packages?.length, icon: Package, hidden: !seePackages },
+    { value: 'documents', label: 'Documents', count: subjectDocuments?.length, icon: FileText, hidden: !seeDocs },
+  ])
+  const current = tabs.some((t) => t.value === tab) ? tab : tabs[0].value
 
   return (
-    <>
-      <Tabs defaultValue="packages" className="flex flex-col flex-1">
-        <div className="border-b border-slate-100">
-          <TabsList className="h-auto rounded-none bg-transparent border-b-0 px-4 sm:px-6 pt-1 gap-4">
-            <TabsTrigger
-              value="packages"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
+    <Tabs value={current} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+      <FolderTabs tabs={tabs} label="What is in this subject" />
+
+      <TabsContent value="packages" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
+        {!seePackages ? <NoAccess what="packages" /> : (
+          <>
+            <ListToolbar search={search} onSearch={setSearch} placeholder="Search packages">
+              {can('package', 'create') && <Button size="sm" className="h-9" onClick={() => create('package')}><Plus className="h-4 w-4" /> New Package</Button>}
+            </ListToolbar>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {data.packagesError ? <Failed what="packages" error={data.packagesError} onRetry={data.refetch} /> : !packages ? <ChildrenListSkeleton /> : filtered.length > 0 ? (
+                <ul aria-label="Packages" className="py-1.5">{filtered.map((p) => <li key={p._id}><PackageRow pkg={p} parentFocus={focus} /></li>)}</ul>
+              ) : packages.length > 0 ? (
+                <ExplorerEmptyState icon={Package} title="No packages match" description={`Nothing here is called "${search}".`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
+              ) : (
+                <ExplorerEmptyState icon={Package} title="No packages yet" description="Add the first package of this subject. Series, modules and videos go inside it." action={can('package', 'create') ? { label: 'Create package', onClick: () => create('package') } : undefined} />
+              )}
+            </div>
+          </>
+        )}
+      </TabsContent>
+
+      <TabsContent value="documents" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
+        {!seeDocs ? <NoAccess what="documents" /> : (
+          <>
+            <ListToolbar
+              search={docSearch}
+              onSearch={setDocSearch}
+              placeholder="Search documents"
+              selectAll={bulk.length > 0 && filteredDocs.length > 0 ? selectAllProps(selection, filteredDocs.map((d) => d._id), 'documents') : undefined}
             >
-              <Package className="w-3.5 h-3.5" />
-              Packages {packages && `(${packages.length})`}
-            </TabsTrigger>
-            <TabsTrigger
-              value="documents"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 gap-1.5 text-sm"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Documents {(subjectDocuments?.length ?? 0) > 0 && `(${subjectDocuments!.length})`}
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="packages" className="mt-0 flex-1">
-          <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-slate-100">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pl-9 h-8 text-sm"
-                placeholder="Search packages…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              {canAddDocument && <Button size="sm" className="h-9" onClick={addDocument}><Plus className="h-4 w-4" /> Add Document</Button>}
+            </ListToolbar>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {data.documentsError ? <Failed what="documents" error={data.documentsError} onRetry={data.refetch} /> : !subjectDocuments ? <ChildrenListSkeleton /> : filteredDocs.length > 0 ? (
+                <ul aria-label="Documents" className="py-1.5">
+                  {filteredDocs.map((d) => <li key={d._id}><DocumentRow document={d} selected={selection.isSelected(d._id)} onSelect={bulk.length > 0 ? selection.toggle : undefined} /></li>)}
+                </ul>
+              ) : docs.length > 0 ? (
+                <ExplorerEmptyState icon={FileText} title="No documents match" description={`Nothing here is called "${docSearch}".`} action={{ label: 'Clear search', onClick: () => setDocSearch('') }} />
+              ) : (
+                <ExplorerEmptyState icon={FileText} title="No documents yet" description="Documents of this subject, including those inside its series, appear here." action={canAddDocument ? { label: 'Add document', onClick: addDocument } : undefined} />
+              )}
             </div>
-            <Button size="sm" className="gap-1.5 shrink-0" onClick={newPackage}>
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">New Package</span>
-            </Button>
-          </div>
-
-          {loading && !packages ? (
-            <ChildrenListSkeleton />
-          ) : filtered && filtered.length > 0 ? (
-            <div className="py-1.5">
-              {filtered.map((pkg) => (
-                <PackageRow
-                  key={pkg._id}
-                  pkg={pkg}
-                  parentFocus={focus}
-                  onRefresh={onRefresh}
-                />
-              ))}
-            </div>
-          ) : (
-            <ExplorerEmptyState
-              icon={Package}
-              title={search ? 'No packages match' : 'No packages yet'}
-              description={
-                search
-                  ? `No results for "${search}".`
-                  : 'Add your first package to this subject.'
-              }
-              action={search ? undefined : { label: 'Create package', onClick: newPackage }}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="documents" className="mt-0 flex-1">
-          <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-slate-100">
-            {filteredDocs.length > 0 && (
-              <input
-                type="checkbox"
-                checked={filteredDocIds.length > 0 && filteredDocIds.every((id) => docSelection.isSelected(id))}
-                onChange={() => docSelection.toggleAll(filteredDocIds)}
-                className="w-4 h-4 accent-primary cursor-pointer shrink-0"
-              />
-            )}
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pl-9 h-8 text-sm"
-                placeholder="Search documents…"
-                value={docSearch}
-                onChange={(e) => setDocSearch(e.target.value)}
-              />
-            </div>
-            <Button size="sm" className="gap-1.5 shrink-0" onClick={() => setDocCreateOpen(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Add Document</span>
-            </Button>
-          </div>
-
-          {loading && !subjectDocuments ? (
-            <ChildrenListSkeleton />
-          ) : filteredDocs.length > 0 ? (
-            <div className="py-1.5">
-              {filteredDocs.map((d) => (
-                <DocumentRow
-                  key={d._id}
-                  document={d}
-                  onRefresh={onRefresh}
-                  selected={docSelection.isSelected(d._id)}
-                  onSelect={docSelection.toggle}
-                />
-              ))}
-            </div>
-          ) : (
-            <ExplorerEmptyState
-              icon={FileText}
-              title={docSearch ? 'No documents match' : 'No documents yet'}
-              description={
-                docSearch
-                  ? `No results for "${docSearch}".`
-                  : 'Documents under this subject (including those inside its series) appear here.'
-              }
-              action={docSearch ? undefined : { label: 'Add document', onClick: () => setDocCreateOpen(true) }}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
-
-      <CreateDocumentDialog
-        open={docCreateOpen}
-        onClose={() => setDocCreateOpen(false)}
-        onSuccess={() => { setDocCreateOpen(false); onRefresh?.() }}
-        subjectId={subjectId}
-        packageOptions={(packages ?? []).map((p) => ({ _id: p._id, name: p.name }))}
-      />
-
-      <ExplorerSelectionBar
-        count={docSelection.count}
-        onClear={docSelection.clear}
-        actions={[
-          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('publish') },
-          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('unpublish'), variant: 'amber' },
-          { label: 'Archive', icon: <Archive className="w-3.5 h-3.5" />, onClick: () => setDocBulkOp('archive'), variant: 'amber' },
-        ]}
-      />
-
-      {docCfg && (
-        <BulkImpactDialog
-          open={!!docBulkOp}
-          onClose={() => setDocBulkOp(null)}
-          onSuccess={() => { setDocBulkOp(null); docSelection.clear(); onRefresh?.() }}
-          items={selectedDocItems}
-          title={docCfg.title}
-          actionLabel={docCfg.actionLabel}
-          destructive={docCfg.destructive}
-          classify={docCfg.classify}
-          runOne={docCfg.runOne}
-        />
-      )}
-    </>
+            <ExplorerSelectionBar count={selection.count} onClear={selection.clear} actions={bulk} />
+          </>
+        )}
+      </TabsContent>
+    </Tabs>
   )
+}
+
+function Failed({ what, error, onRetry }: { what: string; error: { status?: number; message: string }; onRetry: () => Promise<void> }) {
+  if (error.status === 403) return <NoAccess what={what} />
+  return <div className="p-4"><ErrorState title={`The ${what} could not be loaded`} message={error.message} onRetry={() => void onRetry()} /></div>
 }

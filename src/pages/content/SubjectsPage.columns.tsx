@@ -13,6 +13,8 @@ import { GripVertical, MoreVertical, Eye, Pencil, Trash2 } from 'lucide-react';
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface SubjectsColumnsProps {
+  canEdit: boolean;
+  canDelete: boolean;
   onNavigate: (subject: Subject) => void;
   onEdit: (subject: Subject) => void;
   onDelete: (subject: Subject) => void;
@@ -20,6 +22,8 @@ interface SubjectsColumnsProps {
 }
 
 export function useSubjectsColumns({
+  canEdit,
+  canDelete,
   onNavigate,
   onEdit,
   onDelete,
@@ -63,7 +67,7 @@ export function useSubjectsColumns({
       header: 'Packages',
       width: 'w-32',
       cell: (subject) => (
-        <Badge variant="secondary">
+        <Badge variant="outline" className="font-medium">
           {subject.package_count || 0}{' '}
           {subject.package_count === 1 ? 'package' : 'packages'}
         </Badge>
@@ -77,8 +81,10 @@ export function useSubjectsColumns({
         <div onClick={(e) => e.stopPropagation()}>
           <StatusToggle
             checked={subject.is_active}
+            label={subject.name}
             onCheckedChange={() => onToggleActive(subject)}
             size="sm"
+          disabled={!canEdit}
           />
         </div>
       ),
@@ -105,7 +111,7 @@ export function useSubjectsColumns({
         <div onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${subject.name}`}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -114,18 +120,24 @@ export function useSubjectsColumns({
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onEdit(subject)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => onDelete(subject)}
-              className="text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {canEdit && (
+              <DropdownMenuItem onClick={() => onEdit(subject)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => onDelete(subject)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         </div>

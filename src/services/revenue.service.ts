@@ -7,6 +7,9 @@ export interface RevenueByType {
     packages: { revenue: number; count: number; percentage: string }
     sessions: { revenue: number; count: number; percentage: string }
     books: { revenue: number; count: number; percentage: string }
+    ebooks?: { revenue: number; count: number; percentage: string }
+    workshops?: { revenue: number; count: number; percentage: string }
+    forms?: { revenue: number; count: number; percentage: string }
   }
   total_revenue: number
   total_transactions: number

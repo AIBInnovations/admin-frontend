@@ -33,27 +33,167 @@ export interface Book {
   publish_status: PublishStatus
   createdAt: string
   updatedAt: string
+  // E-book file, checks and free sample (full record only)
+  ebook_file_name?: string | null
+  ebook_file_updated_at?: string | null
+  ebook_validation?: EbookReport | null
+  ebook_job?: EbookJob | { status: EbookJobStatus } | null
+  sample?: BookSample | null
+  has_sample?: boolean
+  // Sales (list only). revenue is null when the admin may not see money.
+  sold?: number
+  ebook_sold?: number
+  paperback_sold?: number
+  revenue?: number | null
+  file_status?: EbookReport['status'] | null
 }
 
+export interface EbookIssue { code: string; message: string }
+
+/** What the server found when it checked an e-book file. */
+export interface EbookReport {
+  status: 'passed' | 'warnings' | 'failed'
+  checked_at: string
+  file_name: string | null
+  converted_from_pdf: boolean
+  errors_found: EbookIssue[]
+  warnings: EbookIssue[]
+  info: {
+    version?: string | null
+    title?: string | null
+    author?: string | null
+    language?: string | null
+    sections?: number
+    chars?: number
+    images?: number
+    estimated_pages?: number
+    toc_entries?: number
+    has_cover?: boolean
+    fixed_layout?: boolean
+    size_bytes?: number
+  }
+}
+
+export type EbookJobStatus = 'queued' | 'converting' | 'validating' | 'ready' | 'failed'
+export const EBOOK_JOB_ACTIVE: EbookJobStatus[] = ['queued', 'converting', 'validating']
+
+export interface EbookJob {
+  job_id: string
+  status: EbookJobStatus
+  source_format: 'epub' | 'pdf'
+  file_name: string | null
+  file_size: number | null
+  error_code: string | null
+  error: string | null
+  report: EbookReport | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface EbookStatus {
+  book_id: string
+  ebook_file_url: string | null
+  ebook_file_size_mb: number | null
+  ebook_file_format: 'pdf' | 'epub' | null
+  ebook_file_name: string | null
+  ebook_file_updated_at: string | null
+  has_file?: boolean
+  status: EbookJobStatus | null
+  job: EbookJob | null
+  validation: EbookReport | null
+  pending?: boolean
+  conversion_available?: boolean
+  max_file_bytes?: number
+}
+
+/** Free sample as the admin sees it. */
+export interface BookSample {
+  source: 'auto' | 'file' | null
+  format: 'epub' | 'pdf' | null
+  pages: number | null
+  sections: number | null
+  size_bytes: number | null
+  file_name: string | null
+  target_pages: number | null
+  share_of_book: number | null
+  has_preview: boolean
+  enabled: boolean
+  opens: number
+  updated_at: string | null
+  /** Made from an earlier e-book file. */
+  stale: boolean
+  /** Students can open it now. */
+  visible: boolean
+}
+
+export interface SampleResult { book_id: string; sample: BookSample | null; warnings?: EbookIssue[] }
+
+export interface BookSalesMonth { month: string; ebook: number; paperback: number; sold: number; collected: number | null; net: number | null }
+
+export interface BookSales {
+  book_id: string
+  range: { from: string; to: string } | null
+  money_visible: boolean
+  ebook: { sold: number; collected: number | null; net: number | null }
+  paperback: { sold: number; orders: number; collected: number | null; net: number | null }
+  total: { sold: number; collected: number | null; net: number | null }
+  granted_copies: number
+  active_readers: number
+  last_sale_at: string | null
+  trend: BookSalesMonth[]
+  stock: { quantity: number; is_available: boolean; low: boolean }
+  sample: BookSample | null
+  sample_opens: number
+}
+
+export type BookBuyerKind = 'ebook' | 'paperback' | 'granted'
+export interface BookBuyer {
+  _id: string
+  kind: BookBuyerKind
+  purchase_id: string
+  user: { _id: string; name?: string; email?: string; phone_number?: string } | null
+  user_id: string | null
+  quantity: number
+  collected: number | null
+  date: string
+  coupon_code: string | null
+  order_number: string | null
+  order_status: string | null
+  dispute_status: string | null
+  is_admin_granted: boolean
+  grant_reason: string | null
+}
+
+const MIME = { epub: 'application/epub+zip', pdf: 'application/pdf' } as const
+
+/** What a chosen file really is, from its first bytes. The server checks again. */
+export async function sniffEbookFile(file: File): Promise<'epub' | 'pdf' | null> {
+  const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer())
+  if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04) return 'epub'
+  if (new TextDecoder('latin1').decode(head).includes('%PDF-')) return 'pdf'
+  return null
+}
+
+/** On an update, null clears a field; leave it out to keep it. */
 export interface BookFormData {
   title: string
   author: string
-  description?: string
-  isbn?: string
+  description?: string | null
+  isbn?: string | null
   price: number
-  original_price?: number
+  original_price?: number | null
   is_on_sale?: boolean
-  sale_price?: number
-  thumbnail_url?: string
-  thumbnail_s3_key?: string
-  category?: string
-  subject_id?: string
+  sale_price?: number | null
+  thumbnail_url?: string | null
+  thumbnail_s3_key?: string | null
+  category?: string | null
+  subject_id?: string | null
   stock_quantity?: number
   is_available?: boolean
-  weight_grams?: number
-  publisher?: string
-  publication_year?: number
-  pages?: number
+  weight_grams?: number | null
+  publisher?: string | null
+  publication_year?: number | null
+  pages?: number | null
   display_order?: number
   ebook?: boolean
   publish_status?: PublishStatus
@@ -65,6 +205,9 @@ export interface BooksListParams extends BaseListParams {
   category?: string
   low_stock_threshold?: number
   publish_status?: string | null
+  format?: string | null
+  has_sample?: boolean | null
+  sort?: string | null
 }
 
 class BooksService {
@@ -91,7 +234,7 @@ class BooksService {
     if (response.success && response.data) {
       return { ...response, data: response.data.book }
     }
-    return response as ApiResponse<Book>
+    return response as unknown as ApiResponse<Book>
   }
 
   async create(data: BookFormData): Promise<ApiResponse<Book>> {
@@ -99,7 +242,7 @@ class BooksService {
     if (response.success && response.data) {
       return { ...response, data: response.data.book }
     }
-    return response as ApiResponse<Book>
+    return response as unknown as ApiResponse<Book>
   }
 
   async update(bookId: string, data: Partial<BookFormData>): Promise<ApiResponse<Book>> {
@@ -107,7 +250,7 @@ class BooksService {
     if (response.success && response.data) {
       return { ...response, data: response.data.book }
     }
-    return response as ApiResponse<Book>
+    return response as unknown as ApiResponse<Book>
   }
 
   /**
@@ -128,7 +271,7 @@ class BooksService {
     if (response.success && response.data) {
       return { ...response, data: response.data.book }
     }
-    return response as ApiResponse<Book>
+    return response as unknown as ApiResponse<Book>
   }
 
   async getLowStock(threshold = 10): Promise<ApiResponse<ListResponse<Book>>> {
@@ -152,38 +295,87 @@ class BooksService {
   /**
    * Upload ebook file to S3 and confirm with backend.
    * 3-step flow: get presigned URL → upload to S3 → confirm upload.
+   * The server checks the file before it replaces the live one; a PDF comes
+   * back as `pending` and is converted in the background (poll getEbookStatus).
    */
   async uploadEbook(
     bookId: string,
     file: File,
     onProgress?: (percent: number) => void,
-  ): Promise<ApiResponse<{ book_id: string; ebook_file_url: string; ebook_file_size_mb: number; ebook_file_format: string }>> {
-    // Step 1: Get presigned upload URL
-    const urlRes = await apiService.post<{ uploadUrl: string; s3Key: string }>(
-      `${this.basePath}/ebook-upload-url`,
-      { mimeType: file.type || 'application/pdf' },
+    signal?: AbortSignal,
+  ): Promise<ApiResponse<EbookStatus>> {
+    const s3Key = await this.putFile(`${this.basePath}/${bookId}/ebook-upload-url`, file, onProgress, signal)
+    return apiService.post<EbookStatus>(
+      `${this.basePath}/${bookId}/ebook-confirm`,
+      { s3Key, fileName: file.name, fileSize: file.size, mimeType: file.type || undefined },
+      { timeout: 90000, signal },
     )
-    if (!urlRes.success || !urlRes.data) {
-      throw new Error(urlRes.message || 'Failed to get upload URL')
+  }
+
+  /** Ask for an upload link and send the file to storage. Returns its key. */
+  private async putFile(url: string, file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<string> {
+    const format = await sniffEbookFile(file)
+    if (!format) throw new Error('This file is not an EPUB. Choose an EPUB file.')
+    const mimeType = MIME[format]
+    const res = await apiService.post<{ uploadUrl: string; s3Key: string }>(url, { mimeType, fileName: file.name }, { signal })
+    if (!res.success || !res.data) throw new Error(res.message || 'Failed to get upload URL')
+    try {
+      await axios.put(res.data.uploadUrl, file, {
+        headers: { 'Content-Type': mimeType },
+        signal,
+        onUploadProgress: (e) => {
+          if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+        },
+      })
+    } catch (err) {
+      if (axios.isCancel(err)) throw err
+      throw new Error('The file could not be uploaded. Check your connection and try again.')
     }
-    const { uploadUrl, s3Key } = urlRes.data
+    return res.data.s3Key
+  }
 
-    // Step 2: Upload directly to S3
-    await axios.put(uploadUrl, file, {
-      headers: { 'Content-Type': file.type || 'application/pdf' },
-      onUploadProgress: (e) => {
-        if (onProgress && e.total) {
-          onProgress(Math.round((e.loaded / e.total) * 100))
-        }
-      },
-    })
+  async getEbookStatus(bookId: string): Promise<ApiResponse<EbookStatus>> {
+    return apiService.get<EbookStatus>(`${this.basePath}/${bookId}/ebook-status`)
+  }
 
-    // Step 3: Confirm upload with backend
-    return apiService.post(`${this.basePath}/${bookId}/ebook-confirm`, {
-      s3Key,
-      fileSize: file.size,
-      mimeType: file.type,
-    })
+  /** Cancel a running check or conversion, or clear a finished result. */
+  async clearEbookJob(bookId: string): Promise<ApiResponse<EbookStatus>> {
+    return apiService.delete<EbookStatus>(`${this.basePath}/${bookId}/ebook-job`)
+  }
+
+  /** Check the live EPUB again. */
+  async revalidateEbook(bookId: string): Promise<ApiResponse<EbookStatus>> {
+    return apiService.post<EbookStatus>(`${this.basePath}/${bookId}/ebook-validate`, {}, { timeout: 90000 })
+  }
+
+  async getFileUrl(bookId: string, kind: 'ebook' | 'sample'): Promise<ApiResponse<{ url: string }>> {
+    return apiService.get<{ url: string }>(`${this.basePath}/${bookId}/file-url?kind=${kind}`)
+  }
+
+  async uploadSample(bookId: string, file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<ApiResponse<SampleResult>> {
+    const s3Key = await this.putFile(`${this.basePath}/${bookId}/sample-upload-url`, file, onProgress, signal)
+    return apiService.post<SampleResult>(`${this.basePath}/${bookId}/sample-confirm`, { s3Key, fileName: file.name }, { timeout: 90000, signal })
+  }
+
+  /** Cut a sample of about `pages` pages from the book's EPUB. */
+  async generateSample(bookId: string, pages: number): Promise<ApiResponse<SampleResult>> {
+    return apiService.post<SampleResult>(`${this.basePath}/${bookId}/sample/generate`, { pages }, { timeout: 90000 })
+  }
+
+  async setSampleEnabled(bookId: string, enabled: boolean): Promise<ApiResponse<SampleResult>> {
+    return apiService.put<SampleResult>(`${this.basePath}/${bookId}/sample`, { enabled })
+  }
+
+  async removeSample(bookId: string): Promise<ApiResponse<SampleResult>> {
+    return apiService.delete<SampleResult>(`${this.basePath}/${bookId}/sample`)
+  }
+
+  async getSales(bookId: string, range: { from?: string; to?: string } = {}): Promise<ApiResponse<BookSales>> {
+    return apiService.get<BookSales>(`${this.basePath}/${bookId}/sales${this.buildQuery(range)}`)
+  }
+
+  async getBuyers(bookId: string, params: { page?: number; limit?: number; type?: string; search?: string } = {}): Promise<ApiResponse<ListResponse<BookBuyer>>> {
+    return apiService.get<ListResponse<BookBuyer>>(`${this.basePath}/${bookId}/buyers${this.buildQuery(params)}`)
   }
 
   /**

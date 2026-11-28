@@ -1,248 +1,119 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useState } from 'react'
+import { Globe, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { WebStoreRedirectRuleFormModal } from '@/components/webStoreRedirectRules/WebStoreRedirectRuleFormModal'
-import { Plus, Globe } from 'lucide-react'
-import { toast } from 'sonner'
-import {
-  webStoreRedirectRulesService,
-  WebStoreRedirectRule,
-  WebStoreRedirectRuleFormData,
-  RedirectPlatform,
-} from '@/services/webStoreRedirectRules.service'
-import { useWebStoreRedirectRulesColumns } from './WebStoreRedirectRulesPage.columns'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { StaleNotice } from '@/components/users/kit'
+import { ensureOk, errText, unwrap, usePageInRange, useResource, useUrlState } from '@/components/users/lib'
+import { useAuth } from '@/contexts/AuthContext'
+import { webStoreRedirectRulesService, type RedirectPlatform, type WebStoreRedirectRule } from '@/services/webStoreRedirectRules.service'
+import type { ListResponse } from '@/types/api.types'
 import { describeVersionRange, getStoreKind, STORE_KIND_LABEL } from '@/lib/webStoreRedirect'
+import { useWebStoreRedirectRulesColumns } from './WebStoreRedirectRulesPage.columns'
+
+const describeRule = (r: WebStoreRedirectRule) => `${r.platform === 'ios' ? 'iPhone / iPad' : 'Android'}: ${describeVersionRange(r.min_version, r.max_version)}, opens ${STORE_KIND_LABEL[getStoreKind(r.base_url)]}`
 
 export function WebStoreRedirectRulesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canUpdate = hasPermission('settings.update')
+  const canDelete = hasPermission('settings.delete')
+  const { state, set, clear, page, setPage } = useUrlState({ platform: 'all', is_active: 'all' })
 
-  const [rules, setRules] = useState<WebStoreRedirectRule[]>([])
-  const [loading, setLoading] = useState(true)
-  const [platformFilter, setPlatformFilter] = useState(searchParams.get('platform') || 'all')
-  const [activeFilter, setActiveFilter] = useState(searchParams.get('is_active') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
+  const { data, loading, error, reload } = useResource<ListResponse<WebStoreRedirectRule>>(async () => unwrap(await webStoreRedirectRulesService.getAll({
+    page, limit: 20,
+    platform: state.platform !== 'all' ? (state.platform as RedirectPlatform) : undefined,
+    is_active: state.is_active === 'all' ? undefined : state.is_active === 'true',
+  }), 'Failed to load redirect rules'), [page, state.platform, state.is_active])
+  const totalPages = data?.pagination?.totalPages || 1
+  usePageInRange(page, data ? totalPages : undefined, loading, setPage)
 
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedRule, setSelectedRule] = useState<WebStoreRedirectRule | null>(null)
+  const [form, setForm] = useState<{ open: boolean; mode: 'create' | 'edit'; rule: WebStoreRedirectRule | null }>({ open: false, mode: 'create', rule: null })
+  const [deleting, setDeleting] = useState<WebStoreRedirectRule | null>(null)
+  const [toggling, setToggling] = useState<string | null>(null)
 
-  const { nextFetchId, isStale } = useLatestFetch()
+  const openCreate = () => setForm({ open: true, mode: 'create', rule: null })
+  const openEdit = (rule: WebStoreRedirectRule) => setForm({ open: true, mode: 'edit', rule })
 
-  const fetchRules = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
+  const toggleActive = async (rule: WebStoreRedirectRule) => {
+    if (toggling) return
+    setToggling(rule._id)
     try {
-      const response = await webStoreRedirectRulesService.getAll({
-        page: currentPage,
-        limit: 20,
-        platform: platformFilter !== 'all' ? (platformFilter as RedirectPlatform) : undefined,
-        is_active: activeFilter === 'all' ? undefined : activeFilter === 'true',
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setRules(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load redirect rules')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load redirect rules')
+      ensureOk(await webStoreRedirectRulesService.update(rule._id, { is_active: !rule.is_active }), 'Failed to toggle rule')
+      toast.success(`Rule ${!rule.is_active ? 'activated' : 'deactivated'}`)
+      await reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to toggle rule'))
     } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, platformFilter, activeFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchRules() }, [fetchRules])
-
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (platformFilter !== 'all') params.platform = platformFilter
-    if (activeFilter !== 'all') params.is_active = activeFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [platformFilter, activeFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [platformFilter, activeFilter])
-
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedRule(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (rule: WebStoreRedirectRule) => {
-    setModalMode('edit')
-    setSelectedRule(rule)
-    setFormModalOpen(true)
-  }
-
-  const handleDeleteClick = (rule: WebStoreRedirectRule) => {
-    setSelectedRule(rule)
-    setDeleteModalOpen(true)
-  }
-
-  const handleToggleActive = async (rule: WebStoreRedirectRule) => {
-    try {
-      const response = await webStoreRedirectRulesService.update(rule._id, { is_active: !rule.is_active })
-      if (response.success) {
-        toast.success(`Rule ${!rule.is_active ? 'activated' : 'deactivated'}`)
-        fetchRules()
-      } else {
-        toast.error(response.message || 'Failed to toggle rule')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to toggle rule')
+      setToggling(null)
     }
   }
-
-  const handleFormSubmit = async (data: WebStoreRedirectRuleFormData) => {
+  const confirmDelete = async () => {
+    if (!deleting) return
     try {
-      if (modalMode === 'create') {
-        const response = await webStoreRedirectRulesService.create(data)
-        if (response.success) {
-          toast.success('Rule created successfully')
-          fetchRules()
-        } else {
-          toast.error(response.message || 'Failed to create rule')
-          throw new Error(response.message || 'Failed to create rule')
-        }
-      } else if (selectedRule) {
-        const response = await webStoreRedirectRulesService.update(selectedRule._id, data)
-        if (response.success) {
-          toast.success('Rule updated successfully')
-          fetchRules()
-        } else {
-          toast.error(response.message || 'Failed to update rule')
-          throw new Error(response.message || 'Failed to update rule')
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save rule')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedRule) return
-    try {
-      const response = await webStoreRedirectRulesService.delete(selectedRule._id)
-      if (response.success) {
-        toast.success('Rule deleted successfully')
-        fetchRules()
-      } else {
-        toast.error(response.message || 'Failed to delete rule')
-        throw new Error(response.message || 'Failed to delete rule')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete rule')
-      throw error
+      ensureOk(await webStoreRedirectRulesService.delete(deleting._id), 'Failed to delete rule')
+      toast.success('Rule deleted successfully')
+      await reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to delete rule'))
+      throw err
     }
   }
 
   const columns = useWebStoreRedirectRulesColumns({
-    onEdit: handleEdit,
-    onDelete: handleDeleteClick,
-    onToggleActive: handleToggleActive,
+    onEdit: canUpdate ? openEdit : undefined, onDelete: canDelete ? setDeleting : undefined, onToggleActive: canUpdate ? toggleActive : undefined, togglingId: toggling,
   })
-
-  const hasFilters = platformFilter !== 'all' || activeFilter !== 'all'
+  const hasFilters = state.platform !== 'all' || state.is_active !== 'all'
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
       <PageHeader
         title="Web Store Redirect"
         description="Decide which web store each app version opens. The iPhone app cannot show prices or payment, so it sends users to a web store instead."
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Settings' },
-          { label: 'Web Store Redirect' },
-        ]}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Rule
-          </Button>
-        }
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Settings' }, { label: 'Web Store Redirect' }]}
+        action={canUpdate ? <Button onClick={openCreate}><Plus aria-hidden="true" />Add Rule</Button> : undefined}
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        <Select value={platformFilter} onValueChange={setPlatformFilter}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="Platform" />
-          </SelectTrigger>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Select value={state.platform} onValueChange={(v) => set({ platform: v })}>
+          <SelectTrigger aria-label="App" className="h-9 bg-card sm:w-[180px]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All apps</SelectItem>
             <SelectItem value="ios">iPhone / iPad</SelectItem>
             <SelectItem value="android">Android</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={activeFilter} onValueChange={setActiveFilter}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
+        <Select value={state.is_active} onValueChange={(v) => set({ is_active: v })}>
+          <SelectTrigger aria-label="Status" className="h-9 bg-card sm:w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All rules</SelectItem>
             <SelectItem value="true">On</SelectItem>
             <SelectItem value="false">Off</SelectItem>
           </SelectContent>
         </Select>
+        {hasFilters && <Button variant="ghost" size="sm" onClick={clear}>Clear filters</Button>}
       </div>
-
+      {error && data && <StaleNotice message={error} onRetry={() => reload()} />}
       <DataTable
-        data={rules}
+        data={data?.entities || []}
         columns={columns}
         isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
+        error={error}
+        onRetry={() => reload()}
+        onRowClick={canUpdate ? openEdit : undefined}
+        pagination={{ currentPage: page, totalPages, totalCount: data?.pagination?.total || 0, onPageChange: setPage }}
         emptyState={{
           icon: Globe,
           title: hasFilters ? 'No rules match filters' : 'No redirect rules yet',
-          description: !hasFilters ? 'Create a rule to start dynamically routing app users to a web store.' : undefined,
-          action: !hasFilters ? (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Create your first rule
-            </Button>
-          ) : undefined,
+          description: hasFilters ? undefined : 'Create a rule to start dynamically routing app users to a web store.',
+          action: hasFilters ? <Button variant="outline" size="sm" onClick={clear}>Clear filters</Button> : canUpdate ? <Button onClick={openCreate} variant="outline" size="sm"><Plus aria-hidden="true" />Create your first rule</Button> : undefined,
         }}
         getRowKey={(rule) => rule._id}
       />
-
-      <WebStoreRedirectRuleFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        rule={selectedRule}
-        mode={modalMode}
-      />
-
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Redirect Rule"
-        itemName={
-          selectedRule
-            ? `${selectedRule.platform === 'ios' ? 'iPhone / iPad' : 'Android'} — ${describeVersionRange(selectedRule.min_version, selectedRule.max_version)} → ${STORE_KIND_LABEL[getStoreKind(selectedRule.base_url)]}`
-            : undefined
-        }
-      />
+      <WebStoreRedirectRuleFormModal open={form.open} onClose={() => setForm((f) => ({ ...f, open: false }))} onSaved={() => reload({ silent: true })} rule={form.rule} mode={form.mode} />
+      <DeleteModal open={!!deleting} onClose={() => setDeleting(null)} onConfirm={confirmDelete} title="Delete Redirect Rule" itemName={deleting ? describeRule(deleting) : undefined} />
     </div>
   )
 }

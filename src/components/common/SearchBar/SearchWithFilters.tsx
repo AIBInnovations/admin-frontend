@@ -47,7 +47,8 @@ function SearchableFilter({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-9 w-[180px] justify-between font-normal"
+          className="h-9 w-[calc(50%-6px)] justify-between font-normal sm:w-[180px]"
+          title={selectedOption?.label || filter.placeholder || filter.label}
         >
           <span className="truncate">
             {selectedOption?.label || filter.placeholder || filter.label}
@@ -112,11 +113,11 @@ export function SearchWithFilters({
   const showHint = value.length > 0 && value.length < 3;
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+    <div className="flex flex-wrap gap-3 sm:flex-nowrap sm:items-center sm:gap-4">
       {/* Search input */}
-      <div className="flex-1 sm:max-w-sm">
+      <div className="basis-full sm:max-w-sm sm:flex-1 sm:basis-auto">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -146,7 +147,11 @@ export function SearchWithFilters({
             value={activeFilters[filter.key] || filter.defaultValue || ''}
             onValueChange={(value) => handleFilterChange(filter.key, value)}
           >
-            <SelectTrigger className="h-9 w-[180px]">
+            <SelectTrigger
+              className="h-9 w-[calc(50%-6px)] sm:w-[180px]"
+              // the chosen option may be cut short on a phone; its full name is one hover or long-press away
+              title={filter.options.find((o) => o.value === (activeFilters[filter.key] || filter.defaultValue || ''))?.label}
+            >
               <SelectValue placeholder={filter.placeholder || filter.label} />
             </SelectTrigger>
             <SelectContent>

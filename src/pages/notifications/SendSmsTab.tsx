@@ -1,649 +1,127 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { MessageSquare, Users, BookOpen, UserCheck, X, Search, Loader2, Send, Package, Layers, Video } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { Section } from '@/components/common/detail'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
+import { Textarea } from '@/components/ui/textarea'
+import { Field } from '@/components/users/kit'
+import { dayTimeIST, errText, istInputToISO, isoToIstInput, plural, unwrap } from '@/components/users/lib'
 import { notificationsService } from '@/services/notifications.service'
-import { subjectsService, type Subject } from '@/services/subjects.service'
-import { usersService, type User } from '@/services/users.service'
-import { packagesService, type Package as PackageType } from '@/services/packages.service'
-import { seriesService, type Series } from '@/services/series.service'
-import { liveSessionsService, type LiveSession } from '@/services/liveSessions.service'
+import { AudiencePicker, audienceProblem, countText, describeAudience, EMPTY_AUDIENCE, scheduleTarget, useAudienceCount, useScheduledDraft, type Audience } from './compose/audience'
+import { ComposeFrame, NO_SCHEDULE, ReviewDock, ScheduleSection, scheduleProblem, type Schedule } from './compose/frame'
 
-type TargetAudience = 'all' | 'subject' | 'specific' | 'session'
-type SubjectScope = 'subscribers' | 'package' | 'series'
-
-// SMS character limits
-const SMS_SINGLE = 160
-const SMS_CONCAT = 153 // each part in multi-part SMS
+/** Plain SMS characters. Anything else (Hindi, curly quotes) halves the length of each part. */
+const GSM = /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/
+const GSM_DOUBLE = /[\^{}\\[~\]|€]/g
 
 function getSmsInfo(text: string) {
-  const len = text.length
-  if (len === 0) return { parts: 0, remaining: SMS_SINGLE, chars: 0 }
-  if (len <= SMS_SINGLE) return { parts: 1, remaining: SMS_SINGLE - len, chars: len }
-  const parts = Math.ceil(len / SMS_CONCAT)
-  const used = len % SMS_CONCAT || SMS_CONCAT
-  return { parts, remaining: SMS_CONCAT - used, chars: len }
+  const unicode = !GSM.test(text)
+  const single = unicode ? 70 : 160
+  const concat = unicode ? 67 : 153
+  const chars = unicode ? text.length : text.length + (text.match(GSM_DOUBLE)?.length ?? 0)
+  if (chars === 0) return { parts: 0, remaining: single, chars: 0, unicode }
+  if (chars <= single) return { parts: 1, remaining: single - chars, chars, unicode }
+  const parts = Math.ceil(chars / concat)
+  const used = chars % concat || concat
+  return { parts, remaining: concat - used, chars, unicode }
 }
 
-export function SendSmsTab() {
-  // Audience
-  const [target, setTarget] = useState<TargetAudience>('all')
-  const [subjectId, setSubjectId] = useState('')
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loadingSubjects, setLoadingSubjects] = useState(false)
-  const [subjectScope, setSubjectScope] = useState<SubjectScope>('subscribers')
-  const [packageId, setPackageId] = useState('')
-  const [seriesId, setSeriesId] = useState('')
-  const [packages, setPackages] = useState<PackageType[]>([])
-  const [series, setSeries] = useState<Series[]>([])
-  const [loadingPackages, setLoadingPackages] = useState(false)
-  const [loadingSeries, setLoadingSeries] = useState(false)
-
-  // User search
-  const [userSearch, setUserSearch] = useState('')
-  const [userResults, setUserResults] = useState<User[]>([])
-  const [searchingUsers, setSearchingUsers] = useState(false)
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([])
-
-  // Session selection
-  const [sessions, setSessions] = useState<LiveSession[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [sessionId, setSessionId] = useState('')
-
-  // Message
+export function SendSmsTab({ editId, onStopEdit, onSent }: { editId: string | null; onStopEdit: () => void; onSent: (scheduled: boolean) => void }) {
+  const [audience, setAudience] = useState<Audience>(EMPTY_AUDIENCE)
   const [message, setMessage] = useState('')
+  const [schedule, setSchedule] = useState<Schedule>(NO_SCHEDULE)
+  const [review, setReview] = useState(false)
+  const [showProblems, setShowProblems] = useState(false)
+  const reset = () => { setAudience(EMPTY_AUDIENCE); setMessage(''); setSchedule(NO_SCHEDULE); setShowProblems(false) }
 
-  // Send state
-  const [sending, setSending] = useState(false)
+  const edit = useScheduledDraft(editId, 'sms', async (id) => unwrap(await notificationsService.getScheduledNotification(id)), (doc, aud) => {
+    setAudience(aud)
+    setMessage(doc.sms_message || '')
+    setSchedule({ enabled: true, at: isoToIstInput(doc.scheduled_at) })
+  })
+  useUnsavedChanges(!!message && !edit.loading)
 
-  // Schedule state
-  const [scheduleEnabled, setScheduleEnabled] = useState(false)
-  const [scheduledAt, setScheduledAt] = useState('')
+  const info = useMemo(() => getSmsInfo(message), [message])
+  const messageError = message.trim() ? undefined : 'Enter a message'
+  const when = scheduleProblem(schedule)
+  const problem = audienceProblem(audience) ?? messageError ?? when
+  const count = useAudienceCount(audience, 'sms')
+  const totalSms = count.count !== null ? count.count * Math.max(1, info.parts) : null
 
-  const smsInfo = getSmsInfo(message)
-
-  // ── Subject loading ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (target === 'subject' && subjects.length === 0) {
-      setLoadingSubjects(true)
-      subjectsService
-        .getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' })
-        .then((res) => {
-          if (res.success && res.data) setSubjects(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load subjects'))
-        .finally(() => setLoadingSubjects(false))
-    }
-  }, [target, subjects.length])
-
-  // Load sessions when target changes to 'session'
-  useEffect(() => {
-    if (target === 'session' && sessions.length === 0) {
-      setLoadingSessions(true)
-      liveSessionsService
-        .getAll({ limit: 100, publish_status: 'published' })
-        .then((res) => {
-          if (res.success && res.data) setSessions(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load sessions'))
-        .finally(() => setLoadingSessions(false))
-    }
-  }, [target, sessions.length])
-
-  // Load packages when subject is selected and scope is package or series
-  useEffect(() => {
-    if (subjectId && (subjectScope === 'package' || subjectScope === 'series')) {
-      setLoadingPackages(true)
-      setPackageId('')
-      setSeriesId('')
-      setSeries([])
-      packagesService
-        .getAll({ subject_id: subjectId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setPackages(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load packages'))
-        .finally(() => setLoadingPackages(false))
-    }
-  }, [subjectId, subjectScope])
-
-  // Load series when package is selected and scope is series
-  useEffect(() => {
-    if (packageId && subjectScope === 'series') {
-      setLoadingSeries(true)
-      setSeriesId('')
-      seriesService
-        .getAll({ package_id: packageId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setSeries(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load series'))
-        .finally(() => setLoadingSeries(false))
-    }
-  }, [packageId, subjectScope])
-
-  // ── User search ──────────────────────────────────────────────────────────
-  const searchUsers = useCallback(
-    async (query: string) => {
-      if (query.length < 2) {
-        setUserResults([])
-        return
-      }
-      setSearchingUsers(true)
-      try {
-        const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
-        if (res.success && res.data) {
-          const selectedIds = new Set(selectedUsers.map((u) => u._id))
-          setUserResults((res.data.entities || []).filter((u) => !selectedIds.has(u._id)))
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setSearchingUsers(false)
-      }
-    },
-    [selectedUsers]
-  )
-
-  useEffect(() => {
-    const timer = setTimeout(() => searchUsers(userSearch), 300)
-    return () => clearTimeout(timer)
-  }, [userSearch, searchUsers])
-
-  const addUser = (user: User) => {
-    setSelectedUsers((prev) => [...prev, user])
-    setUserResults((prev) => prev.filter((u) => u._id !== user._id))
-    setUserSearch('')
+  const openReview = () => {
+    if (problem) { setShowProblems(true); toast.error(problem); return }
+    setReview(true)
   }
 
-  const removeUser = (userId: string) => {
-    setSelectedUsers((prev) => prev.filter((u) => u._id !== userId))
-  }
-
-  // ── Validation ────────────────────────────────────────────────────────────
-  const canSend = () => {
-    if (!message.trim()) return false
-    if (target === 'subject') {
-      if (!subjectId) return false
-      if (subjectScope === 'package' && !packageId) return false
-      if (subjectScope === 'series' && !seriesId) return false
+  const send = async () => {
+    const text = message.trim()
+    if (schedule.enabled) {
+      const at = istInputToISO(schedule.at)
+      if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was changed.')
+      unwrap(await notificationsService.scheduleNotification({ channel: 'sms', ...scheduleTarget(audience), scheduled_at: at, sms_message: text }), 'Failed to schedule SMS')
+      toast.success(`SMS scheduled for ${dayTimeIST(at)}`)
+      reset(); onSent(true)
+      return
     }
-    if (target === 'specific' && selectedUsers.length === 0) return false
-    if (target === 'session' && !sessionId) return false
-    if (scheduleEnabled) {
-      if (!scheduledAt) return false
-      const when = new Date(scheduledAt)
-      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
-    }
-    return true
+    if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was sent.')
+    const res = audience.target === 'all' ? await notificationsService.sendSmsToAll({ message: text })
+      : audience.target === 'session' ? await notificationsService.sendSmsToSession({ session_id: audience.sessionId, message: text })
+        : audience.target === 'specific' ? await notificationsService.sendSmsToUsers({ user_ids: audience.users.map((u) => u._id), message: text })
+          : audience.subjectScope === 'package' ? await notificationsService.sendSmsToPackage({ package_id: audience.packageId, message: text })
+            : audience.subjectScope === 'series' ? await notificationsService.sendSmsToSeries({ series_id: audience.seriesId, message: text })
+              : await notificationsService.sendSmsToSubject({ subject_id: audience.subjectId, message: text })
+    const { sent, failed, total } = unwrap(res, 'Failed to send SMS')
+    toast.success(`SMS sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`)
+    reset(); onSent(false)
   }
+  const sendSafely = async () => { try { await send() } catch (err) { throw new Error(errText(err, 'Failed to send SMS')) } }
 
-  // ── Send ──────────────────────────────────────────────────────────────────
-  const handleSend = async () => {
-    if (!canSend()) return
-    setSending(true)
-
-    try {
-      // ── Scheduled path ────────────────────────────────────────────────
-      if (scheduleEnabled) {
-        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
-        let scheduleTargetId: string | undefined
-        let scheduleUserIds: string[] | undefined
-        if (target === 'all') {
-          scheduleTargetType = 'all'
-        } else if (target === 'subject') {
-          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
-          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
-          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
-        } else if (target === 'session') {
-          scheduleTargetType = 'session'
-          scheduleTargetId = sessionId
-        } else {
-          scheduleTargetType = 'users'
-          scheduleUserIds = selectedUsers.map((u) => u._id)
-        }
-
-        const schedRes = await notificationsService.scheduleNotification({
-          channel: 'sms',
-          target_type: scheduleTargetType,
-          ...(scheduleTargetId && { target_id: scheduleTargetId }),
-          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
-          scheduled_at: new Date(scheduledAt).toISOString(),
-          sms_message: message.trim(),
-        })
-        if (schedRes.success) {
-          toast.success(`SMS scheduled for ${new Date(scheduledAt).toLocaleString()}`)
-          resetForm()
-        } else {
-          toast.error(schedRes.message || 'Failed to schedule SMS')
-        }
-        setSending(false)
-        return
-      }
-
-      let response
-      if (target === 'all') {
-        response = await notificationsService.sendSmsToAll({ message: message.trim() })
-      } else if (target === 'subject') {
-        if (subjectScope === 'package') {
-          response = await notificationsService.sendSmsToPackage({ package_id: packageId, message: message.trim() })
-        } else if (subjectScope === 'series') {
-          response = await notificationsService.sendSmsToSeries({ series_id: seriesId, message: message.trim() })
-        } else {
-          response = await notificationsService.sendSmsToSubject({ subject_id: subjectId, message: message.trim() })
-        }
-      } else if (target === 'session') {
-        response = await notificationsService.sendSmsToSession({ session_id: sessionId, message: message.trim() })
-      } else {
-        response = await notificationsService.sendSmsToUsers({
-          user_ids: selectedUsers.map((u) => u._id),
-          message: message.trim(),
-        })
-      }
-
-      if (response.success && response.data) {
-        const { sent, failed, total } = response.data
-        toast.success(`SMS sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`)
-        resetForm()
-      } else {
-        toast.error(response.message || 'Failed to send SMS')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send SMS')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const resetForm = () => {
-    setMessage('')
-    setSubjectId('')
-    setSelectedUsers([])
-    setUserSearch('')
-    setUserResults([])
-    setSubjectScope('subscribers')
-    setPackageId('')
-    setSeriesId('')
-    setPackages([])
-    setSeries([])
-    setSessionId('')
-    setScheduleEnabled(false)
-    setScheduledAt('')
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <MessageSquare className="h-5 w-5" />
-            Send SMS
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-
-          {/* ── Target Audience ── */}
-          <div className="space-y-2">
-            <Label>Target Audience</Label>
-            <div className="grid grid-cols-4 gap-3">
-              {(
-                [
-                  { value: 'all' as const, icon: Users, label: 'All Users', desc: 'Send to everyone' },
-                  { value: 'subject' as const, icon: BookOpen, label: 'By Subject', desc: 'Subject subscribers' },
-                  { value: 'session' as const, icon: Video, label: 'By Session', desc: 'Session enrollees' },
-                  { value: 'specific' as const, icon: UserCheck, label: 'Specific Users', desc: 'Pick individual users' },
-                ]
-              ).map(({ value, icon: Icon, label, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTarget(value)}
-                  className={`flex items-center gap-3 rounded-lg border-2 p-4 text-left transition-colors ${
-                    target === value
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-muted-foreground/30'
-                  }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                      target === value ? 'bg-primary/10' : 'bg-muted'
-                    }`}
-                  >
-                    <Icon
-                      className={`h-5 w-5 ${target === value ? 'text-primary' : 'text-muted-foreground'}`}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
-                  </div>
-                </button>
-              ))}
+    <>
+      <ComposeFrame
+        title="Send SMS"
+        editing={editId ? { loading: edit.loading, error: edit.error, scheduledFor: edit.doc?.scheduled_at ?? null, onStop: () => { reset(); onStopEdit() } } : null}
+        preview={(
+          <Section title="Preview" description="How it looks on a phone.">
+            <div className="rounded-2xl bg-muted p-4">
+              <p className="w-fit max-w-full whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-card px-3.5 py-2.5 text-sm shadow-card">{message || <span className="text-muted-foreground">Message</span>}</p>
             </div>
+            <dl className="mt-4 space-y-1.5 text-[13px]">
+              <div className="flex justify-between"><dt className="text-muted-foreground">Parts per person</dt><dd className="font-medium tabular-nums">{info.parts || 0}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Total SMS</dt><dd className="font-medium tabular-nums">{totalSms === null ? 'Not known' : `${count.kind === 'atMost' ? 'up to ' : count.kind === 'atLeast' ? 'at least ' : ''}${totalSms.toLocaleString('en-IN')}`}</dd></div>
+            </dl>
+          </Section>
+        )}
+        status={`${describeAudience(audience, 'sms')}${countText(count) ? ` · ${countText(count)}` : ''}`}
+        problem={showProblems ? problem : audienceProblem(audience)}
+        primaryLabel={schedule.enabled ? (edit.doc ? 'Save Schedule' : 'Schedule SMS') : 'Send SMS'}
+        busyLabel={null}
+        onPrimary={openReview}
+      >
+        <Section title="Target Audience"><AudiencePicker idPrefix="sms" value={audience} onChange={setAudience} /></Section>
+        <Section title="Message">
+          <Field id="sms-message" label="Message" required error={showProblems ? messageError : undefined}>
+            <Textarea placeholder="e.g. Dr. Sharma's Anatomy session starts in 30 mins. Join now on PGME!" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1600} rows={5} />
+          </Field>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs" aria-live="polite">
+            <span className="text-muted-foreground">
+              {plural(info.chars, 'character')}
+              {info.parts > 1 && <span className="text-warning"> · {info.parts} SMS parts (carriers may bill separately)</span>}
+            </span>
+            <span className={info.remaining <= 10 && info.parts > 0 ? 'font-medium tabular-nums text-danger' : info.remaining <= 30 && info.parts > 0 ? 'font-medium tabular-nums text-warning' : 'font-medium tabular-nums text-muted-foreground'}>{info.remaining} left in part {info.parts || 1}</span>
           </div>
-
-          {/* ── Subject selector ── */}
-          {target === 'subject' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Subject</Label>
-                {loadingSubjects ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading subjects…
-                  </div>
-                ) : (
-                  <Select
-                    value={subjectId}
-                    onValueChange={(v) => {
-                      setSubjectId(v)
-                      setSubjectScope('subscribers')
-                      setPackageId('')
-                      setSeriesId('')
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {subjectId && (
-                <div className="space-y-2">
-                  <Label>Target Scope</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      { value: 'subscribers' as const, icon: Users, label: 'All Subscribers', desc: 'All subject subscribers' },
-                      { value: 'package' as const, icon: Package, label: 'Package', desc: 'Package purchasers' },
-                      { value: 'series' as const, icon: Layers, label: 'Series', desc: 'Series subscribers' },
-                    ]).map(({ value, icon: Icon, label, desc }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => { setSubjectScope(value); setPackageId(''); setSeriesId('') }}
-                        className={`flex items-center gap-2 rounded-lg border p-3 text-left transition-colors ${
-                          subjectScope === value
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-muted-foreground/30'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 shrink-0 ${subjectScope === value ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <div>
-                          <p className="text-xs font-medium">{label}</p>
-                          <p className="text-[10px] text-muted-foreground">{desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Package dropdown */}
-              {subjectId && (subjectScope === 'package' || subjectScope === 'series') && (
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  {loadingPackages ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading packages…
-                    </div>
-                  ) : (
-                    <Select value={packageId} onValueChange={(v) => { setPackageId(v); setSeriesId('') }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a package" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {packages.map((p) => (
-                          <SelectItem key={p._id} value={p._id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              {/* Series dropdown */}
-              {subjectId && subjectScope === 'series' && packageId && (
-                <div className="space-y-2">
-                  <Label>Series</Label>
-                  {loadingSeries ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading series…
-                    </div>
-                  ) : (
-                    <Select value={seriesId} onValueChange={setSeriesId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a series" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {series.map((s) => (
-                          <SelectItem key={s._id} value={s._id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Session selector ── */}
-          {target === 'session' && (
-            <div className="space-y-2">
-              <Label>Live Session</Label>
-              {loadingSessions ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading sessions...
-                </div>
-              ) : (
-                <Select value={sessionId} onValueChange={setSessionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a live session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sessions.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.title}
-                        {s.enrollment_count !== undefined ? ` (${s.enrollment_count} enrolled)` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          )}
-
-          {/* ── User selector ── */}
-          {target === 'specific' && (
-            <div className="space-y-3">
-              <Label>Select Users</Label>
-              {selectedUsers.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedUsers.map((user) => (
-                    <Badge key={user._id} variant="secondary" className="gap-1 py-1 pl-2 pr-1">
-                      {user.name || user.phone_number}
-                      <button
-                        type="button"
-                        onClick={() => removeUser(user._id)}
-                        className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search users by name, email, or phone…"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="pl-9"
-                />
-                {searchingUsers && (
-                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                )}
-              </div>
-              {userResults.length > 0 && (
-                <div className="rounded-lg border">
-                  {userResults.map((user) => (
-                    <button
-                      key={user._id}
-                      type="button"
-                      onClick={() => addUser(user)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                        {(user.name || '?')[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{user.name || 'Unnamed'}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {user.phone_number}
-                          {user.email ? ` · ${user.email}` : ''}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {userSearch.length >= 2 && !searchingUsers && userResults.length === 0 && (
-                <p className="text-sm text-muted-foreground">No users found</p>
-              )}
-            </div>
-          )}
-
-          {/* ── Message ── */}
-          <div className="space-y-2 border-t pt-6">
-            <Label htmlFor="sms-message">
-              Message <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="sms-message"
-              placeholder="e.g. Dr. Sharma's Anatomy session starts in 30 mins. Join now on PGME!"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              maxLength={1600}
-              rows={5}
-            />
-
-            {/* SMS counter bar */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {smsInfo.chars} character{smsInfo.chars !== 1 ? 's' : ''}
-                {smsInfo.parts > 1 && (
-                  <span className="ml-2 text-amber-600">
-                    · {smsInfo.parts} SMS parts (carriers may bill separately)
-                  </span>
-                )}
-              </span>
-              <span
-                className={`font-medium tabular-nums ${
-                  smsInfo.remaining <= 10
-                    ? 'text-red-500'
-                    : smsInfo.remaining <= 30
-                    ? 'text-amber-500'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                {smsInfo.remaining} left in part {smsInfo.parts || 1}
-              </span>
-            </div>
-
-            {/* SMS info tip */}
-            <p className="text-xs text-muted-foreground">
-              Plain text only — no HTML or markdown. Keep it under 160 characters for a single SMS.
-              Numbers are sent as <span className="font-medium">+91XXXXXXXXXX</span>.
-            </p>
-          </div>
-
-          {/* ── Schedule ── */}
-          <div className="space-y-3 border-t pt-6">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={scheduleEnabled}
-                onChange={(e) => setScheduleEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-border"
-              />
-              <span className="text-sm font-medium">Schedule for later</span>
-            </label>
-            {scheduleEnabled && (
-              <div className="space-y-2 pl-7">
-                <Label htmlFor="sms-schedule-at">Send at <span className="text-red-500">*</span></Label>
-                <Input
-                  id="sms-schedule-at"
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
-                  className="max-w-xs"
-                />
-                <p className="text-xs text-muted-foreground">SMS will be queued and sent automatically at this time.</p>
-              </div>
-            )}
-          </div>
-
-          {/* ── Actions ── */}
-          <div className="flex items-center justify-between border-t pt-6">
-            <p className="text-sm text-muted-foreground">
-              {target === 'all' && 'Will be sent to all active users with a registered phone'}
-              {target === 'subject' && !subjectId && 'Select a subject first'}
-              {target === 'subject' && subjectId && subjectScope === 'subscribers' && 'Sending to subject subscribers with a registered phone'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && !packageId && 'Select a package'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && packageId && 'Sending to package purchasers with a registered phone'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && !seriesId && 'Select a package and series'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && seriesId && 'Sending to series users with a registered phone'}
-              {target === 'session' && !sessionId && 'Select a live session first'}
-              {target === 'session' && sessionId && 'Sending to all confirmed enrollees of the selected session'}
-              {target === 'specific' && selectedUsers.length > 0 && `Sending to ${selectedUsers.length} selected user${selectedUsers.length > 1 ? 's' : ''}`}
-              {target === 'specific' && selectedUsers.length === 0 && 'Search and select users first'}
-            </p>
-
-            <Button onClick={handleSend} disabled={!canSend() || sending} size="lg">
-              {sending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {scheduleEnabled ? 'Scheduling…' : 'Sending…'}
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  {scheduleEnabled ? 'Schedule SMS' : 'Send SMS'}
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+          {info.unicode && <p className="mt-1.5 text-xs text-warning">This text has characters outside plain SMS (for example Hindi or curly quotes), so each part holds 70 characters instead of 160.</p>}
+          <p className="mt-2 text-xs text-muted-foreground">Plain text only, no HTML or markdown. Keep it under {info.unicode ? 70 : 160} characters for a single SMS. Numbers are sent as <span className="font-mono">+91XXXXXXXXXX</span>.</p>
+        </Section>
+        <ScheduleSection id="sms-schedule-at" noun="SMS" value={schedule} onChange={setSchedule} problem={showProblems ? when : null} />
+      </ComposeFrame>
+      <ReviewDock
+        open={review} onClose={() => setReview(false)} onConfirm={sendSafely} noun="SMS" audience={describeAudience(audience, 'sms')} count={count}
+        scheduledAt={schedule.enabled && schedule.at ? istInputToISO(schedule.at) : null} replacing={!!edit.doc}
+        rows={[
+          { label: 'Message', value: <span className="whitespace-pre-wrap">{message}</span> },
+          { label: 'Length', value: `${plural(info.parts, 'part')} per person${totalSms !== null ? `, ${count.kind === 'atMost' ? 'up to ' : count.kind === 'atLeast' ? 'at least ' : ''}${totalSms.toLocaleString('en-IN')} SMS in all` : ''}` },
+        ]}
+      />
+    </>
   )
 }

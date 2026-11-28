@@ -66,7 +66,7 @@ class RecordingsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.recording }
     }
-    return response as ApiResponse<Recording>
+    return response as unknown as ApiResponse<Recording>
   }
 
   /**
@@ -250,7 +250,7 @@ class RecordingsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.recording }
     }
-    return response as ApiResponse<Recording>
+    return response as unknown as ApiResponse<Recording>
   }
 
   /**

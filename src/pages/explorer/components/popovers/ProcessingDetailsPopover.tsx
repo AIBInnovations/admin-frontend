@@ -1,128 +1,55 @@
+import type { ReactNode } from 'react'
+import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upload, type LucideIcon } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, AlertCircle, CheckCircle2, Loader2, Clock, Upload } from 'lucide-react'
-import { useExplorerMutation } from '../../hooks/useExplorerMutation'
+import { formatDayTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { videosService } from '@/services/videos.service'
 import type { PackageDetailVideo } from '@/services/packages.service'
+import { useExplorerMutation } from '../../hooks/useExplorerMutation'
+import { useExplorerAccess } from '../../access'
+import { clock } from '../../ui/text'
+import { CopyButton } from '@/components/common/detail'
 
-type ProcessingStatus = PackageDetailVideo['processing_status']
-
-const STATUS_CONFIG: Record<ProcessingStatus, {
-  icon: React.ElementType
-  iconClass: string
-  label: string
-  description: string
-}> = {
-  ready: {
-    icon: CheckCircle2,
-    iconClass: 'text-emerald-500',
-    label: 'Ready',
-    description: 'Video has been processed and is available to students.',
-  },
-  processing: {
-    icon: Loader2,
-    iconClass: 'text-blue-500 animate-spin',
-    label: 'Processing',
-    description: 'Video is being transcoded by MediaConvert. This usually takes a few minutes.',
-  },
-  uploading: {
-    icon: Upload,
-    iconClass: 'text-violet-500',
-    label: 'Uploading',
-    description: 'Video file is being uploaded to storage.',
-  },
-  upcoming: {
-    icon: Clock,
-    iconClass: 'text-orange-500',
-    label: 'Upcoming',
-    description: 'Placeholder video scheduled for a future release date.',
-  },
-  failed: {
-    icon: AlertCircle,
-    iconClass: 'text-red-500',
-    label: 'Failed',
-    description: 'Processing encountered an error.',
-  },
+const STATUS: Record<PackageDetailVideo['processing_status'], { icon: LucideIcon; tone: string; label: string; description: string }> = {
+  ready: { icon: CheckCircle2, tone: 'text-success', label: 'Ready', description: 'Processed and playable for students.' },
+  processing: { icon: Loader2, tone: 'text-primary animate-spin', label: 'Processing', description: 'Being converted. This usually takes a few minutes.' },
+  uploading: { icon: Upload, tone: 'text-primary', label: 'Uploading', description: 'The file is being uploaded.' },
+  upcoming: { icon: Clock, tone: 'text-warning', label: 'Upcoming', description: 'A placeholder for a video that will be released later.' },
+  failed: { icon: AlertCircle, tone: 'text-danger', label: 'Failed', description: 'Processing stopped with an error.' },
 }
 
-interface ProcessingDetailsPopoverProps {
-  video: PackageDetailVideo
-  onRefresh?: () => void
-  children: React.ReactNode
-}
+interface Props { video: PackageDetailVideo; onRefresh: () => Promise<void> | void; children: ReactNode }
 
-export function ProcessingDetailsPopover({ video, onRefresh, children }: ProcessingDetailsPopoverProps) {
-  const config = STATUS_CONFIG[video.processing_status] ?? STATUS_CONFIG.failed
-  const StatusIcon = config.icon
-
+export function ProcessingDetailsPopover({ video, onRefresh, children }: Props) {
+  const { can } = useExplorerAccess()
+  const { icon: Icon, tone, label, description } = STATUS[video.processing_status] ?? STATUS.failed
   const retry = useExplorerMutation({
-    name: 'Retry transcoding',
+    name: 'Retry processing',
+    what: 'processing videos',
     fn: () => videosService.retryTranscoding(video._id),
-    onSuccess: () => onRefresh?.(),
-    successMessage: 'Transcoding restarted',
+    onSuccess: () => onRefresh(),
+    successMessage: 'Processing restarted',
   })
 
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0 rounded-xl shadow-lg ring-1 ring-black/10" align="end">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <StatusIcon className={`w-4 h-4 shrink-0 ${config.iconClass}`} />
-            <span className="text-sm font-semibold text-slate-800">{config.label}</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 leading-relaxed">{config.description}</p>
+      <PopoverContent align="end" className="w-72 space-y-3 p-4 text-sm">
+        <div>
+          <p className="flex items-center gap-2 font-semibold text-foreground"><Icon aria-hidden="true" className={cn('h-4 w-4 shrink-0', tone)} />{label}</p>
+          <p className="mt-1 text-muted-foreground">{description}</p>
         </div>
-
-        {video.processing_status === 'failed' && video.processing_error && (
-          <div className="px-4 py-3 border-b border-slate-100">
-            <p className="text-xs font-medium text-slate-600 mb-1">Error details</p>
-            <p className="text-xs text-red-600 font-mono leading-relaxed break-all">
-              {video.processing_error}
-            </p>
-          </div>
-        )}
-
-        {video.scheduled_release_at && (
-          <div className="px-4 py-3 border-b border-slate-100">
-            <p className="text-xs font-medium text-slate-600 mb-1">Scheduled release</p>
-            <p className="text-xs text-slate-700">
-              {new Date(video.scheduled_release_at).toLocaleString('en-IN', {
-                dateStyle: 'medium',
-                timeStyle: 'short',
-              })}
-            </p>
-          </div>
-        )}
-
-        <div className="px-4 py-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Video ID</span>
-            <span className="font-mono text-slate-600 text-[11px]">{video._id.slice(-8)}</span>
-          </div>
-          {video.duration_seconds > 0 && (
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>Duration</span>
-              <span className="text-slate-600">
-                {Math.floor(video.duration_seconds / 60)}m {video.duration_seconds % 60}s
-              </span>
-            </div>
-          )}
-        </div>
-
-        {video.processing_status === 'failed' && (
-          <div className="px-4 pb-3">
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-2 border-slate-200 text-slate-600 hover:bg-slate-50 text-xs h-8"
-              disabled={retry.loading}
-              onClick={(e) => { e.stopPropagation(); retry.execute() }}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${retry.loading ? 'animate-spin' : ''}`} />
-              {retry.loading ? 'Restarting…' : 'Retry processing'}
-            </Button>
-          </div>
+        {video.processing_status === 'failed' && video.processing_error && <p className="break-words rounded-md bg-danger-soft p-2.5 font-mono text-xs text-danger">{video.processing_error}</p>}
+        <dl className="space-y-1.5 text-[13px]">
+          {video.scheduled_release_at && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Release</dt><dd className="text-right">{formatDayTime(video.scheduled_release_at)}</dd></div>}
+          {video.duration_seconds > 0 && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Length</dt><dd className="tabular-nums">{clock(video.duration_seconds)}</dd></div>}
+          <div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">Video ID</dt><dd className="flex items-center gap-1 font-mono text-xs">{video._id.slice(-8)}<CopyButton value={video._id} label="video ID" /></dd></div>
+        </dl>
+        {video.processing_status === 'failed' && can('video', 'update') && (
+          <Button size="sm" variant="outline" className="w-full" disabled={retry.loading} onClick={() => void retry.execute()}>
+            <RefreshCw className={cn('h-3.5 w-3.5', retry.loading && 'animate-spin')} />{retry.loading ? 'Restarting…' : 'Retry processing'}
+          </Button>
         )}
       </PopoverContent>
     </Popover>

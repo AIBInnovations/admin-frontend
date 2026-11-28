@@ -1,762 +1,314 @@
-import { useState, useEffect } from 'react'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from '@/components/ui/command'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import {
-  Download, BookOpen, CalendarDays, Package as PackageIcon, BookText,
-  FileText, Check, ChevronsUpDown, Loader2, Eye, X, Users,
-} from 'lucide-react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { BookOpen, BookText, CalendarDays, Download, Eye, FileText, Loader2, Package as PackageIcon, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { exportsService, ExportPreviewData, PreviewColumn } from '@/services/exports.service'
-import { subjectsService, Subject } from '@/services/subjects.service'
-import { liveSessionsService, LiveSession } from '@/services/liveSessions.service'
-import { packagesService, Package } from '@/services/packages.service'
-import { seriesService, Series } from '@/services/series.service'
-import { modulesService, Module as ModuleType } from '@/services/modules.service'
-import { documentsService, Document as DocumentType } from '@/services/documents.service'
-import { booksService, Book } from '@/services/books.service'
-import { formsService, Form } from '@/services/forms.service'
+import { PageHeader } from '@/components/common/PageHeader'
+import { ErrorState, Section } from '@/components/common/detail'
 import { DataTable } from '@/components/common/DataTable/DataTable'
 import type { ColumnDef } from '@/components/common/DataTable/types'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Field, SearchSelect, type SelectOption } from '@/components/users/kit'
+import { dayIST, errText, plural, unwrap, useResource } from '@/components/users/lib'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { StudentLink, useStudentPage } from '@/components/students/StudentLink'
+import { exportsService, type ExportPreviewData } from '@/services/exports.service'
+import { subjectsService } from '@/services/subjects.service'
+import { liveSessionsService } from '@/services/liveSessions.service'
+import { packagesService } from '@/services/packages.service'
+import { seriesService } from '@/services/series.service'
+import { modulesService } from '@/services/modules.service'
+import { documentsService } from '@/services/documents.service'
+import { booksService } from '@/services/books.service'
+import { formsService } from '@/services/forms.service'
 
 type PackagePickerType = 'package' | 'series' | 'module' | 'document'
+/** What one row of an export is. */
+type RowNoun = 'user' | 'submission'
 
-type ViewData = {
-  loading: boolean
-  title: string
-  label: string
-  rows: Record<string, unknown>[]
-  columns: PreviewColumn[]
-  count: number
-} | null
+interface View { title: string; label: string; noun: RowNoun; load: () => Promise<ExportPreviewData> }
+type OnView = (view: View) => Promise<void>
 
-const handleError = (error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message : fallback
-  toast.error(message)
-}
+const refName = (v: unknown) => (v && typeof v === 'object' && 'name' in v ? String((v as { name: unknown }).name) : undefined)
 
 export function ExportsPage() {
-  const [viewData, setViewData] = useState<ViewData>(null)
+  const [view, setView] = useState<View | null>(null)
+  const [data, setData] = useState<ExportPreviewData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const { nextFetchId, isStale } = useLatestFetch()
 
-  const handleView = async (
-    title: string,
-    label: string,
-    fetcher: () => Promise<ExportPreviewData>,
-  ) => {
-    setViewData({ loading: true, title, label, rows: [], columns: [], count: 0 })
+  const open: OnView = async (next) => {
+    const id = nextFetchId()
+    setView(next)
+    setData(null)
+    setError(null)
+    setLoading(true)
+    requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
     try {
-      const data = await fetcher()
-      setViewData({ loading: false, title, label, ...data })
+      const result = await next.load()
+      if (!isStale(id)) setData(result)
     } catch (err) {
-      setViewData(null)
-      handleError(err, 'Failed to load preview')
+      if (!isStale(id)) setError(errText(err, 'Failed to load preview'))
+    } finally {
+      if (!isStale(id)) setLoading(false)
     }
   }
+  const close = () => { nextFetchId(); setView(null); setData(null); setError(null); setLoading(false) }
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
       <PageHeader
         title="Exports"
         description="Generate XLSX spreadsheets of users filtered by subject, session, or content access."
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Exports' },
-        ]}
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Exports' }]}
       />
-
       <div className="grid gap-4 md:grid-cols-2">
-        <SubjectExportCard onView={handleView} />
-        <SessionExportCard onView={handleView} />
-        <PackageExportCard onView={handleView} />
-        <EbookExportCard onView={handleView} />
-        <FormExportCard onView={handleView} />
+        <SubjectExportCard onView={open} />
+        <SessionExportCard onView={open} />
+        <PackageExportCard onView={open} />
+        <EbookExportCard onView={open} />
+        <FormExportCard onView={open} />
       </div>
-
-      {viewData && (
-        <ExportTableSection viewData={viewData} onClose={() => setViewData(null)} />
+      {view && (
+        <div ref={sectionRef} className="scroll-mt-4">
+          <ExportTableSection key={`${view.title}:${view.label}`} view={view} data={data} loading={loading} error={error} onClose={close} onRetry={() => open(view)} />
+        </div>
       )}
     </div>
   )
 }
 
-/* -------- Shared card wrapper -------- */
+/* -------- Shared card -------- */
 
-function ExportCard({
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>
+interface CardProps {
+  icon: ComponentType<{ className?: string }>
   title: string
   description: string
-  children: React.ReactNode
-}) {
+  noun: RowNoun
+  /** The chosen item, when one is chosen. */
+  label: string | null
+  load: () => Promise<ExportPreviewData>
+  download: () => Promise<{ filename: string }>
+  onView: OnView
+  children: ReactNode
+}
+
+/** One export: choose, look at it, download it. */
+function ExportCard({ icon: Icon, title, description, noun, label, load, download, onView, children }: CardProps) {
+  const [busy, setBusy] = useState<'view' | 'download' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { setError(null) }, [label])
+
+  const view = async () => {
+    if (label === null || busy) return
+    setBusy('view')
+    setError(null)
+    await onView({ title, label, noun, load })
+    setBusy(null)
+  }
+  const save = async () => {
+    if (label === null || busy) return
+    setBusy('download')
+    setError(null)
+    try {
+      const { filename } = await download()
+      toast.success(`Export downloaded: ${filename}`)
+    } catch (err) {
+      setError(errText(err, 'Failed to download export'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icon className="h-4 w-4" />
-          {title}
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
-    </Card>
+    <Section title={<span className="flex items-center gap-2"><Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />{title}</span>} description={description} className="h-full">
+      <div className="space-y-4">
+        {children}
+        {error && <p role="alert" className="rounded-lg bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="bg-card" onClick={view} disabled={label === null || !!busy}>
+            {busy === 'view' ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Eye aria-hidden="true" />}
+            {busy === 'view' ? 'Loading…' : 'View'}
+          </Button>
+          <Button type="button" onClick={save} disabled={label === null || !!busy}>
+            {busy === 'download' ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Download aria-hidden="true" />}
+            {busy === 'download' ? 'Generating…' : 'Download XLSX'}
+          </Button>
+        </div>
+      </div>
+    </Section>
   )
 }
 
-/* -------- Action buttons (View + Download) -------- */
+/* -------- Preview table -------- */
 
-function ExportActions({
-  onView,
-  onDownload,
-  viewing,
-  downloading,
-  disabled,
-}: {
-  onView: () => void
-  onDownload: () => void
-  viewing: boolean
-  downloading: boolean
-  disabled: boolean
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        variant="outline"
-        onClick={onView}
-        disabled={disabled || viewing}
-      >
-        {viewing ? (
-          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
-        ) : (
-          <><Eye className="mr-2 h-4 w-4" />View</>
-        )}
-      </Button>
-      <Button onClick={onDownload} disabled={disabled || downloading}>
-        {downloading ? (
-          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
-        ) : (
-          <><Download className="mr-2 h-4 w-4" />Download XLSX</>
-        )}
-      </Button>
-    </div>
-  )
-}
+const CHUNK = 100
 
-/* -------- Table preview section -------- */
-
-function ExportTableSection({
-  viewData,
-  onClose,
-}: {
-  viewData: NonNullable<ViewData>
-  onClose: () => void
-}) {
-  const columns: ColumnDef<Record<string, unknown>>[] = viewData.columns.map((col) => ({
+function ExportTableSection({ view, data, loading, error, onClose, onRetry }: { view: View; data: ExportPreviewData | null; loading: boolean; error: string | null; onClose: () => void; onRetry: () => void }) {
+  const [shown, setShown] = useState(CHUNK)
+  const rows = data?.rows ?? []
+  const student = useStudentPage(view.title)
+  // Each name opens the student; a row of a users export opens the student too
+  const idOf = (row: Record<string, unknown>) => (typeof row.user_id === 'string' ? row.user_id : null)
+  const nameKey = view.noun === 'user' ? 'name' : 'submitter_name'
+  const columns: ColumnDef<Record<string, unknown>>[] = (data?.columns ?? []).map((col) => ({
     id: col.key,
     header: col.header,
     cell: (row) => {
-      const val = row[col.key]
-      return val !== undefined && val !== null && val !== '' ? String(val) : (
-        <span className="text-muted-foreground">—</span>
-      )
+      const value = row[col.key]
+      if (col.key === nameKey && idOf(row)) {
+        return <span className="block max-w-[320px] break-words text-sm"><StudentLink student={{ _id: idOf(row), name: value ? String(value) : null, email: row.email ? String(row.email) : row.submitter_email ? String(row.submitter_email) : null }} from={view.title} className={view.noun === 'user' ? 'text-foreground hover:text-primary' : undefined} /></span>
+      }
+      return value !== undefined && value !== null && value !== '' ? <span className="block max-w-[320px] break-words text-sm">{String(value)}</span> : <span className="text-muted-foreground">—</span>
     },
   }))
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold">
-            {viewData.title}
-            {viewData.label && (
-              <span className="font-normal text-muted-foreground"> — {viewData.label}</span>
-            )}
-          </h2>
-          {!viewData.loading && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              {viewData.count} {viewData.count === 1 ? 'user' : 'users'}
-            </Badge>
-          )}
+    <section aria-label={`${view.title}: ${view.label}`} className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0" aria-live="polite">
+          <h2 className="break-words text-[15px] font-semibold">{view.title}<span className="font-normal text-muted-foreground">: {view.label}</span></h2>
+          {data && <p className="text-[13px] text-muted-foreground">{plural(data.count, view.noun)}</p>}
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
-          <X className="h-4 w-4" />
-        </Button>
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 shrink-0" aria-label="Close preview"><X className="h-4 w-4" /></Button>
       </div>
-      <div className="overflow-x-auto">
-        <DataTable
-          data={viewData.rows}
-          columns={columns}
-          isLoading={viewData.loading}
-          skeletonCount={8}
-          emptyState={{
-            icon: Users,
-            title: 'No users found',
-            description: 'No users match this filter.',
-          }}
-        />
-      </div>
-    </div>
+      {error ? <ErrorState title="The preview could not be loaded" message={error} onRetry={onRetry} /> : (
+        <>
+          <div className="overflow-x-auto">
+            <DataTable
+              data={rows.slice(0, shown)}
+              columns={columns.length ? columns : [{ id: 'loading', header: 'Loading', cell: () => null }]}
+              isLoading={loading}
+              skeletonCount={6}
+              onRowClick={view.noun === 'user' && student.can && rows.some(idOf) ? (row) => student.open(idOf(row)) : undefined}
+              emptyState={{ icon: Users, title: view.noun === 'user' ? 'No users found' : 'No submissions found', description: view.noun === 'user' ? 'No users match this filter. The XLSX would be empty.' : 'Nobody has submitted this form yet.' }}
+            />
+          </div>
+          {rows.length > shown && (
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Showing {shown.toLocaleString('en-IN')} of {plural(rows.length, view.noun)}. The XLSX has all of them.</span>
+              <Button size="sm" variant="outline" className="bg-card" onClick={() => setShown((n) => n + CHUNK)}>Show {Math.min(CHUNK, rows.length - shown)} more</Button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 
 /* -------- Subject export -------- */
 
-function SubjectExportCard({
-  onView,
-}: {
-  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
-}) {
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loadingList, setLoadingList] = useState(false)
-  const [subjectId, setSubjectId] = useState<string>('')
-  const [downloading, setDownloading] = useState(false)
-  const [viewing, setViewing] = useState(false)
-
-  useEffect(() => {
-    setLoadingList(true)
-    subjectsService
-      .getSubjects({ limit: 1000, sort_by: 'name', sort_order: 'asc' })
-      .then((res) => {
-        if (res.success && res.data) setSubjects(res.data.entities || [])
-      })
-      .catch((err) => handleError(err, 'Failed to load subjects'))
-      .finally(() => setLoadingList(false))
-  }, [])
-
-  const selectedSubject = subjects.find((s) => s._id === subjectId)
-
-  const handleDownload = async () => {
-    if (!subjectId) return
-    try {
-      setDownloading(true)
-      await exportsService.usersBySubject(subjectId)
-      toast.success('Export downloaded')
-    } catch (err) {
-      handleError(err, 'Failed to download export')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
-  const handleView = async () => {
-    if (!subjectId) return
-    setViewing(true)
-    await onView(
-      'Users by Primary Subject',
-      selectedSubject?.name ?? '',
-      () => exportsService.previewUsersBySubject(subjectId),
-    )
-    setViewing(false)
-  }
-
+function SubjectExportCard({ onView }: { onView: OnView }) {
+  const [id, setId] = useState('')
+  const list = useResource<SelectOption[]>(async () => unwrap(await subjectsService.getSubjects({ limit: 1000, sort_by: 'name', sort_order: 'asc' })).entities.map((s) => ({ value: s._id, label: s.name })), [])
   return (
     <ExportCard
-      icon={BookOpen}
-      title="Users by Primary Subject"
-      description="All active users whose primary subject selection matches."
+      icon={BookOpen} title="Users by Primary Subject" description="All active users whose primary subject selection matches." noun="user"
+      label={list.data?.find((s) => s.value === id)?.label ?? null} onView={onView}
+      load={() => exportsService.previewUsersBySubject(id)} download={() => exportsService.usersBySubject(id)}
     >
-      <div className="space-y-2">
-        <Label>Subject</Label>
-        <Select value={subjectId} onValueChange={setSubjectId}>
-          <SelectTrigger>
-            <SelectValue placeholder={loadingList ? 'Loading...' : 'Select a subject'} />
-          </SelectTrigger>
-          <SelectContent>
-            {subjects.length === 0 && !loadingList ? (
-              <div className="px-2 py-4 text-sm text-muted-foreground">No subjects available</div>
-            ) : (
-              subjects.map((s) => (
-                <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-      </div>
-      <ExportActions
-        onView={handleView}
-        onDownload={handleDownload}
-        viewing={viewing}
-        downloading={downloading}
-        disabled={!subjectId}
-      />
+      <Field id="export-subject" label="Subject">
+        <SearchSelect value={id} onChange={setId} options={list.data || []} loading={list.loading} error={list.error} onRetry={() => list.reload()} placeholder="Select a subject" searchPlaceholder="Search subjects..." emptyText="No subjects available" />
+      </Field>
     </ExportCard>
   )
 }
 
 /* -------- Session export -------- */
 
-function SessionExportCard({
-  onView,
-}: {
-  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
-}) {
-  const [sessions, setSessions] = useState<LiveSession[]>([])
-  const [loadingList, setLoadingList] = useState(false)
-  const [sessionId, setSessionId] = useState<string>('')
-  const [downloading, setDownloading] = useState(false)
-  const [viewing, setViewing] = useState(false)
-
-  useEffect(() => {
-    setLoadingList(true)
-    liveSessionsService
-      .getAll({ limit: 1000 })
-      .then((res) => {
-        if (res.success && res.data) setSessions(res.data.entities || [])
-      })
-      .catch((err) => handleError(err, 'Failed to load sessions'))
-      .finally(() => setLoadingList(false))
-  }, [])
-
-  const selectedSession = sessions.find((s) => s._id === sessionId)
-
-  const handleDownload = async () => {
-    if (!sessionId) return
-    try {
-      setDownloading(true)
-      await exportsService.usersBySession(sessionId)
-      toast.success('Export downloaded')
-    } catch (err) {
-      handleError(err, 'Failed to download export')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
-  const handleView = async () => {
-    if (!sessionId) return
-    setViewing(true)
-    await onView(
-      'Users by Live Session',
-      selectedSession?.title ?? '',
-      () => exportsService.previewUsersBySession(sessionId),
-    )
-    setViewing(false)
-  }
-
+function SessionExportCard({ onView }: { onView: OnView }) {
+  const [id, setId] = useState('')
+  const list = useResource<SelectOption[]>(async () => unwrap(await liveSessionsService.getAll({ limit: 1000 })).entities.map((s) => ({ value: s._id, label: s.title, hint: s.scheduled_start_time ? dayIST(s.scheduled_start_time) : undefined })), [])
   return (
     <ExportCard
-      icon={CalendarDays}
-      title="Users by Live Session"
-      description="All confirmed enrollees of a live session — paid, admin-granted, and free."
+      icon={CalendarDays} title="Users by Live Session" description="All confirmed enrollees of a live session: paid, admin-granted, and free." noun="user"
+      label={list.data?.find((s) => s.value === id)?.label ?? null} onView={onView}
+      load={() => exportsService.previewUsersBySession(id)} download={() => exportsService.usersBySession(id)}
     >
-      <div className="space-y-2">
-        <Label>Live Session</Label>
-        <Combobox
-          options={sessions.map((s) => ({
-            value: s._id,
-            label: s.title,
-            hint: s.scheduled_start_time
-              ? new Date(s.scheduled_start_time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-              : undefined,
-          }))}
-          value={sessionId}
-          onChange={setSessionId}
-          placeholder={loadingList ? 'Loading...' : 'Select a session'}
-          searchPlaceholder="Search sessions..."
-          emptyText="No sessions found"
-        />
-      </div>
-      <ExportActions
-        onView={handleView}
-        onDownload={handleDownload}
-        viewing={viewing}
-        downloading={downloading}
-        disabled={!sessionId}
-      />
+      <Field id="export-session" label="Live Session">
+        <SearchSelect value={id} onChange={setId} options={list.data || []} loading={list.loading} error={list.error} onRetry={() => list.reload()} placeholder="Select a session" searchPlaceholder="Search sessions..." emptyText="No sessions found" />
+      </Field>
     </ExportCard>
   )
 }
 
 /* -------- Package export (with Package / Series / Module / Document sub-picker) -------- */
 
-function PackageExportCard({
-  onView,
-}: {
-  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
-}) {
-  const [pickerType, setPickerType] = useState<PackagePickerType>('package')
-  const [entityId, setEntityId] = useState<string>('')
-  const [downloading, setDownloading] = useState(false)
-  const [viewing, setViewing] = useState(false)
+const PICKER_LABEL: Record<PackagePickerType, string> = { package: 'Package', series: 'Series', module: 'Module', document: 'Document' }
+const PICKER_PLURAL: Record<PackagePickerType, string> = { package: 'packages', series: 'series', module: 'modules', document: 'documents' }
 
-  const [packages, setPackages] = useState<Package[]>([])
-  const [series, setSeries] = useState<Series[]>([])
-  const [modules, setModules] = useState<ModuleType[]>([])
-  const [documents, setDocuments] = useState<DocumentType[]>([])
-  const [loadingList, setLoadingList] = useState(false)
-
-  useEffect(() => {
-    setEntityId('')
-    setLoadingList(true)
-    const loader = (() => {
-      if (pickerType === 'package') {
-        return packagesService.getAll({ limit: 1000 }).then((res) => {
-          if (res.success && res.data) setPackages(res.data.entities || [])
-        })
-      }
-      if (pickerType === 'series') {
-        return seriesService.getAll({ limit: 1000 }).then((res) => {
-          if (res.success && res.data) setSeries(res.data.entities || [])
-        })
-      }
-      if (pickerType === 'module') {
-        return modulesService.getAll({ limit: 1000 }).then((res) => {
-          if (res.success && res.data) setModules(res.data.entities || [])
-        })
-      }
-      return documentsService.getAll({ limit: 1000 }).then((res) => {
-        if (res.success && res.data) setDocuments(res.data.entities || [])
-      })
-    })()
-    loader
-      .catch((err) => handleError(err, 'Failed to load items'))
-      .finally(() => setLoadingList(false))
-  }, [pickerType])
-
-  const options = (() => {
-    if (pickerType === 'package') {
-      return packages.map((p) => ({
-        value: p._id,
-        label: p.name,
-        hint: typeof p.subject_id === 'object' && p.subject_id ? p.subject_id.name : undefined,
-      }))
-    }
-    if (pickerType === 'series') {
-      return series.map((s) => ({
-        value: s._id,
-        label: s.name,
-        hint: typeof s.package_id === 'object' && s.package_id ? s.package_id.name : undefined,
-      }))
-    }
-    if (pickerType === 'module') {
-      return modules.map((m) => ({
-        value: m._id,
-        label: m.name,
-        hint: typeof m.series_id === 'object' && m.series_id ? m.series_id.name : undefined,
-      }))
-    }
-    return documents.map((d) => ({
-      value: d._id,
-      label: d.title,
-      hint: typeof d.series_id === 'object' && d.series_id ? d.series_id.name : undefined,
-    }))
-  })()
-
-  const selectedLabel = options.find((o) => o.value === entityId)?.label ?? ''
-
-  const handleDownload = async () => {
-    if (!entityId) return
-    try {
-      setDownloading(true)
-      await exportsService.usersByPackage({
-        ...(pickerType === 'package' && { package_id: entityId }),
-        ...(pickerType === 'series' && { series_id: entityId }),
-        ...(pickerType === 'module' && { module_id: entityId }),
-        ...(pickerType === 'document' && { document_id: entityId }),
-      })
-      toast.success('Export downloaded')
-    } catch (err) {
-      handleError(err, 'Failed to download export')
-    } finally {
-      setDownloading(false)
-    }
+async function loadPicker(type: PackagePickerType): Promise<SelectOption[]> {
+  switch (type) {
+    case 'package': return unwrap(await packagesService.getAll({ limit: 1000 })).entities.map((p) => ({ value: p._id, label: p.name, hint: refName(p.subject_id) }))
+    case 'series': return unwrap(await seriesService.getAll({ limit: 1000 })).entities.map((s) => ({ value: s._id, label: s.name, hint: refName(s.package_id) }))
+    case 'module': return unwrap(await modulesService.getAll({ limit: 1000 })).entities.map((m) => ({ value: m._id, label: m.name, hint: refName(m.series_id) }))
+    case 'document': return unwrap(await documentsService.getAll({ limit: 1000 })).entities.map((d) => ({ value: d._id, label: d.title, hint: refName(d.series_id) }))
   }
+}
 
-  const handleView = async () => {
-    if (!entityId) return
-    setViewing(true)
-    await onView(
-      'Users by Package Access',
-      selectedLabel,
-      () => exportsService.previewUsersByPackage({
-        ...(pickerType === 'package' && { package_id: entityId }),
-        ...(pickerType === 'series' && { series_id: entityId }),
-        ...(pickerType === 'module' && { module_id: entityId }),
-        ...(pickerType === 'document' && { document_id: entityId }),
-      }),
-    )
-    setViewing(false)
-  }
-
+function PackageExportCard({ onView }: { onView: OnView }) {
+  const [type, setType] = useState<PackagePickerType>('package')
+  const [id, setId] = useState('')
+  const list = useResource<{ type: PackagePickerType; options: SelectOption[] }>(async () => ({ type, options: await loadPicker(type) }), [type])
+  const options = list.data?.type === type ? list.data.options : []
+  const params = { [`${type}_id`]: id } as { package_id?: string; series_id?: string; module_id?: string; document_id?: string }
   return (
     <ExportCard
-      icon={PackageIcon}
-      title="Users by Package Access"
-      description="Active purchasers of a package. Pick any item inside the package to resolve up."
+      icon={PackageIcon} title="Users by Package Access" description="Active purchasers of a package. Pick any item inside the package to resolve up." noun="user"
+      label={options.find((o) => o.value === id)?.label ?? null} onView={onView}
+      load={() => exportsService.previewUsersByPackage(params)} download={() => exportsService.usersByPackage(params)}
     >
-      <div className="space-y-2">
-        <Label>Select By</Label>
-        <Select value={pickerType} onValueChange={(v) => setPickerType(v as PackagePickerType)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="package">Package</SelectItem>
-            <SelectItem value="series">Series</SelectItem>
-            <SelectItem value="module">Module</SelectItem>
-            <SelectItem value="document">Document</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)]">
+        <Field id="export-by" label="Select By"><PickerTypeSelect value={type} onChange={(t) => { setType(t); setId('') }} /></Field>
+        <Field id="export-item" label={PICKER_LABEL[type]}>
+          <SearchSelect value={id} onChange={setId} options={options} loading={list.loading} error={list.error} onRetry={() => list.reload()} placeholder={`Select a ${type}`} searchPlaceholder={`Search ${PICKER_PLURAL[type]}...`} emptyText={`No ${PICKER_PLURAL[type]} found`} />
+        </Field>
       </div>
-      <div className="space-y-2">
-        <Label className="capitalize">{pickerType}</Label>
-        <Combobox
-          options={options}
-          value={entityId}
-          onChange={setEntityId}
-          placeholder={loadingList ? 'Loading...' : `Select a ${pickerType}`}
-          searchPlaceholder={`Search ${pickerType}s...`}
-          emptyText={`No ${pickerType}s found`}
-        />
-      </div>
-      <ExportActions
-        onView={handleView}
-        onDownload={handleDownload}
-        viewing={viewing}
-        downloading={downloading}
-        disabled={!entityId}
-      />
     </ExportCard>
+  )
+}
+
+function PickerTypeSelect({ value, onChange, ...aria }: { value: PackagePickerType; onChange: (v: PackagePickerType) => void; id?: string }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as PackagePickerType)}>
+      <SelectTrigger {...aria}><SelectValue /></SelectTrigger>
+      <SelectContent>{(Object.keys(PICKER_LABEL) as PackagePickerType[]).map((k) => <SelectItem key={k} value={k}>{PICKER_LABEL[k]}</SelectItem>)}</SelectContent>
+    </Select>
   )
 }
 
 /* -------- eBook export -------- */
 
-function EbookExportCard({
-  onView,
-}: {
-  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
-}) {
-  const [books, setBooks] = useState<Book[]>([])
-  const [loadingList, setLoadingList] = useState(false)
-  const [bookId, setBookId] = useState<string>('')
-  const [downloading, setDownloading] = useState(false)
-  const [viewing, setViewing] = useState(false)
-
-  useEffect(() => {
-    setLoadingList(true)
-    booksService
-      .getAll({ limit: 1000 })
-      .then((res) => {
-        if (res.success && res.data) {
-          setBooks((res.data.entities || []).filter((b) => b.ebook))
-        }
-      })
-      .catch((err) => handleError(err, 'Failed to load eBooks'))
-      .finally(() => setLoadingList(false))
-  }, [])
-
-  const selectedBook = books.find((b) => b._id === bookId)
-
-  const handleDownload = async () => {
-    if (!bookId) return
-    try {
-      setDownloading(true)
-      await exportsService.usersByEbook(bookId)
-      toast.success('Export downloaded')
-    } catch (err) {
-      handleError(err, 'Failed to download export')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
-  const handleView = async () => {
-    if (!bookId) return
-    setViewing(true)
-    await onView(
-      'Users by eBook Access',
-      selectedBook?.title ?? '',
-      () => exportsService.previewUsersByEbook(bookId),
-    )
-    setViewing(false)
-  }
-
+function EbookExportCard({ onView }: { onView: OnView }) {
+  const [id, setId] = useState('')
+  const list = useResource<SelectOption[]>(async () => unwrap(await booksService.getAll({ limit: 1000 })).entities.filter((b) => b.ebook).map((b) => ({ value: b._id, label: b.title, hint: b.author || undefined })), [])
   return (
     <ExportCard
-      icon={BookText}
-      title="Users by eBook Access"
-      description="Active purchasers of an eBook (paid or admin-granted)."
+      icon={BookText} title="Users by eBook Access" description="Active purchasers of an eBook (paid or admin-granted)." noun="user"
+      label={list.data?.find((b) => b.value === id)?.label ?? null} onView={onView}
+      load={() => exportsService.previewUsersByEbook(id)} download={() => exportsService.usersByEbook(id)}
     >
-      <div className="space-y-2">
-        <Label>eBook</Label>
-        <Combobox
-          options={books.map((b) => ({ value: b._id, label: b.title, hint: b.author }))}
-          value={bookId}
-          onChange={setBookId}
-          placeholder={loadingList ? 'Loading...' : 'Select an eBook'}
-          searchPlaceholder="Search eBooks..."
-          emptyText="No eBooks found"
-        />
-      </div>
-      <ExportActions
-        onView={handleView}
-        onDownload={handleDownload}
-        viewing={viewing}
-        downloading={downloading}
-        disabled={!bookId}
-      />
+      <Field id="export-ebook" label="eBook">
+        <SearchSelect value={id} onChange={setId} options={list.data || []} loading={list.loading} error={list.error} onRetry={() => list.reload()} placeholder="Select an eBook" searchPlaceholder="Search eBooks..." emptyText="No eBooks found" />
+      </Field>
     </ExportCard>
   )
 }
 
 /* -------- Form submissions export -------- */
 
-function FormExportCard({
-  onView,
-}: {
-  onView: (title: string, label: string, fetcher: () => Promise<ExportPreviewData>) => void
-}) {
-  const [forms, setForms] = useState<Form[]>([])
-  const [loadingList, setLoadingList] = useState(false)
-  const [formId, setFormId] = useState<string>('')
-  const [downloading, setDownloading] = useState(false)
-  const [viewing, setViewing] = useState(false)
-
-  useEffect(() => {
-    setLoadingList(true)
-    formsService
-      .getAll({ limit: 1000 })
-      .then((res) => {
-        if (res.success && res.data) setForms(res.data.entities || [])
-      })
-      .catch((err) => handleError(err, 'Failed to load forms'))
-      .finally(() => setLoadingList(false))
-  }, [])
-
-  const selectedForm = forms.find((f) => f._id === formId)
-
-  const handleDownload = async () => {
-    if (!formId) return
-    try {
-      setDownloading(true)
-      await exportsService.formSubmissions(formId)
-      toast.success('Export downloaded')
-    } catch (err) {
-      handleError(err, 'Failed to download export')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
-  const handleView = async () => {
-    if (!formId) return
-    setViewing(true)
-    await onView(
-      'Form Submissions',
-      selectedForm?.title ?? '',
-      () => exportsService.previewFormSubmissions(formId),
-    )
-    setViewing(false)
-  }
-
+function FormExportCard({ onView }: { onView: OnView }) {
+  const [id, setId] = useState('')
+  const list = useResource<SelectOption[]>(async () => unwrap(await formsService.getAll({ limit: 1000 })).entities.map((f) => ({ value: f._id, label: f.title, hint: refName(f.subject_id) })), [])
   return (
     <ExportCard
-      icon={FileText}
-      title="Form Submissions"
-      description="All submissions for a form, one column per field, with payment status."
+      icon={FileText} title="Form Submissions" description="All submissions for a form, one column per field, with payment status." noun="submission"
+      label={list.data?.find((f) => f.value === id)?.label ?? null} onView={onView}
+      load={() => exportsService.previewFormSubmissions(id)} download={() => exportsService.formSubmissions(id)}
     >
-      <div className="space-y-2">
-        <Label>Form</Label>
-        <Combobox
-          options={forms.map((f) => ({
-            value: f._id,
-            label: f.title,
-            hint: typeof f.subject_id === 'object' && f.subject_id ? f.subject_id.name : undefined,
-          }))}
-          value={formId}
-          onChange={setFormId}
-          placeholder={loadingList ? 'Loading...' : 'Select a form'}
-          searchPlaceholder="Search forms..."
-          emptyText="No forms found"
-        />
-      </div>
-      <ExportActions
-        onView={handleView}
-        onDownload={handleDownload}
-        viewing={viewing}
-        downloading={downloading}
-        disabled={!formId}
-      />
+      <Field id="export-form" label="Form">
+        <SearchSelect value={id} onChange={setId} options={list.data || []} loading={list.loading} error={list.error} onRetry={() => list.reload()} placeholder="Select a form" searchPlaceholder="Search forms..." emptyText="No forms found" />
+      </Field>
     </ExportCard>
-  )
-}
-
-/* -------- Generic searchable combobox -------- */
-
-type ComboboxOption = { value: string; label: string; hint?: string }
-
-function Combobox({
-  options,
-  value,
-  onChange,
-  placeholder,
-  searchPlaceholder,
-  emptyText,
-}: {
-  options: ComboboxOption[]
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-  searchPlaceholder: string
-  emptyText: string
-}) {
-  const [open, setOpen] = useState(false)
-  const selected = options.find((o) => o.value === value)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between font-normal"
-        >
-          <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-            {selected ? selected.label : placeholder}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {options.map((opt) => (
-                <CommandItem
-                  key={opt.value}
-                  value={`${opt.label} ${opt.hint || ''}`}
-                  onSelect={() => { onChange(opt.value); setOpen(false) }}
-                >
-                  <Check className={cn('mr-2 h-4 w-4', value === opt.value ? 'opacity-100' : 'opacity-0')} />
-                  <div className="flex flex-col">
-                    <span>{opt.label}</span>
-                    {opt.hint && <span className="text-xs text-muted-foreground">{opt.hint}</span>}
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   )
 }

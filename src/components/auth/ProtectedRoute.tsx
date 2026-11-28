@@ -21,7 +21,7 @@ export function ProtectedRoute({
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );

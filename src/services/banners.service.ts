@@ -58,7 +58,8 @@ export interface BannerFormData {
   is_active?: boolean
   publish_status?: PublishStatus
   start_date: string
-  end_date?: string
+  /** null removes a saved end date. */
+  end_date?: string | null
 }
 
 export interface BannersListParams extends BaseListParams {

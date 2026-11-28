@@ -1,320 +1,160 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
-import { PageHeader } from '@/components/common/PageHeader'
-import { DataTable } from '@/components/common/DataTable'
-import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
-import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Bell, Send, Eye, AlertTriangle, Clock, Megaphone, Mail, MessageSquare, CalendarClock } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Bell, CalendarClock, Mail, Megaphone, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  notificationsService,
-  Notification,
-  NotificationStats,
-} from '@/services/notifications.service'
+import { PageHeader } from '@/components/common/PageHeader'
+import { Stat } from '@/components/common/detail'
+import { DataTable } from '@/components/common/DataTable'
+import { SearchWithFilters, type FilterConfig } from '@/components/common/SearchBar'
+import { DeleteModal } from '@/components/modals/DeleteModal'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { StaleNotice } from '@/components/users/kit'
+import { ensureOk, errText, unwrap, usePageInRange, useResource, useUrlSearch, useUrlState } from '@/components/users/lib'
+import { useAuth } from '@/contexts/AuthContext'
+import { notificationsService, type Notification, type NotificationStats } from '@/services/notifications.service'
+import type { ListResponse } from '@/types/api.types'
 import { useNotificationsColumns } from './NotificationsPage.columns'
-import { NotificationDetailModal } from './NotificationDetailModal'
-import { SendNotificationTab } from './SendNotificationTab'
-import { SendEmailTab } from './SendEmailTab'
-import { SendSmsTab } from './SendSmsTab'
 import { ScheduledNotificationsTab } from './ScheduledNotificationsTab'
+import { SendEmailTab } from './SendEmailTab'
+import { SendNotificationTab } from './SendNotificationTab'
+import { SendSmsTab } from './SendSmsTab'
+
+const TABS = ['send', 'email', 'sms', 'scheduled', 'history'] as const
+type Tab = (typeof TABS)[number]
+const COMPOSE: Tab[] = ['send', 'email', 'sms']
+
+const FILTERS: FilterConfig[] = [
+  { key: 'type', label: 'Type', type: 'select', placeholder: 'Filter by type', defaultValue: 'all', options: [{ label: 'All Types', value: 'all' }, { label: 'Push', value: 'push' }, { label: 'In-App', value: 'in_app' }, { label: 'Email', value: 'email' }, { label: 'SMS', value: 'sms' }] },
+  { key: 'status', label: 'Status', type: 'select', placeholder: 'Filter by status', defaultValue: 'all', options: [{ label: 'All Status', value: 'all' }, { label: 'Pending', value: 'pending' }, { label: 'Sent', value: 'sent' }, { label: 'Read', value: 'read' }, { label: 'Failed', value: 'failed' }] },
+  { key: 'delivery', label: 'Delivery', type: 'select', placeholder: 'Filter by delivery', defaultValue: 'all', options: [{ label: 'All Delivery', value: 'all' }, { label: 'Queued', value: 'queued' }, { label: 'Sent', value: 'sent' }, { label: 'Delivered', value: 'delivered' }, { label: 'Failed', value: 'failed' }] },
+]
 
 export function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<NotificationStats | null>(null)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [deliveryFilter, setDeliveryFilter] = useState('all')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
-
-  // Delete modal
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
-
-  // View modal
-  const [viewModalOpen, setViewModalOpen] = useState(false)
-  const [viewNotification, setViewNotification] = useState<Notification | null>(null)
-
-  // Fetch stats
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canSend = hasPermission('notifications.create')
+  const [params] = useSearchParams()
+  const wanted = params.get('tab') as Tab | null
+  const tab: Tab = wanted && TABS.includes(wanted) && (canSend || !COMPOSE.includes(wanted)) ? wanted : canSend ? 'send' : 'history'
+  const editId = params.get('edit')
+  // A scheduled message being edited stays with its tab until it is saved or stopped
+  const [editing, setEditing] = useState<Partial<Record<Tab, string>>>({})
   useEffect(() => {
-    notificationsService.getStats().then((res) => {
-      if (res.success && res.data) setStats(res.data)
-    })
-  }, [])
+    if (editId && /^[0-9a-f]{24}$/i.test(editId) && COMPOSE.includes(tab)) setEditing((prev) => (prev[tab] === editId ? prev : { ...prev, [tab]: editId }))
+  }, [editId, tab])
 
-  const { nextFetchId, isStale } = useLatestFetch()
+  // Each tab keeps its own URL state; switching starts clean. Drafts stay because the composers stay mounted.
+  const hrefOf = (next: string, edit?: string) => {
+    const q = new URLSearchParams()
+    if (next !== 'send' || edit) q.set('tab', next)
+    if (edit) q.set('edit', edit)
+    const text = q.toString()
+    return `/notifications${text ? `?${text}` : ''}`
+  }
+  const openTab = (next: string) => navigate(hrefOf(next, editing[next as Tab]), { replace: true })
+  const leaveEdit = (from: Tab, to: Tab) => {
+    setEditing((prev) => ({ ...prev, [from]: undefined }))
+    navigate(hrefOf(to), { replace: true })
+  }
+  const composer = (t: Tab) => ({ editId: editing[t] ?? null, onStopEdit: () => leaveEdit(t, t), onSent: (scheduled: boolean) => leaveEdit(t, scheduled ? 'scheduled' : 'history') })
 
-  // Fetch notifications
-  const fetchNotifications = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
+  return (
+    <div className="relative space-y-6">
+      <PageHeader title="Notifications" description="Send push notifications, emails, SMS, and view notification history" breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Notifications' }]} />
+
+      <Tabs value={tab} onValueChange={openTab} className="space-y-6">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:mx-0 sm:px-0">
+          <TabsList>
+            {canSend && <TabsTrigger value="send" className="gap-2"><Megaphone aria-hidden="true" className="h-4 w-4" />Send Push</TabsTrigger>}
+            {canSend && <TabsTrigger value="email" className="gap-2"><Mail aria-hidden="true" className="h-4 w-4" />Send Email</TabsTrigger>}
+            {canSend && <TabsTrigger value="sms" className="gap-2"><MessageSquare aria-hidden="true" className="h-4 w-4" />Send SMS</TabsTrigger>}
+            <TabsTrigger value="scheduled" className="gap-2"><CalendarClock aria-hidden="true" className="h-4 w-4" />Scheduled</TabsTrigger>
+            <TabsTrigger value="history" className="gap-2"><Bell aria-hidden="true" className="h-4 w-4" />History</TabsTrigger>
+          </TabsList>
+        </div>
+        {canSend && (
+          <>
+            <TabsContent value="send" forceMount className="data-[state=inactive]:hidden"><SendNotificationTab {...composer('send')} /></TabsContent>
+            <TabsContent value="email" forceMount className="data-[state=inactive]:hidden"><SendEmailTab {...composer('email')} /></TabsContent>
+            <TabsContent value="sms" forceMount className="data-[state=inactive]:hidden"><SendSmsTab {...composer('sms')} /></TabsContent>
+          </>
+        )}
+        <TabsContent value="scheduled"><ScheduledNotificationsTab /></TabsContent>
+        <TabsContent value="history"><HistoryTab /></TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+function HistoryTab() {
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canDelete = hasPermission('notifications.delete')
+  const { state, set, page, setPage } = useUrlState({ search: '', type: 'all', status: 'all', delivery: 'all' })
+  const [search, setSearch] = useUrlSearch(state.search, (v) => set({ search: v }))
+  const stats = useResource<NotificationStats>(async () => unwrap(await notificationsService.getStats()), [])
+  const { data, loading, error, reload } = useResource<ListResponse<Notification>>(async () => unwrap(await notificationsService.getAll({
+    page, limit: 20,
+    search: state.search || undefined,
+    notification_type: state.type !== 'all' ? state.type : undefined,
+    status: state.status !== 'all' ? state.status : undefined,
+    delivery_status: state.delivery !== 'all' ? state.delivery : undefined,
+  }), 'Failed to load notifications'), [page, state.search, state.type, state.status, state.delivery])
+  const totalPages = data?.pagination?.totalPages || 1
+  usePageInRange(page, data ? totalPages : undefined, loading, setPage)
+  const [deleting, setDeleting] = useState<Notification | null>(null)
+
+  const confirmDelete = async () => {
+    if (!deleting) return
     try {
-      const response = await notificationsService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        notification_type: typeFilter !== 'all' ? typeFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        delivery_status: deliveryFilter !== 'all' ? deliveryFilter : undefined,
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setNotifications(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load notifications')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load notifications')
-    } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, debouncedSearch, typeFilter, statusFilter, deliveryFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchNotifications() }, [fetchNotifications])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, typeFilter, statusFilter, deliveryFilter])
-
-  // Handlers
-  const handleViewClick = (notif: Notification) => {
-    setViewNotification(notif)
-    setViewModalOpen(true)
-  }
-
-  const handleDeleteClick = (notif: Notification) => {
-    setSelectedNotification(notif)
-    setDeleteModalOpen(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedNotification) return
-    try {
-      const response = await notificationsService.delete(selectedNotification._id)
-      if (response.success) {
-        toast.success('Notification deleted successfully')
-        fetchNotifications()
-        // Refresh stats
-        notificationsService.getStats().then((res) => {
-          if (res.success && res.data) setStats(res.data)
-        })
-      } else {
-        toast.error(response.message || 'Failed to delete notification')
-        throw new Error(response.message || 'Failed to delete notification')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete notification')
-      throw error
+      ensureOk(await notificationsService.delete(deleting._id), 'Failed to delete notification')
+      toast.success('Notification deleted successfully')
+      await reload({ silent: true })
+      void stats.reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to delete notification'))
+      throw err
     }
   }
 
-  // Filters
-  const filters: FilterConfig[] = [
-    {
-      key: 'type',
-      label: 'Type',
-      type: 'select',
-      options: [
-        { label: 'All Types', value: 'all' },
-        { label: 'Push', value: 'push' },
-        { label: 'In-App', value: 'in_app' },
-        { label: 'Email', value: 'email' },
-        { label: 'SMS', value: 'sms' },
-      ],
-      placeholder: 'Filter by type',
-      defaultValue: 'all',
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      type: 'select',
-      options: [
-        { label: 'All Status', value: 'all' },
-        { label: 'Pending', value: 'pending' },
-        { label: 'Sent', value: 'sent' },
-        { label: 'Read', value: 'read' },
-        { label: 'Failed', value: 'failed' },
-      ],
-      placeholder: 'Filter by status',
-      defaultValue: 'all',
-    },
-    {
-      key: 'delivery',
-      label: 'Delivery',
-      type: 'select',
-      options: [
-        { label: 'All Delivery', value: 'all' },
-        { label: 'Queued', value: 'queued' },
-        { label: 'Sent', value: 'sent' },
-        { label: 'Delivered', value: 'delivered' },
-        { label: 'Failed', value: 'failed' },
-      ],
-      placeholder: 'Filter by delivery',
-      defaultValue: 'all',
-    },
-  ]
-
-  const columns = useNotificationsColumns({ onDelete: handleDeleteClick, onView: handleViewClick })
+  const view = (n: Notification) => navigate(`/notifications/${n._id}`)
+  const columns = useNotificationsColumns({ onView: view, onDelete: canDelete ? setDeleting : undefined })
+  const hasFilters = !!state.search || state.type !== 'all' || state.status !== 'all' || state.delivery !== 'all'
+  const figure = (n?: number) => (stats.data ? (n ?? 0).toLocaleString('en-IN') : stats.error ? 'Not available' : '')
+  const s = stats.data
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Notifications"
-        description="Send push notifications, emails, SMS, and view notification history"
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Notifications' },
-        ]}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <Stat label="Total Notifications" value={figure(s?.total)} loading={stats.loading && !s} />
+        <Stat label="Read" value={figure(s?.read)} loading={stats.loading && !s} />
+        <Stat label="Pending" value={figure(s?.pending)} loading={stats.loading && !s} />
+        <Stat label="Failed" value={figure(s?.failed)} loading={stats.loading && !s} />
+      </div>
+      <SearchWithFilters
+        value={search} onChange={setSearch} placeholder="Search notifications..." filters={FILTERS}
+        activeFilters={{ type: state.type, status: state.status, delivery: state.delivery }}
+        onFiltersChange={(f) => set({ type: f.type ?? state.type, status: f.status ?? state.status, delivery: f.delivery ?? state.delivery })}
       />
-
-      <Tabs defaultValue="send" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="send" className="gap-2">
-            <Megaphone className="h-4 w-4" />
-            Send Push
-          </TabsTrigger>
-          <TabsTrigger value="email" className="gap-2">
-            <Mail className="h-4 w-4" />
-            Send Email
-          </TabsTrigger>
-          <TabsTrigger value="sms" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Send SMS
-          </TabsTrigger>
-          <TabsTrigger value="scheduled" className="gap-2">
-            <CalendarClock className="h-4 w-4" />
-            Scheduled
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-2">
-            <Bell className="h-4 w-4" />
-            History
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="send">
-          <SendNotificationTab />
-        </TabsContent>
-
-        <TabsContent value="email">
-          <SendEmailTab />
-        </TabsContent>
-
-        <TabsContent value="sms">
-          <SendSmsTab />
-        </TabsContent>
-
-        <TabsContent value="scheduled">
-          <ScheduledNotificationsTab />
-        </TabsContent>
-
-        <TabsContent value="history" className="space-y-6">
-          {/* Stats */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Send className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats?.total?.toLocaleString('en-IN') ?? '—'}</p>
-                  <p className="text-xs text-muted-foreground">Total Notifications</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <Eye className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats?.read?.toLocaleString('en-IN') ?? '—'}</p>
-                  <p className="text-xs text-muted-foreground">Read</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                  <Clock className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats?.pending?.toLocaleString('en-IN') ?? '—'}</p>
-                  <p className="text-xs text-muted-foreground">Pending</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
-                  <AlertTriangle className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats?.failed?.toLocaleString('en-IN') ?? '—'}</p>
-                  <p className="text-xs text-muted-foreground">Failed</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <SearchWithFilters
-            value={search}
-            onChange={setSearch}
-            placeholder="Search notifications..."
-            filters={filters}
-            activeFilters={{ type: typeFilter, status: statusFilter, delivery: deliveryFilter }}
-            onFiltersChange={(f) => {
-              if (f.type !== undefined) setTypeFilter(f.type)
-              if (f.status !== undefined) setStatusFilter(f.status)
-              if (f.delivery !== undefined) setDeliveryFilter(f.delivery)
-            }}
-          />
-
-          <DataTable
-            data={notifications}
-            columns={columns}
-            isLoading={loading}
-            pagination={{
-              currentPage,
-              totalPages,
-              totalCount,
-              onPageChange: setCurrentPage,
-            }}
-            emptyState={{
-              icon: Bell,
-              title: debouncedSearch || typeFilter !== 'all' || statusFilter !== 'all' || deliveryFilter !== 'all'
-                ? 'No notifications found matching your filters'
-                : 'No notifications yet',
-              description: !debouncedSearch && typeFilter === 'all' && statusFilter === 'all' && deliveryFilter === 'all'
-                ? 'Notifications will appear here when they are sent to users'
-                : undefined,
-            }}
-            getRowKey={(n) => n._id}
-          />
-
-          <DeleteModal
-            open={deleteModalOpen}
-            onClose={() => setDeleteModalOpen(false)}
-            onConfirm={handleDeleteConfirm}
-            title="Delete Notification"
-            itemName={selectedNotification?.title}
-          />
-
-          <NotificationDetailModal
-            open={viewModalOpen}
-            onClose={() => setViewModalOpen(false)}
-            notification={viewNotification}
-          />
-        </TabsContent>
-      </Tabs>
+      {error && data && <StaleNotice message={error} onRetry={() => reload()} />}
+      <DataTable
+        data={data?.entities || []}
+        columns={columns}
+        isLoading={loading}
+        error={error}
+        onRetry={() => reload()}
+        onRowClick={view}
+        pagination={{ currentPage: page, totalPages, totalCount: data?.pagination?.total || 0, onPageChange: setPage }}
+        emptyState={{
+          icon: Bell,
+          title: hasFilters ? 'No notifications found matching your filters' : 'No notifications yet',
+          description: hasFilters ? undefined : 'Notifications will appear here when they are sent to users',
+          action: hasFilters ? <Button variant="outline" size="sm" onClick={() => { setSearch(''); set({ search: '', type: 'all', status: 'all', delivery: 'all' }) }}>Clear filters</Button> : undefined,
+        }}
+        getRowKey={(n) => n._id}
+      />
+      <DeleteModal open={!!deleting} onClose={() => setDeleting(null)} onConfirm={confirmDelete} title="Delete Notification" itemName={deleting?.title} />
     </div>
   )
 }

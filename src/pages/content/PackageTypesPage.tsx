@@ -1,185 +1,87 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Layers, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { DeleteModal } from '@/components/modals/DeleteModal'
 import { PackageTypeFormModal } from '@/components/packageTypes/PackageTypeFormModal'
-import { Plus, Layers } from 'lucide-react'
-import { toast } from 'sonner'
-import { packageTypesService, PackageType, PackageTypeFormData } from '@/services/packageTypes.service'
+import { Button } from '@/components/ui/button'
+import { StaleNotice } from '@/components/users/kit'
+import { ensureOk, errText, unwrap, usePageInRange, useResource, useUrlState } from '@/components/users/lib'
+import { useAuth } from '@/contexts/AuthContext'
+import { packageTypesService, type PackageType } from '@/services/packageTypes.service'
+import type { DeleteImpactResponse, ListResponse } from '@/types/api.types'
 import { usePackageTypesColumns } from './PackageTypesPage.columns'
 
 export function PackageTypesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('packages.create')
+  const canUpdate = hasPermission('packages.update')
+  const canDelete = hasPermission('packages.delete')
+  const { page, setPage } = useUrlState({})
 
-  // State
-  const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
-  const [loading, setLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
+  const { data, loading, error, reload } = useResource<ListResponse<PackageType>>(async () => unwrap(await packageTypesService.getAll({ page, limit: 20 }), 'Failed to load package types'), [page])
+  const totalPages = data?.pagination?.totalPages || 1
+  usePageInRange(page, data ? totalPages : undefined, loading, setPage)
 
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedType, setSelectedType] = useState<PackageType | null>(null)
+  const [form, setForm] = useState<{ open: boolean; mode: 'create' | 'edit'; type: PackageType | null }>({ open: false, mode: 'create', type: null })
+  const [deleting, setDeleting] = useState<PackageType | null>(null)
+  const [impact, setImpact] = useState<DeleteImpactResponse | null>(null)
+  const [impactLoading, setImpactLoading] = useState(false)
 
-  // Fetch package types
-  const fetchPackageTypes = useCallback(async () => {
+  const openCreate = () => setForm({ open: true, mode: 'create', type: null })
+  const openEdit = (type: PackageType) => setForm({ open: true, mode: 'edit', type })
+  const openDelete = async (type: PackageType) => {
+    setDeleting(type)
+    setImpact(null)
+    setImpactLoading(true)
+    try { setImpact(unwrap(await packageTypesService.getDeleteImpact(type._id))) } catch { /* the API still refuses a type that is in use */ } finally { setImpactLoading(false) }
+  }
+  const confirmDelete = async () => {
+    if (!deleting) return
     try {
-      setLoading(true)
-      const response = await packageTypesService.getAll({
-        page: currentPage,
-        limit: 20,
-      })
-
-      if (response.success && response.data) {
-        setPackageTypes(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load package types')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load package types')
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage])
-
-  useEffect(() => { fetchPackageTypes() }, [fetchPackageTypes])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [currentPage, setSearchParams])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedType(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (pt: PackageType) => {
-    setModalMode('edit')
-    setSelectedType(pt)
-    setFormModalOpen(true)
-  }
-
-  const handleDeleteClick = (pt: PackageType) => {
-    setSelectedType(pt)
-    setDeleteModalOpen(true)
-  }
-
-  const handleFormSubmit = async (data: PackageTypeFormData) => {
-    try {
-      if (modalMode === 'create') {
-        const response = await packageTypesService.create(data)
-        if (response.success) {
-          toast.success('Package type created successfully')
-          fetchPackageTypes()
-        } else {
-          toast.error(response.message || 'Failed to create package type')
-          throw new Error(response.message || 'Failed to create package type')
-        }
-      } else if (selectedType) {
-        const response = await packageTypesService.update(selectedType._id, data)
-        if (response.success) {
-          toast.success('Package type updated successfully')
-          fetchPackageTypes()
-        } else {
-          toast.error(response.message || 'Failed to update package type')
-          throw new Error(response.message || 'Failed to update package type')
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save package type')
-      throw error
+      ensureOk(await packageTypesService.delete(deleting._id), 'Failed to delete package type')
+      toast.success('Package type deleted successfully')
+      await reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to delete package type'))
+      throw err
     }
   }
 
-  const handleDeleteConfirm = async () => {
-    if (!selectedType) return
-    try {
-      const response = await packageTypesService.delete(selectedType._id)
-      if (response.success) {
-        toast.success('Package type deleted successfully')
-        fetchPackageTypes()
-      } else {
-        toast.error(response.message || 'Failed to delete package type')
-        throw new Error(response.message || 'Failed to delete package type')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete package type')
-      throw error
-    }
-  }
-
-  const columns = usePackageTypesColumns({
-    onEdit: handleEdit,
-    onDelete: handleDeleteClick,
-  })
+  const columns = usePackageTypesColumns({ onEdit: canUpdate ? openEdit : undefined, onDelete: canDelete ? openDelete : undefined })
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Package Types"
         description="Manage package types such as Theory, Practical, etc."
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Content' },
-          { label: 'Packages', href: '/content/packages' },
-          { label: 'Package Types' },
-        ]}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Package Type
-          </Button>
-        }
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Packages', href: '/content/packages' }, { label: 'Package Types' }]}
+        action={canCreate ? <Button onClick={openCreate}><Plus aria-hidden="true" />Add Package Type</Button> : undefined}
       />
-
+      {error && data && <StaleNotice message={error} onRetry={() => reload()} />}
       <DataTable
-        data={packageTypes}
+        data={data?.entities || []}
         columns={columns}
         isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
+        error={error}
+        onRetry={() => reload()}
+        onRowClick={canUpdate ? openEdit : undefined}
+        pagination={{ currentPage: page, totalPages, totalCount: data?.pagination?.total || 0, onPageChange: setPage }}
         emptyState={{
-          icon: Layers,
-          title: 'No package types yet',
-          description: 'Get started by creating your first package type',
-          action: (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Create your first package type
-            </Button>
-          ),
+          icon: Layers, title: 'No package types yet', description: 'Get started by creating your first package type',
+          action: canCreate ? <Button onClick={openCreate} variant="outline" size="sm"><Plus aria-hidden="true" />Create your first package type</Button> : undefined,
         }}
         getRowKey={(pt) => pt._id}
       />
-
-      <PackageTypeFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        packageType={selectedType}
-        mode={modalMode}
-      />
-
+      <PackageTypeFormModal open={form.open} onClose={() => setForm((f) => ({ ...f, open: false }))} onSaved={() => reload({ silent: true })} packageType={form.type} mode={form.mode} />
       <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Package Type"
-        itemName={selectedType?.name}
+        open={!!deleting} onClose={() => { setDeleting(null); setImpact(null) }} onConfirm={confirmDelete} title="Delete Package Type" itemName={deleting?.name}
+        isLoadingImpact={impactLoading} blocked={impact?.blocked}
+        warning={impact?.dependencies?.length ? {
+          message: impact.blocked ? 'Cannot delete. Remove the following dependencies first:' : 'The following associated data will be affected:',
+          details: impact.dependencies.map((d) => ({ label: d.label, count: d.count, blocking: d.blocking })),
+        } : undefined}
       />
     </div>
   )

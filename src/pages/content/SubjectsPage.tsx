@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useServerSearch } from '@/hooks/useServerSearch';
 import { useResetPageOnChange } from '@/hooks/useResetPageOnChange';
 import { useLatestFetch } from '@/hooks/useLatestFetch';
+import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/common/DataTable';
@@ -18,6 +19,10 @@ import { FilterConfig } from '@/components/common/SearchBar';
 
 export function SubjectsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission('subjects.create');
+  const canEdit = hasPermission('subjects.update');
+  const canDelete = hasPermission('subjects.delete');
   const navigate = useNavigate();
 
   // State
@@ -28,6 +33,7 @@ export function SubjectsPage() {
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -43,6 +49,7 @@ export function SubjectsPage() {
   const fetchSubjects = useCallback(async () => {
     const fetchId = nextFetchId();
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await subjectsService.getSubjects({
         page: currentPage,
@@ -58,12 +65,17 @@ export function SubjectsPage() {
         setSubjects(response.data.entities || []);
         setTotalPages(response.data.pagination?.totalPages || 1);
         setTotalCount(response.data.pagination?.total || 0);
+        // The last row of the last page is gone: show the page before it
+        const pages = response.data.pagination?.totalPages || 1;
+        if (currentPage > pages) setCurrentPage(pages);
       } else {
-        toast.error(response.message || 'Failed to load subjects');
+        setLoadError(response.message || 'The subjects could not be loaded.');
       }
     } catch (error: any) {
       if (isStale(fetchId)) return;
-      toast.error(error.message || 'Failed to load subjects');
+      const message = error.status === 403 ? 'You do not have access to subjects.' : error.message || 'The subjects could not be loaded.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       if (!isStale(fetchId)) setLoading(false);
     }
@@ -81,7 +93,7 @@ export function SubjectsPage() {
     if (searchQuery) params.search = searchQuery;
     if (activeFilter !== 'all') params.status = activeFilter;
     if (currentPage > 1) params.page = currentPage.toString();
-    setSearchParams(params);
+    setSearchParams(params, { replace: true });
   }, [searchQuery, activeFilter, currentPage, setSearchParams]);
 
   // Create subject
@@ -199,6 +211,8 @@ export function SubjectsPage() {
 
   // Column definitions
   const columns = useSubjectsColumns({
+    canEdit,
+    canDelete,
     onNavigate: (subject) => navigate(`/content/subjects/${subject._id}`),
     onEdit: handleEdit,
     onDelete: handleDeleteClick,
@@ -215,12 +229,12 @@ export function SubjectsPage() {
           { label: 'Content' },
           { label: 'Subjects' },
         ]}
-        action={
+        action={canCreate && (
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Add Subject
           </Button>
-        }
+        )}
       />
 
       <SearchWithFilters
@@ -236,6 +250,8 @@ export function SubjectsPage() {
         data={subjects}
         columns={columns}
         isLoading={loading}
+        error={loadError}
+        onRetry={fetchSubjects}
         pagination={{
           currentPage,
           totalPages,

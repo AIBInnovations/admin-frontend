@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useServerSearch } from '@/hooks/useServerSearch'
 import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
 import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -17,17 +18,21 @@ import { useSeriesColumns } from './SeriesPage.columns'
 
 export function SeriesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('series.create')
+  const canEdit = hasPermission('series.update')
 
   // State
   const [seriesList, setSeriesList] = useState<Series[]>([])
   const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [packageFilter, setPackageFilter] = useState(searchParams.get('package') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Dropdown data
   const [packages, setPackages] = useState<Package[]>([])
@@ -54,6 +59,7 @@ export function SeriesPage() {
   const fetchSeries = useCallback(async () => {
     const fetchId = nextFetchId()
     setLoading(true)
+    setLoadError(null)
     try {
       const response = await seriesService.getAll({
         page: currentPage,
@@ -69,12 +75,17 @@ export function SeriesPage() {
         setSeriesList(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+        // The last row of the last page is gone: show the page before it
+        const pages = response.data.pagination?.totalPages || 1
+        if (currentPage > pages) setCurrentPage(pages)
       } else {
-        toast.error(response.message || 'Failed to load series')
+        setLoadError(response.message || 'The series could not be loaded.')
       }
     } catch (error: any) {
       if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load series')
+      const message = error.status === 403 ? 'You do not have access to series.' : error.message || 'The series could not be loaded.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
@@ -85,12 +96,13 @@ export function SeriesPage() {
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (debouncedSearch) params.search = debouncedSearch
     if (packageFilter !== 'all') params.package = packageFilter
     if (activeFilter !== 'all') params.status = activeFilter
     if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [packageFilter, activeFilter, publishFilter, currentPage, setSearchParams])
+    setSearchParams(params, { replace: true })
+  }, [debouncedSearch, packageFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
   useResetPageOnChange(setCurrentPage, [debouncedSearch, packageFilter, activeFilter, publishFilter])
 
@@ -193,6 +205,7 @@ export function SeriesPage() {
   ]
 
   const columns = useSeriesColumns({
+    canEdit,
     onEdit: handleEdit,
     onToggleActive: handleToggleActive,
     onPublishAction: handlePublishAction,
@@ -204,11 +217,11 @@ export function SeriesPage() {
         title="Series"
         description="Manage course series within packages"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Series' }]}
-        action={
+        action={canCreate && (
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />Add Series
           </Button>
-        }
+        )}
       />
 
       <SearchWithFilters
@@ -228,6 +241,8 @@ export function SeriesPage() {
         data={seriesList}
         columns={columns}
         isLoading={loading}
+        error={loadError}
+        onRetry={fetchSeries}
         pagination={{
           currentPage,
           totalPages,
@@ -242,13 +257,14 @@ export function SeriesPage() {
           description: !debouncedSearch && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first series'
             : undefined,
-          action: !debouncedSearch && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
+          action: canCreate && !debouncedSearch && packageFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first series
             </Button>
           ) : undefined,
         }}
         getRowKey={(series) => series._id}
+        onRowClick={canEdit ? handleEdit : undefined}
       />
 
       <SeriesFormModal

@@ -1,71 +1,49 @@
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Archive, Globe, GlobeLock, Pencil, Users, XCircle } from 'lucide-react'
 import { ColumnDef } from '@/components/common/DataTable'
+import { StatusPill } from '@/components/common/detail'
 import { Workshop } from '@/services/workshops.service'
-import { MoreVertical, Pencil, Archive, XCircle, Globe, GlobeLock, Users } from 'lucide-react'
-
-const statusColors: Record<string, string> = {
-  scheduled: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  live: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  completed: 'bg-gray-500/10 text-gray-600 border-gray-200',
-  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
-}
+import { formatCount, formatINR } from '@/lib/format'
+import { PublishStatusPill, RowMenu, RunStatus, Tag } from '@/components/forms/editor/list'
+import { istDay, toIstInputs } from '@/components/forms/editor/ist'
 
 /**
- * "12–14 Mar" for a multi-day run, "12 Mar" when it's a single day.
+ * "12 to 14 Mar" for a multi-day run, "12 Mar" when it's a single day (IST).
  * Year is only shown when the workshop isn't in the current year.
  */
 function formatDateRange(start: string, end: string): string {
-  const s = new Date(start)
-  const e = new Date(end)
-  const sameDay = s.toDateString() === e.toDateString()
-  const thisYear = s.getFullYear() === new Date().getFullYear()
-
-  const day = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  const year = thisYear ? '' : ` ${s.getFullYear()}`
-
-  if (sameDay) return `${day(s)}${year}`
-  if (s.getMonth() === e.getMonth()) {
-    return `${s.getDate()}–${e.getDate()} ${s.toLocaleDateString('en-IN', { month: 'short' })}${year}`
-  }
-  return `${day(s)} – ${day(e)}${year}`
+  const a = toIstInputs(start).date
+  const b = toIstInputs(end).date
+  if (!a) return 'Not scheduled'
+  const year = String(new Date().getFullYear())
+  const trim = (s: string) => (s.endsWith(` ${year}`) ? s.slice(0, -5) : s)
+  if (!b || a === b) return trim(istDay(start))
+  if (a.slice(0, 7) === b.slice(0, 7)) return `${Number(a.slice(8))} to ${trim(istDay(end))}`
+  return `${trim(istDay(start))} to ${trim(istDay(end))}`
 }
 
 interface WorkshopsColumnsProps {
+  canUpdate: boolean
+  canDelete: boolean
   onEdit: (workshop: Workshop) => void
   onCancel: (workshop: Workshop) => void
   onArchive: (workshop: Workshop) => void
-  onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
+  onPublishAction: (workshop: Workshop, action: 'publish' | 'unpublish') => void
   onViewEnrollees: (workshop: Workshop) => void
 }
 
-export function useWorkshopsColumns({
-  onEdit,
-  onCancel,
-  onArchive,
-  onPublishAction,
-  onViewEnrollees,
-}: WorkshopsColumnsProps): ColumnDef<Workshop>[] {
+export function getWorkshopsColumns({ canUpdate, canDelete, onEdit, onCancel, onArchive, onPublishAction, onViewEnrollees }: WorkshopsColumnsProps): ColumnDef<Workshop>[] {
   return [
     {
       id: 'workshop',
       header: 'Workshop',
       cell: (workshop) => {
         const faculty = Array.isArray(workshop.faculty_ids)
-          ? (workshop.faculty_ids as Array<{ name?: string }>)
-              .map((f) => (typeof f === 'object' ? f?.name : null))
-              .filter(Boolean)
+          ? (workshop.faculty_ids as Array<{ name?: string } | string | null>).map((f) => (f && typeof f === 'object' ? f.name : null)).filter(Boolean)
           : []
         return (
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate max-w-[240px]">{workshop.title}</p>
-            <p className="text-xs text-muted-foreground truncate max-w-[240px]">
-              {faculty.length > 0 ? faculty.join(', ') : '—'}
-            </p>
+          <div className="min-w-[180px] max-w-[320px]">
+            <p className="truncate text-sm font-medium" title={workshop.title}>{workshop.title}</p>
+            <p className="truncate text-xs text-muted-foreground">{faculty.length > 0 ? faculty.join(', ') : 'No faculty'}</p>
           </div>
         )
       },
@@ -73,25 +51,19 @@ export function useWorkshopsColumns({
     {
       id: 'subject',
       header: 'Subject',
-      width: 'w-28',
-      cell: (workshop) => (
-        <Badge variant="secondary" className="text-[10px]">
-          {typeof workshop.subject_id === 'object' ? workshop.subject_id.name : '—'}
-        </Badge>
-      ),
+      width: 'w-36',
+      cell: (workshop) => <Tag>{workshop.subject_id && typeof workshop.subject_id === 'object' ? workshop.subject_id.name : 'Deleted subject'}</Tag>,
     },
     {
       id: 'schedule',
       header: 'Dates',
       width: 'w-36',
       cell: (workshop) => (
-        <div>
+        <div className="whitespace-nowrap">
           <p className="text-sm">{formatDateRange(workshop.start_date, workshop.end_date)}</p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {workshop.day_count} day{workshop.day_count === 1 ? '' : 's'}
-            {workshop.total_duration_minutes
-              ? ` · ${Math.round(workshop.total_duration_minutes / 60)}h total`
-              : ''}
+            {workshop.total_duration_minutes ? ` · ${Math.round(workshop.total_duration_minutes / 60)}h total` : ''}
           </p>
         </div>
       ),
@@ -101,92 +73,41 @@ export function useWorkshopsColumns({
       header: 'Seats',
       width: 'w-24',
       cell: (workshop) => (
-        <div>
-          <p className="text-xs">
-            {workshop.enrollment_count ?? 0}
-            {workshop.capacity_mode === 'unlimited' ? '' : ` / ${workshop.max_seats ?? '—'}`}
+        <div className="whitespace-nowrap">
+          <p className="text-sm tabular-nums">
+            {formatCount(workshop.enrollment_count ?? 0)}
+            {workshop.capacity_mode === 'unlimited' ? '' : ` / ${workshop.max_seats ? formatCount(workshop.max_seats) : '—'}`}
           </p>
-          {(workshop.waitlist_count ?? 0) > 0 && (
-            <p className="text-[10px] text-amber-600">{workshop.waitlist_count} waiting</p>
-          )}
+          {(workshop.waitlist_count ?? 0) > 0 && <p className="text-xs text-warning">{workshop.waitlist_count} waiting</p>}
         </div>
       ),
     },
     {
       id: 'price',
       header: 'Price',
-      width: 'w-20',
+      width: 'w-24',
       cell: (workshop) =>
-        workshop.is_free || !workshop.price ? (
-          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 text-[10px]">FREE</Badge>
-        ) : (
-          <span className="text-sm font-medium">₹{workshop.price.toLocaleString('en-IN')}</span>
-        ),
+        workshop.is_free || !workshop.price ? <StatusPill tone="success">Free</StatusPill> : <span className="whitespace-nowrap text-sm font-medium tabular-nums">{formatINR(workshop.price)}</span>,
     },
-    {
-      id: 'status',
-      header: 'Status',
-      width: 'w-24',
-      cell: (workshop) => (
-        <Badge className={`text-[10px] capitalize ${statusColors[workshop.status] || ''}`}>
-          {workshop.status}
-        </Badge>
-      ),
-    },
-    {
-      id: 'publish_status',
-      header: 'Publish',
-      width: 'w-24',
-      cell: (workshop) => (
-        <Badge
-          className={`text-[10px] ${
-            workshop.publish_status === 'published'
-              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-              : 'bg-amber-500/10 text-amber-600 border-amber-200'
-          }`}
-        >
-          {workshop.publish_status === 'published' ? 'Published' : 'Draft'}
-        </Badge>
-      ),
-    },
+    { id: 'status', header: 'Status', width: 'w-28', cell: (workshop) => <RunStatus status={workshop.status} /> },
+    { id: 'publish_status', header: 'Publish', width: 'w-28', cell: (workshop) => <PublishStatusPill status={workshop.publish_status} /> },
     {
       id: 'actions',
       header: '',
       width: 'w-10',
       cell: (workshop) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(workshop)}>
-              <Pencil className="mr-2 h-4 w-4" />Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onViewEnrollees(workshop)}>
-              <Users className="mr-2 h-4 w-4" />View Enrollees
-            </DropdownMenuItem>
-            {workshop.publish_status === 'published' ? (
-              <DropdownMenuItem onClick={() => onPublishAction(workshop._id, 'unpublish')}>
-                <GlobeLock className="mr-2 h-4 w-4" />Unpublish
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onClick={() => onPublishAction(workshop._id, 'publish')}>
-                <Globe className="mr-2 h-4 w-4" />Publish
-              </DropdownMenuItem>
-            )}
-            {(workshop.status === 'scheduled' || workshop.status === 'live') && (
-              <DropdownMenuItem onClick={() => onCancel(workshop)} className="text-amber-600">
-                <XCircle className="mr-2 h-4 w-4" />Cancel Workshop
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onArchive(workshop)} className="text-amber-600">
-              <Archive className="mr-2 h-4 w-4" />Archive
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowMenu
+          label={`Actions for ${workshop.title}`}
+          actions={[
+            { label: 'Edit', icon: Pencil, onSelect: () => onEdit(workshop), hidden: !canUpdate },
+            { label: 'View Enrollees', icon: Users, onSelect: () => onViewEnrollees(workshop) },
+            workshop.publish_status === 'published'
+              ? { label: 'Unpublish', icon: GlobeLock, onSelect: () => onPublishAction(workshop, 'unpublish'), hidden: !canUpdate }
+              : { label: 'Publish', icon: Globe, onSelect: () => onPublishAction(workshop, 'publish'), hidden: !canUpdate },
+            { label: 'Cancel Workshop', icon: XCircle, onSelect: () => onCancel(workshop), tone: 'warning', hidden: !canUpdate || !(workshop.status === 'scheduled' || workshop.status === 'live') },
+            { label: 'Archive', icon: Archive, onSelect: () => onArchive(workshop), tone: 'warning', separated: true, hidden: !canDelete },
+          ]}
+        />
       ),
     },
   ]

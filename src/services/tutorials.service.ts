@@ -34,6 +34,8 @@ export interface TutorialFormData {
   body?: string
   thumbnail_url?: string | null
   thumbnail_s3_key?: string | null
+  /** null removes the uploaded file (a new file goes through uploadMedia). */
+  media_url?: null
   display_screens?: string[]
   display_order?: number
   is_active?: boolean
@@ -70,7 +72,7 @@ class TutorialsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.tutorial }
     }
-    return response as ApiResponse<Tutorial>
+    return response as unknown as ApiResponse<Tutorial>
   }
 
   async create(data: TutorialFormData): Promise<ApiResponse<Tutorial>> {
@@ -78,7 +80,7 @@ class TutorialsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.tutorial }
     }
-    return response as ApiResponse<Tutorial>
+    return response as unknown as ApiResponse<Tutorial>
   }
 
   async update(tutorialId: string, data: Partial<TutorialFormData>): Promise<ApiResponse<Tutorial>> {
@@ -86,7 +88,7 @@ class TutorialsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.tutorial }
     }
-    return response as ApiResponse<Tutorial>
+    return response as unknown as ApiResponse<Tutorial>
   }
 
   async delete(tutorialId: string): Promise<ApiResponse<void>> {

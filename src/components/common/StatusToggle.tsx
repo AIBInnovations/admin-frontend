@@ -14,6 +14,8 @@ interface StatusToggleProps {
   size?: 'sm' | 'md';
   /** Disabled state */
   disabled?: boolean;
+  /** What is switched, for screen readers (e.g. the row's name) */
+  label?: string;
   /** Optional className */
   className?: string;
 }
@@ -29,10 +31,11 @@ export function StatusToggle({
   inactiveLabel = 'Inactive',
   size = 'md',
   disabled = false,
+  label,
   className,
 }: StatusToggleProps) {
   const sizeClasses = {
-    sm: 'scale-75',
+    sm: 'scale-75 pointer-coarse:scale-100',
     md: 'scale-100',
   };
 
@@ -42,6 +45,7 @@ export function StatusToggle({
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
+        aria-label={label ? `${label}: ${checked ? activeLabel : inactiveLabel}` : checked ? activeLabel : inactiveLabel}
         className={sizeClasses[size]}
       />
       <span className="text-xs text-muted-foreground">

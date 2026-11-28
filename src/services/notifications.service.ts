@@ -123,7 +123,7 @@ class NotificationsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.notification }
     }
-    return response as ApiResponse<Notification>
+    return response as unknown as ApiResponse<Notification>
   }
 
   async getStats(): Promise<ApiResponse<NotificationStats>> {
@@ -131,7 +131,7 @@ class NotificationsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.stats }
     }
-    return response as ApiResponse<NotificationStats>
+    return response as unknown as ApiResponse<NotificationStats>
   }
 
   async delete(id: string): Promise<ApiResponse<void>> {
@@ -237,6 +237,12 @@ class NotificationsService {
     return apiService.get<ListResponse<ScheduledNotification>>(`${this.basePath}/scheduled${query}`)
   }
 
+  async getScheduledNotification(id: string): Promise<ApiResponse<ScheduledNotificationFull>> {
+    const response = await apiService.get<{ scheduled_notification: ScheduledNotificationFull }>(`${this.basePath}/scheduled/${id}`)
+    if (response.success && response.data) return { ...response, data: response.data.scheduled_notification }
+    return response as unknown as ApiResponse<ScheduledNotificationFull>
+  }
+
   async cancelScheduledNotification(id: string): Promise<ApiResponse<{ scheduled_notification: ScheduledNotification }>> {
     return apiService.delete(`${this.basePath}/scheduled/${id}`)
   }
@@ -296,6 +302,20 @@ export interface ScheduledNotification {
   created_by: { _id: string; name: string; email: string } | null
   createdAt: string
   updatedAt: string
+}
+
+/** Everything stored for a scheduled send, for editing it. */
+export interface ScheduledNotificationFull extends ScheduledNotification {
+  click_url?: string | null
+  link_type?: 'internal' | 'external' | 'none'
+  external_url?: string | null
+  internal_route?: string | null
+  internal_params?: Record<string, string> | null
+  email_header?: string | null
+  email_body?: string | null
+  email_footer?: string | null
+  email_attachments?: EmailAttachment[] | null
+  email_excluded_user_ids?: string[]
 }
 
 export const notificationsService = new NotificationsService()

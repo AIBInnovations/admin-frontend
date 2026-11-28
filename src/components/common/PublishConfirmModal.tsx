@@ -71,11 +71,6 @@ function hasDraftChildren(summary: PublishInfo['children_summary']): boolean {
   return getDraftChildren(summary).length > 0;
 }
 
-/** Check if there are any published children */
-function hasPublishedChildren(summary: PublishInfo['children_summary']): boolean {
-  return getPublishedChildren(summary).length > 0;
-}
-
 export function PublishConfirmModal({
   open,
   onOpenChange,
@@ -137,7 +132,7 @@ export function PublishConfirmModal({
   const isPublish = action === 'publish';
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !submitting && onOpenChange(val)}>
+    <Dialog variant="dock" open={open} onOpenChange={(val) => !submitting && onOpenChange(val)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

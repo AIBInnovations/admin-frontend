@@ -23,8 +23,8 @@ export function ExtendValidityDrawer({
 }: ExtendValidityDrawerProps) {
   return (
     <Sheet open={!!record} onOpenChange={(open) => !open && onClose()}>
-      {/* p-0 + [&>button]:hidden: PanelShell supplies its own padding and close (X). */}
-      <SheetContent side={side} className="p-0 gap-0 w-full sm:max-w-md [&>button]:hidden">
+      {/* p-0 + [&>button]:hidden: the panel supplies its own padding and close button. */}
+      <SheetContent side={side} aria-describedby={undefined} className="w-full gap-0 p-0 sm:max-w-md [&>button]:hidden">
         <SheetTitle className="sr-only">Extend validity</SheetTitle>
         {record && (
           <div className="h-full">

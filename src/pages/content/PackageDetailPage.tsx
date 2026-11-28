@@ -1,43 +1,47 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import {
-  Package, BookOpen, Calendar, Hash, Pencil, Plus, ChevronRight,
-  Layers, Film, Clock, Eye, IndianRupee, Tag, FileText, Download, BarChart3, CalendarClock,
-} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  packagesService,
-  PackageDetail,
-  PackageFormData,
-  PackageDetailSeries,
-  PackageDetailModule,
-  PackageDetailDocument,
-} from '@/services/packages.service'
-import { SeriesFormData } from '@/services/series.service'
-import { seriesService } from '@/services/series.service'
-import { ModuleFormData } from '@/services/modules.service'
-import { modulesService } from '@/services/modules.service'
-import { VideoFormData, UpcomingVideoFormData, videosService, Video, ReleaseMode } from '@/services/videos.service'
-import { DocumentFormData, documentsService } from '@/services/documents.service'
-import { PackageFormModal } from '@/components/packages/PackageFormModal'
-import { SeriesFormModal } from '@/components/series/SeriesFormModal'
-import { ModuleFormModal } from '@/components/modules/ModuleFormModal'
-import { VideoFormModal } from '@/components/videos/VideoFormModal'
-import { UpcomingVideoModal } from '@/components/videos/UpcomingVideoModal'
+  BarChart3, BookOpen, Calendar, CalendarClock, ChevronRight, Clock, Download, Eye, FileText, Film, Hash, IndianRupee, Layers, Package, Pencil, Plus, Tag,
+} from 'lucide-react'
+import { PageHeader } from '@/components/common/PageHeader'
+import { DetailSkeleton, ErrorState, Section, StatusPill } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal'
+import { ModuleFormModal } from '@/components/modules/ModuleFormModal'
+import { PackageSalesSection } from '@/components/packages/PackageSalesSection'
+import { summaryText, type ContentSummary } from '@/components/packages/BundlePicker'
+import { SeriesFormModal } from '@/components/series/SeriesFormModal'
+import { StaleNotice } from '@/components/users/kit'
+import { dayIST, dayTimeIST, errText, plural, unwrap, useResource, useUrlState } from '@/components/users/lib'
+import { UpcomingVideoModal } from '@/components/videos/UpcomingVideoModal'
+import { VideoFormModal } from '@/components/videos/VideoFormModal'
+import { useAuth } from '@/contexts/AuthContext'
+import { formatDuration as formatPlan, formatINR } from '@/lib/format'
+import { documentsService, type DocumentFormData } from '@/services/documents.service'
+import { modulesService, type ModuleFormData } from '@/services/modules.service'
+import { packagesService, type PackageDetail, type PackageDetailModule, type PackageDetailSeries, type PackageDetailVideo } from '@/services/packages.service'
+import { seriesService, type SeriesFormData } from '@/services/series.service'
+import { videosService, type ReleaseMode, type UpcomingVideoFormData, type Video, type VideoFormData } from '@/services/videos.service'
+
+/** Fields newer backends add: what a combo really contains. */
+type DetailWithBundle = PackageDetail & {
+  /** Parts of the course tree this admin's role may not read (left out by the API). */
+  withheld?: ('series' | 'modules' | 'videos' | 'documents')[]
+  is_combo?: boolean
+  content_summary?: ContentSummary
+  bundle?: {
+    missing_count?: number
+    packages?: (ContentSummary & { _id: string; name: string; is_active?: boolean; publish_status?: string; subject?: { name?: string | null } | null })[]
+  } | null
+}
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
+  if (!seconds || seconds < 0) return '0m'
+  if (seconds < 60) return `${Math.round(seconds)}s`
   const mins = Math.floor(seconds / 60)
   if (mins < 60) return `${mins}m`
   const hrs = Math.floor(mins / 60)
@@ -45,26 +49,30 @@ function formatDuration(seconds: number): string {
   return remainMins > 0 ? `${hrs}h ${remainMins}m` : `${hrs}h`
 }
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  })
-}
-
-function formatFileSize(mb: number): string {
+function formatFileSize(mb: number | null | undefined): string {
+  if (!mb) return 'Unknown'
   if (mb < 1) return `${(mb * 1024).toFixed(0)} KB`
   return `${mb.toFixed(1)} MB`
 }
 
+const refName = (v: unknown, deleted: string) => (v && typeof v === 'object' && 'name' in v ? String((v as { name: unknown }).name) : deleted)
+
 export function PackageDetailPage() {
-  const { packageId } = useParams<{ packageId: string }>()
-  const navigate = useNavigate()
+  const { packageId = '' } = useParams<{ packageId: string }>()
+  const { hasPermission } = useAuth()
+  const canUpdate = hasPermission('packages.update')
+  const canAddSeries = hasPermission('series.create')
+  const canAddModule = hasPermission('modules.create')
+  const canAddVideo = hasPermission('videos.create')
+  const canEditVideo = hasPermission('videos.update')
+  const canAddDocument = hasPermission('documents.create')
 
-  const [pkg, setPkg] = useState<PackageDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data, loading, error, status, reload } = useResource<DetailWithBundle>(async () => unwrap(await packagesService.getDetail(packageId), 'Package not found') as DetailWithBundle, [packageId])
+  const pkg = data
+  const refresh = () => { void reload({ silent: true }) }
+  const { state, set } = useUrlState({ tab: 'videos' })
 
-  // Modal states
-  const [editPackageOpen, setEditPackageOpen] = useState(false)
+  // Forms opened from the content tree
   const [seriesModalOpen, setSeriesModalOpen] = useState(false)
   const [moduleModalOpen, setModuleModalOpen] = useState(false)
   const [videoModalOpen, setVideoModalOpen] = useState(false)
@@ -72,698 +80,350 @@ export function PackageDetailPage() {
   const [editingVideo, setEditingVideo] = useState<PackageDetailVideo | null>(null)
   const [upcomingVideoModalOpen, setUpcomingVideoModalOpen] = useState(false)
   const [documentModalOpen, setDocumentModalOpen] = useState(false)
-  const [targetSeriesId, setTargetSeriesId] = useState<string>('')
-  const [targetModuleId, setTargetModuleId] = useState<string>('')
+  const [targetSeriesId, setTargetSeriesId] = useState('')
+  const [targetModuleId, setTargetModuleId] = useState('')
 
-  // Collapsible states — separate for video hierarchy and document hierarchy
+  // Open rows, separate for the video and the document tree
   const [openSeries, setOpenSeries] = useState<Set<string>>(new Set())
   const [openModules, setOpenModules] = useState<Set<string>>(new Set())
   const [openDocSeries, setOpenDocSeries] = useState<Set<string>>(new Set())
+  const flip = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) => setter((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const toggleSeries = flip(setOpenSeries)
+  const toggleModule = flip(setOpenModules)
+  const toggleDocSeries = flip(setOpenDocSeries)
 
-  const fetchPackage = useCallback(async () => {
-    if (!packageId) return
-    try {
-      setLoading(true)
-      const response = await packagesService.getDetail(packageId)
-      if (response.success && response.data) {
-        setPkg(response.data)
-      } else {
-        toast.error('Package not found')
-        navigate('/content/packages')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load package details')
-      navigate('/content/packages')
-    } finally {
-      setLoading(false)
-    }
-  }, [packageId, navigate])
+  useEffect(() => { setOpenSeries(new Set()); setOpenModules(new Set()); setOpenDocSeries(new Set()) }, [packageId])
 
-  useEffect(() => { fetchPackage() }, [fetchPackage])
+  const isTheory = refName(pkg?.package_type_id, '').toLowerCase() === 'theory'
+  const bundled = pkg?.bundle?.packages ?? (pkg?.bundled_package_ids || []).filter((b) => b && typeof b === 'object').map((b) => ({ _id: b._id, name: b.name }) as NonNullable<NonNullable<DetailWithBundle['bundle']>['packages']>[number])
+  const missing = pkg?.bundle?.missing_count ?? 0
 
-  // Detect if theory package
-  const isTheory = useMemo(() => {
-    if (!pkg) return false
-    const typeName = typeof pkg.package_type_id === 'object' ? pkg.package_type_id.name : ''
-    return typeName.toLowerCase() === 'theory'
-  }, [pkg])
-
-  // Computed stats
   const stats = useMemo(() => {
-    if (!pkg) return { totalModules: 0, totalVideos: 0, totalDuration: 0, totalDocuments: 0 }
-    let totalModules = 0
-    let totalVideos = 0
-    let totalDuration = 0
-    let totalDocuments = 0
-    for (const s of pkg.series) {
-      totalModules += s.modules.length
-      totalDocuments += (s.documents?.length || 0)
-      for (const m of s.modules) {
-        totalVideos += m.videos.length
-        for (const v of m.videos) {
-          totalDuration += v.duration_seconds
-        }
+    // Counts come with each level, so they stay right when a role cannot
+    // read the items themselves (see `withheld`)
+    const own = { series: pkg?.series?.length || pkg?.series_count || 0, modules: 0, videos: 0, seconds: 0, documents: 0 }
+    for (const s of pkg?.series ?? []) {
+      own.modules += s.modules?.length || s.module_count || 0
+      own.documents += s.documents?.length || s.document_count || 0
+      for (const m of s.modules || []) {
+        own.videos += m.videos?.length || m.video_count || 0
+        for (const v of m.videos || []) own.seconds += v.duration_seconds || 0
       }
     }
-    return { totalModules, totalVideos, totalDuration, totalDocuments }
+    const sum = pkg?.content_summary
+    // Series withheld: a plain package's summary is its own content
+    if (sum && pkg?.withheld?.includes('series') && !pkg?.is_combo) {
+      Object.assign(own, { series: sum.series_count, modules: sum.module_count, videos: sum.video_count, documents: sum.document_count, seconds: sum.duration_seconds })
+    }
+    return {
+      own,
+      series: sum?.series_count ?? own.series, modules: sum?.module_count ?? own.modules, videos: sum?.video_count ?? own.videos,
+      documents: sum?.document_count ?? own.documents, seconds: sum?.duration_seconds ?? own.seconds,
+    }
   }, [pkg])
 
-  // Toggle helpers
-  const toggleSeries = (id: string) => {
-    setOpenSeries((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  // ── Saving from the content tree ──
 
-  const toggleModule = (id: string) => {
-    setOpenModules((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const toggleDocSeries = (id: string) => {
-    setOpenDocSeries((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  // Handlers
-  const handlePackageSubmit = async (data: PackageFormData) => {
-    if (!pkg) return
+  const run = async (work: () => Promise<string | null>, fallback: string) => {
     try {
-      const response = await packagesService.update(pkg._id, data)
-      if (response.success) {
-        toast.success('Package updated successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to update package')
-        throw new Error(response.message || 'Failed to update package')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update package')
-      throw error
+      const done = await work()
+      if (done) toast.success(done)
+      refresh()
+    } catch (err) {
+      toast.error(errText(err, fallback))
+      throw err
     }
   }
 
-  const handleSeriesSubmit = async (data: SeriesFormData) => {
-    try {
-      const response = await seriesService.create(data)
-      if (response.success) {
-        toast.success('Series created successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to create series')
-        throw new Error(response.message || 'Failed to create series')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create series')
-      throw error
-    }
-  }
+  const handleSeriesSubmit = (formData: SeriesFormData) => run(async () => { unwrap(await seriesService.create(formData), 'Failed to create series'); return 'Series created successfully' }, 'Failed to create series')
+  const handleModuleSubmit = (formData: ModuleFormData) => run(async () => { unwrap(await modulesService.create(formData), 'Failed to create module'); return 'Module created successfully' }, 'Failed to create module')
+  const handleUpcomingVideoSubmit = (formData: UpcomingVideoFormData) => run(async () => {
+    const res = await videosService.createUpcoming(formData)
+    if (!res.success) throw new Error(res.message || 'Failed to add upcoming video')
+    return 'Upcoming video added successfully'
+  }, 'Failed to add upcoming video')
 
-  const handleModuleSubmit = async (data: ModuleFormData) => {
-    try {
-      const response = await modulesService.create(data)
-      if (response.success) {
-        toast.success('Module created successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to create module')
-        throw new Error(response.message || 'Failed to create module')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create module')
-      throw error
-    }
-  }
-
-  const handleVideoSubmit = async (
-    data: VideoFormData,
+  const handleVideoSubmit = (
+    formData: VideoFormData,
     file?: File,
     onProgress?: (percent: number) => void,
     onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void,
     releaseMode?: ReleaseMode,
-  ) => {
-    try {
-      let videoId: string | undefined
-
-      if (videoModalMode === 'create') {
-        if (!file) return
-        const response = await videosService.upload(data, file, onProgress, onPhaseChange)
-        if (response.success) {
-          videoId = response.data?.video_id
-          toast.success('Video uploaded successfully')
-        } else {
-          toast.error(response.message || 'Failed to upload video')
-          throw new Error(response.message || 'Failed to upload video')
-        }
-      } else if (editingVideo) {
-        // Edit mode. For an upcoming video with a newly attached file, push
-        // the file through the dedicated upload-file endpoint first; it owns
-        // the scheduled_release_at transition based on release_mode.
-        if (file && editingVideo.processing_status === 'upcoming') {
-          const uploadResponse = await videosService.uploadFileForExisting(
-            editingVideo._id,
-            file,
-            {
-              onProgress,
-              onPhaseChange,
-              release_mode: releaseMode,
-              scheduled_release_at: data.scheduled_release_at ?? undefined,
-            },
-          )
-          if (uploadResponse.success) {
-            toast.success(
-              releaseMode === 'scheduled'
-                ? 'Video file uploaded — will release on the scheduled date'
-                : 'Video file uploaded — processing will begin shortly',
-            )
-          } else {
-            toast.error(uploadResponse.message || 'Failed to upload video file')
-            throw new Error(uploadResponse.message || 'Failed to upload video file')
-          }
-        }
-        // Update metadata. When we just uploaded a file, the upload endpoint
-        // already wrote the authoritative scheduled_release_at — drop it from
-        // the metadata payload to avoid racing with that write.
-        const updatePayload: Partial<VideoFormData> = file
-          ? (() => {
-              const { scheduled_release_at: _unused, ...rest } = data
-              void _unused
-              return rest
-            })()
-          : data
-        const response = await videosService.update(editingVideo._id, updatePayload)
-        if (response.success) {
-          videoId = editingVideo._id
-          if (!file) toast.success('Video updated successfully')
-        } else {
-          toast.error(response.message || 'Failed to update video')
-          throw new Error(response.message || 'Failed to update video')
-        }
-      }
-
-      if (videoId && data.tag_ids && data.tag_ids.length > 0) {
-        await videosService.assignTags(videoId, data.tag_ids).catch(() => {})
-      }
-      fetchPackage()
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save video')
-      throw error
-    }
-  }
-
-  const handleUpcomingVideoSubmit = async (data: UpcomingVideoFormData) => {
-    try {
-      const response = await videosService.createUpcoming(data)
-      if (response.success) {
-        toast.success('Upcoming video added successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to add upcoming video')
-        throw new Error(response.message || 'Failed to add upcoming video')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to add upcoming video')
-      throw error
-    }
-  }
-
-  const handleDocumentSubmit = async (
-    data: DocumentFormData,
-    file?: File,
-    onProgress?: (percent: number) => void,
-    linkedBookId?: string,
-  ) => {
-    try {
-      if (linkedBookId) {
-        const response = await documentsService.createLinked({
-          source_book_id: linkedBookId,
-          series_id: data.series_id,
-          subject_id: data.subject_id,
-          is_free: data.is_free,
-          publish_status: data.publish_status,
+  ) => run(async () => {
+    let videoId: string | undefined
+    let message: string | null = null
+    if (videoModalMode === 'create') {
+      if (!file) return null
+      const response = await videosService.upload(formData, file, onProgress, onPhaseChange)
+      if (!response.success) throw new Error(response.message || 'Failed to upload video')
+      videoId = response.data?.video_id
+      message = 'Video uploaded successfully'
+    } else if (editingVideo) {
+      // For an upcoming video with a newly attached file, the file goes through
+      // the dedicated endpoint first; it owns the scheduled_release_at change.
+      if (file && editingVideo.processing_status === 'upcoming') {
+        const uploadResponse = await videosService.uploadFileForExisting(editingVideo._id, file, {
+          onProgress, onPhaseChange, release_mode: releaseMode, scheduled_release_at: formData.scheduled_release_at ?? undefined,
         })
-        if (!response.success) {
-          const msg = response.message || 'Failed to link eBook as document'
-          toast.error(msg)
-          throw new Error(msg)
-        }
-        toast.success('eBook linked as document successfully')
-        fetchPackage()
-        return
+        if (!uploadResponse.success) throw new Error(uploadResponse.message || 'Failed to upload video file')
+        message = releaseMode === 'scheduled' ? 'Video file uploaded. It will release on the scheduled date.' : 'Video file uploaded. Processing will begin shortly.'
       }
-      if (!file) {
-        const msg = 'A document file is required to create a standalone document.'
-        toast.error(msg)
-        throw new Error(msg)
-      }
-      const response = await documentsService.upload(data, file, onProgress)
-      if (response.success) {
-        toast.success('Document uploaded successfully')
-        fetchPackage()
-      } else {
-        toast.error(response.message || 'Failed to upload document')
-        throw new Error(response.message || 'Failed to upload document')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to upload document')
-      throw error
+      // After a file upload the endpoint already wrote scheduled_release_at,
+      // so leave it out of the details update.
+      const { scheduled_release_at: _release, ...rest } = formData
+      const response = await videosService.update(editingVideo._id, (file ? rest : formData) as Partial<VideoFormData>)
+      if (!response.success) throw new Error(response.message || 'Failed to update video')
+      videoId = editingVideo._id
+      message = message ?? 'Video updated successfully'
     }
-  }
+    if (videoId && formData.tag_ids && formData.tag_ids.length > 0) await videosService.assignTags(videoId, formData.tag_ids).catch(() => {})
+    return message
+  }, 'Failed to save video')
 
-  const openAddModule = (seriesId: string) => {
-    setTargetSeriesId(seriesId)
-    setModuleModalOpen(true)
-  }
+  const handleDocumentSubmit = (formData: DocumentFormData, file?: File, onProgress?: (percent: number) => void, linkedBookId?: string) => run(async () => {
+    if (linkedBookId) {
+      const response = await documentsService.createLinked({
+        source_book_id: linkedBookId, series_id: formData.series_id, subject_id: formData.subject_id, is_free: formData.is_free, publish_status: formData.publish_status,
+      })
+      if (!response.success) throw new Error(response.message || 'Failed to link eBook as document')
+      return 'eBook linked as document successfully'
+    }
+    if (!file) throw new Error('A document file is required to create a standalone document.')
+    const response = await documentsService.upload(formData, file, onProgress)
+    if (!response.success) throw new Error(response.message || 'Failed to upload document')
+    return 'Document uploaded successfully'
+  }, 'Failed to upload document')
 
-  const openAddVideo = (moduleId: string) => {
-    setTargetModuleId(moduleId)
-    setEditingVideo(null)
-    setVideoModalMode('create')
-    setVideoModalOpen(true)
-  }
+  const openAddVideo = (moduleId: string) => { setTargetModuleId(moduleId); setEditingVideo(null); setVideoModalMode('create'); setVideoModalOpen(true) }
+  const openEditVideo = (video: PackageDetailVideo) => { setEditingVideo(video); setTargetModuleId(video.module_id); setVideoModalMode('edit'); setVideoModalOpen(true) }
 
-  const openAddUpcoming = (moduleId: string) => {
-    setTargetModuleId(moduleId)
-    setUpcomingVideoModalOpen(true)
-  }
-
-  const openEditVideo = (video: PackageDetailVideo) => {
-    setEditingVideo(video)
-    setTargetModuleId(video.module_id)
-    setVideoModalMode('edit')
-    setVideoModalOpen(true)
-  }
-
-  const openAddDocument = (seriesId: string) => {
-    setTargetSeriesId(seriesId)
-    setDocumentModalOpen(true)
-  }
-
-  if (loading) {
+  if (loading && !pkg) return <DetailSkeleton />
+  if (!pkg) {
+    const gone = status === 404 || status === 400
     return (
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
+      <ErrorState
+        title={gone ? 'Package not found' : status === 403 ? 'You do not have access to this package' : 'This package could not be loaded'}
+        message={gone ? 'It may have been deleted, or the link is wrong.' : error ?? undefined}
+        onRetry={gone || status === 403 ? undefined : () => reload()}
+        back={{ label: 'Back to Packages', href: '/content/packages' }}
+      />
     )
   }
 
-  if (!pkg) return null
+  const tiers = [...(pkg.tiers || [])].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+  const pct = pkg.is_on_sale && pkg.sale_discount_percent ? pkg.sale_discount_percent : 0
+  const isCombo = bundled.length > 0 || missing > 0
+  const series = pkg.series || []
 
-  const subjectName = typeof pkg.subject_id === 'object' ? pkg.subject_id.name : '—'
-  const packageTypeName = typeof pkg.package_type_id === 'object' ? pkg.package_type_id.name : '—'
-
-  // Video hierarchy content (used in both theory tabs and practical layout)
-  const videoHierarchyContent = (
-    <>
-      {pkg.series.length === 0 ? (
-        <div className="text-center py-8 text-sm text-muted-foreground">
-          <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          No series in this package yet
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {pkg.series.map((series) => (
-            <SeriesBlock
-              key={series._id}
-              series={series}
-              isOpen={openSeries.has(series._id)}
-              onToggle={() => toggleSeries(series._id)}
-              openModules={openModules}
-              onToggleModule={toggleModule}
-              onAddModule={() => openAddModule(series._id)}
-              onAddVideo={openAddVideo}
-              onAddUpcoming={openAddUpcoming}
-              onEditVideo={openEditVideo}
-            />
-          ))}
-        </div>
-      )}
-    </>
-  )
-
-  // Document hierarchy content (theory packages only)
-  const documentHierarchyContent = (
-    <>
-      {pkg.series.length === 0 ? (
-        <div className="text-center py-8 text-sm text-muted-foreground">
-          <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          No series in this package yet
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {pkg.series.map((series) => (
-            <DocSeriesBlock
-              key={series._id}
-              series={series}
-              isOpen={openDocSeries.has(series._id)}
-              onToggle={() => toggleDocSeries(series._id)}
-              onAddDocument={() => openAddDocument(series._id)}
-            />
-          ))}
-        </div>
-      )}
-    </>
+  const bundleList = isCombo && (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <ul className="divide-y divide-border">
+        {bundled.map((b) => (
+          <li key={b._id}>
+            <Link to={`/content/packages/${b._id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+              <Package aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-medium">{b.name}</span>
+                <span className="block text-xs text-muted-foreground">{[b.subject?.name, summaryText(b)].filter(Boolean).join(' · ')}</span>
+              </span>
+              {b.publish_status === 'draft' && <StatusPill tone="warning">Draft</StatusPill>}
+              {b.is_active === false && <StatusPill tone="neutral">Inactive</StatusPill>}
+              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
+          </li>
+        ))}
+        {missing > 0 && <li className="px-4 py-3 text-sm text-danger">{plural(missing, 'deleted package')} still listed in this combo. Edit the package to remove {missing === 1 ? 'it' : 'them'}.</li>}
+      </ul>
+    </div>
   )
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
       <PageHeader
         title={pkg.name}
         description={pkg.description || undefined}
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Content' },
-          { label: 'Packages', href: '/content/packages' },
-          { label: pkg.name },
-        ]}
-        action={
-          <Button variant="outline" size="sm" onClick={() => setEditPackageOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit Package
-          </Button>
-        }
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Packages', href: '/content/packages' }, { label: pkg.name }]}
+        action={canUpdate ? <Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/content/packages/${pkg._id}/edit`}><Pencil aria-hidden="true" />Edit Package</Link></Button> : undefined}
       />
 
-      {/* Package Info + Quick Stats */}
+      {error && <StaleNotice message={error} onRetry={refresh} />}
+
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Package Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-lg font-bold text-primary">
-                  {pkg.name.charAt(0)}
-                </div>
-                <div>
-                  <p className="text-lg font-medium">{pkg.name}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Badge className={`text-[10px] ${pkg.is_active
-                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                      : 'bg-red-500/10 text-red-600 border-red-200'
-                    }`}>
-                      {pkg.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                    {pkg.is_on_sale && (
-                      <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-[10px]">
-                        On Sale
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {pkg.description && (
-                <p className="text-sm text-muted-foreground">{pkg.description}</p>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <BookOpen className="h-3.5 w-3.5" /> Subject
-                  </p>
-                  <p className="mt-0.5 font-medium">{subjectName}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Tag className="h-3.5 w-3.5" /> Package Type
-                  </p>
-                  <p className="mt-0.5 font-medium">{packageTypeName}</p>
-                </div>
-                {pkg.bundled_package_ids && pkg.bundled_package_ids.length > 0 && (
-                  <div className="col-span-2">
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Layers className="h-3.5 w-3.5" /> Bundles (Combo)
-                    </p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {pkg.bundled_package_ids.map((b) => (
-                        <Badge key={b._id} variant="secondary" className="text-[10px] font-normal">
-                          {b.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <IndianRupee className="h-3.5 w-3.5" /> Price
-                  </p>
-                  <p className="mt-0.5 font-medium">
-                    {pkg.tiers && pkg.tiers.length > 0 ? (
-                      <>
-                        From ₹{Math.min(...pkg.tiers.map(t => t.price)).toLocaleString('en-IN')}
-                        <Badge variant="outline" className="ml-2 text-[10px]">
-                          {pkg.tiers.length} {pkg.tiers.length === 1 ? 'tier' : 'tiers'}
-                        </Badge>
-                      </>
-                    ) : pkg.is_on_sale ? (
-                      <>
-                        <span className="text-emerald-600">₹{pkg.sale_price?.toLocaleString('en-IN')}</span>
-                        <span className="ml-2 text-xs text-muted-foreground line-through">
-                          ₹{pkg.price.toLocaleString('en-IN')}
-                        </span>
-                      </>
-                    ) : (
-                      <>₹{pkg.price.toLocaleString('en-IN')}</>
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" /> Duration
-                  </p>
-                  <p className="mt-0.5 font-medium">
-                    {pkg.tiers && pkg.tiers.length > 0 ? (
-                      (() => {
-                        const durations = pkg.tiers!.map(t => t.duration_days).sort((a, b) => a - b)
-                        return `${durations[0]} – ${durations[durations.length - 1]} days`
-                      })()
-                    ) : (
-                      `${pkg.duration_days} days`
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Hash className="h-3.5 w-3.5" /> Display Order
-                  </p>
-                  <p className="mt-0.5 font-medium">{pkg.display_order}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" /> Created
-                  </p>
-                  <p className="mt-0.5 font-medium">{formatDate(pkg.createdAt)}</p>
+        <Section title="Package Details">
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              {pkg.thumbnail_url
+                ? <img src={pkg.thumbnail_url} alt="" className="h-14 w-24 shrink-0 rounded-lg border border-border object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                : <div aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-accent text-lg font-bold text-accent-foreground">{pkg.name.charAt(0).toUpperCase()}</div>}
+              <div className="min-w-0">
+                <p className="break-words text-lg font-medium">{pkg.name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <StatusPill tone={pkg.is_active ? 'success' : 'danger'}>{pkg.is_active ? 'Active' : 'Inactive'}</StatusPill>
+                  {pkg.publish_status === 'draft' && <StatusPill tone="warning">Draft</StatusPill>}
+                  {pkg.is_on_sale && <StatusPill tone="warning">On Sale{pkg.sale_end_date ? ` until ${dayIST(pkg.sale_end_date)}` : ''}</StatusPill>}
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quick Stats</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg border p-4 text-center">
-                <p className="text-2xl font-semibold">{pkg.series_count}</p>
-                <p className="text-xs text-muted-foreground mt-1">Series</p>
-              </div>
-              <div className="rounded-lg border p-4 text-center">
-                <p className="text-2xl font-semibold">{stats.totalModules}</p>
-                <p className="text-xs text-muted-foreground mt-1">Modules</p>
-              </div>
-              <div className="rounded-lg border p-4 text-center">
-                <p className="text-2xl font-semibold">{stats.totalVideos}</p>
-                <p className="text-xs text-muted-foreground mt-1">Videos</p>
-              </div>
-              {isTheory ? (
-                <div className="rounded-lg border p-4 text-center">
-                  <p className="text-2xl font-semibold">{stats.totalDocuments}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Documents</p>
-                </div>
-              ) : (
-                <div className="rounded-lg border p-4 text-center">
-                  <p className="text-2xl font-semibold">{formatDuration(stats.totalDuration)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Total Duration</p>
-                </div>
+            {pkg.description && <p className="break-words text-sm text-muted-foreground">{pkg.description}</p>}
+
+            <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+              <Fact icon={BookOpen} label="Subject">{refName(pkg.subject_id, 'Deleted subject')}</Fact>
+              <Fact icon={Tag} label="Package Type">{refName(pkg.package_type_id, 'Deleted type')}</Fact>
+              {isCombo && (
+                <Fact icon={Layers} label="Bundles (Combo)" wide>
+                  <span className="flex flex-wrap gap-1.5">
+                    {bundled.map((b) => <Link key={b._id} to={`/content/packages/${b._id}`} className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground hover:underline">{b.name}</Link>)}
+                    {missing > 0 && <span className="rounded-full bg-danger-soft px-2.5 py-0.5 text-xs font-medium text-danger">{plural(missing, 'deleted package')}</span>}
+                  </span>
+                </Fact>
               )}
-            </div>
-          </CardContent>
-        </Card>
+              <Fact icon={IndianRupee} label="Price">
+                {tiers.length > 0 ? <>From {formatINR(Math.min(...tiers.map((t) => t.price)))} <span className="font-normal text-muted-foreground">({plural(tiers.length, 'tier')})</span></>
+                  : pkg.is_on_sale && pkg.sale_price != null ? <><span className="text-success">{formatINR(pkg.sale_price)}</span> <s className="text-xs font-normal text-muted-foreground">{formatINR(pkg.price)}</s></>
+                    : formatINR(pkg.price)}
+              </Fact>
+              <Fact icon={Clock} label="Duration">
+                {tiers.length > 0 ? [...new Set(tiers.map((t) => t.duration_days))].sort((a, b) => a - b).map(formatPlan).join(', ') : formatPlan(pkg.duration_days)}
+              </Fact>
+              <Fact icon={Hash} label="Display Order">{pkg.display_order}</Fact>
+              <Fact icon={Calendar} label="Created">{dayIST(pkg.createdAt)}</Fact>
+            </dl>
+          </div>
+        </Section>
+
+        <Section title="Quick Stats" description={isCombo ? 'Combined, with everything in the bundled packages.' : undefined}>
+          <dl className={isCombo ? 'grid grid-cols-2 gap-4 sm:grid-cols-3' : 'grid grid-cols-2 gap-4'}>
+            {isCombo && <QuickStat label="Packages" value={bundled.length.toLocaleString('en-IN')} />}
+            <QuickStat label="Series" value={stats.series.toLocaleString('en-IN')} />
+            <QuickStat label="Modules" value={stats.modules.toLocaleString('en-IN')} />
+            <QuickStat label="Videos" value={stats.videos.toLocaleString('en-IN')} />
+            {(isTheory || isCombo) && <QuickStat label="Documents" value={stats.documents.toLocaleString('en-IN')} />}
+            {!isTheory && <QuickStat label="Total Duration" value={formatDuration(stats.seconds)} />}
+          </dl>
+        </Section>
       </div>
 
-      {/* Pricing Tiers */}
-      {pkg.tiers && pkg.tiers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Pricing Tiers
-              {pkg.is_on_sale && pkg.sale_discount_percent && (
-                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 text-[10px]">
-                  {pkg.sale_discount_percent}% Sale Discount
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
+      {tiers.length > 0 && (
+        <Section flush title={<span className="flex flex-wrap items-center gap-2"><BarChart3 aria-hidden="true" className="h-4 w-4 text-muted-foreground" />Pricing Tiers{pct > 0 && <StatusPill tone="success">{pct}% Sale Discount</StatusPill>}</span>}>
+          <div className="border-t border-border">
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-10 text-xs">#</TableHead>
-                  <TableHead className="text-xs">Tier Name</TableHead>
-                  <TableHead className="w-28 text-xs">Duration</TableHead>
-                  <TableHead className="w-28 text-xs">Price</TableHead>
-                  {pkg.is_on_sale && pkg.sale_discount_percent && (
-                    <TableHead className="w-28 text-xs">Sale Price</TableHead>
-                  )}
+                  <TableHead scope="col" className="w-14 pl-5">#</TableHead>
+                  <TableHead scope="col">Tier Name</TableHead>
+                  <TableHead scope="col">Duration</TableHead>
+                  <TableHead scope="col">Price</TableHead>
+                  {pct > 0 && <TableHead scope="col">Sale Price</TableHead>}
+                  <TableHead scope="col" className="pr-5">Zoho item</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...pkg.tiers]
-                  .sort((a, b) => a.display_order - b.display_order)
-                  .map((tier, idx) => {
-                    const salePrice = pkg.is_on_sale && pkg.sale_discount_percent
-                      ? Math.round(tier.price * (1 - pkg.sale_discount_percent / 100))
-                      : null
-                    return (
-                      <TableRow key={idx} className="hover:bg-muted/30">
-                        <TableCell className="text-xs text-muted-foreground">
-                          {tier.display_order}
-                        </TableCell>
-                        <TableCell className="text-sm font-medium">{tier.name}</TableCell>
-                        <TableCell className="text-sm">{tier.duration_days} days</TableCell>
-                        <TableCell className={`text-sm ${salePrice ? 'text-muted-foreground line-through' : 'font-semibold'}`}>
-                          ₹{tier.price.toLocaleString('en-IN')}
-                        </TableCell>
-                        {salePrice !== null && (
-                          <TableCell className="text-sm font-semibold text-emerald-600">
-                            ₹{salePrice.toLocaleString('en-IN')}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    )
-                  })}
+                {tiers.map((tier, i) => (
+                  <TableRow key={tier._id ?? i} className="hover:bg-transparent">
+                    <TableCell className="py-3 pl-5 text-xs tabular-nums text-muted-foreground">{i + 1}</TableCell>
+                    <TableCell className="break-words text-sm font-medium">{tier.name}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatPlan(tier.duration_days)} <span className="text-xs text-muted-foreground">({plural(tier.duration_days, 'day')})</span></TableCell>
+                    <TableCell className="whitespace-nowrap text-sm tabular-nums">
+                      {pct > 0 ? <s className="text-muted-foreground">{formatINR(tier.price)}</s> : <span className="font-semibold">{formatINR(tier.price)}</span>}
+                      {pct === 0 && tier.original_price && tier.original_price > tier.price ? <s className="ml-1.5 text-xs text-muted-foreground">{formatINR(tier.original_price)}</s> : null}
+                    </TableCell>
+                    {pct > 0 && <TableCell className="whitespace-nowrap text-sm font-semibold tabular-nums text-success">{formatINR(Math.round(tier.price * (1 - pct / 100)))}</TableCell>}
+                    <TableCell className="pr-5 text-xs">{(tier as { zoho_item_id?: string | null }).zoho_item_id ? <span className="font-medium text-success">Linked</span> : <span className="text-warning" title="Created automatically on the next save of this package, or at the first checkout">Not created yet</span>}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       )}
 
-      {/* Content Structure */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Layers className="h-4 w-4" />
-            Content Structure
-            <Badge variant="secondary" className="text-[10px] ml-1">
-              {pkg.series_count} series
-            </Badge>
-          </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setSeriesModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Series
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="videos">
+      <Section
+        title={<span className="flex items-center gap-2"><Layers aria-hidden="true" className="h-4 w-4 text-muted-foreground" />Content Structure<span className="rounded-full bg-muted px-2 py-px text-xs font-semibold tabular-nums text-muted-foreground">{stats.own.series} series</span></span>}
+        action={canAddSeries ? <Button variant="outline" size="sm" className="bg-card" onClick={() => setSeriesModalOpen(true)}><Plus aria-hidden="true" />Add Series</Button> : undefined}
+      >
+        {!!pkg.withheld?.length && (
+          <p className="mb-4 text-sm text-muted-foreground" role="note">Some content is hidden because your role cannot view: {pkg.withheld.join(', ')}.</p>
+        )}
+        {isCombo && (
+          <div className="mb-5 space-y-2">
+            <p className="text-sm text-muted-foreground">This combo opens the content of these packages{series.length > 0 ? ', and its own series below' : '. It has no series of its own'}.</p>
+            {bundleList}
+          </div>
+        )}
+        {!(isCombo && series.length === 0) && (
+          <Tabs value={state.tab === 'documents' ? 'documents' : 'videos'} onValueChange={(v) => set({ tab: v })}>
             <TabsList>
-              <TabsTrigger value="videos" className="gap-1.5">
-                <Film className="h-3.5 w-3.5" />
-                Videos
-                <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalVideos}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="documents" className="gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                Documents
-                <Badge variant="secondary" className="text-[10px] ml-1">{stats.totalDocuments}</Badge>
-              </TabsTrigger>
+              <TabsTrigger value="videos" className="gap-1.5"><Film aria-hidden="true" className="h-3.5 w-3.5" />Videos<span className="rounded-full bg-muted-foreground/10 px-1.5 text-xs tabular-nums">{stats.own.videos}</span></TabsTrigger>
+              <TabsTrigger value="documents" className="gap-1.5"><FileText aria-hidden="true" className="h-3.5 w-3.5" />Documents<span className="rounded-full bg-muted-foreground/10 px-1.5 text-xs tabular-nums">{stats.own.documents}</span></TabsTrigger>
             </TabsList>
             <TabsContent value="videos" className="mt-4">
-              {videoHierarchyContent}
+              {series.length === 0 ? <NoSeries icon={Package} hidden={pkg.withheld?.includes('series') && !!pkg.series_count} /> : (
+                <div className="space-y-3">
+                  {series.map((s) => (
+                    <SeriesBlock
+                      key={s._id} series={s} isOpen={openSeries.has(s._id)} onToggle={() => toggleSeries(s._id)} openModules={openModules} onToggleModule={toggleModule}
+                      onAddModule={canAddModule ? () => { setTargetSeriesId(s._id); setModuleModalOpen(true) } : undefined}
+                      onAddVideo={canAddVideo ? openAddVideo : undefined}
+                      onAddUpcoming={canAddVideo ? (moduleId) => { setTargetModuleId(moduleId); setUpcomingVideoModalOpen(true) } : undefined}
+                      onEditVideo={canEditVideo ? openEditVideo : undefined}
+                    />
+                  ))}
+                </div>
+              )}
             </TabsContent>
             <TabsContent value="documents" className="mt-4">
-              {documentHierarchyContent}
+              {series.length === 0 ? <NoSeries icon={FileText} hidden={pkg.withheld?.includes('series') && !!pkg.series_count} /> : (
+                <div className="space-y-3">
+                  {series.map((s) => (
+                    <DocSeriesBlock key={s._id} series={s} isOpen={openDocSeries.has(s._id)} onToggle={() => toggleDocSeries(s._id)} onAddDocument={canAddDocument ? () => { setTargetSeriesId(s._id); setDocumentModalOpen(true) } : undefined} />
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        )}
+      </Section>
 
-      {/* Modals */}
-      <PackageFormModal
-        open={editPackageOpen}
-        onClose={() => { setEditPackageOpen(false); fetchPackage() }}
-        onSubmit={handlePackageSubmit}
-        pkg={pkg}
-        mode="edit"
-      />
+      <PackageSalesSection packageId={pkg._id} tiers={tiers} isCombo={isCombo} />
 
-      <SeriesFormModal
-        open={seriesModalOpen}
-        onClose={() => setSeriesModalOpen(false)}
-        onSubmit={handleSeriesSubmit}
-        mode="create"
-        defaultPackageId={pkg._id}
-      />
-
-      <ModuleFormModal
-        open={moduleModalOpen}
-        onClose={() => setModuleModalOpen(false)}
-        onSubmit={handleModuleSubmit}
-        mode="create"
-        defaultSeriesId={targetSeriesId}
-      />
-
+      <SeriesFormModal open={seriesModalOpen} onClose={() => setSeriesModalOpen(false)} onSubmit={handleSeriesSubmit} mode="create" defaultPackageId={pkg._id} />
+      <ModuleFormModal open={moduleModalOpen} onClose={() => setModuleModalOpen(false)} onSubmit={handleModuleSubmit} mode="create" defaultSeriesId={targetSeriesId} />
       <VideoFormModal
-        open={videoModalOpen}
-        onClose={() => {
-          setVideoModalOpen(false)
-          setEditingVideo(null)
-        }}
-        onSubmit={handleVideoSubmit}
-        mode={videoModalMode}
-        video={editingVideo as unknown as Video | null}
-        defaultModuleId={targetModuleId}
+        open={videoModalOpen} onClose={() => { setVideoModalOpen(false); setEditingVideo(null) }} onSubmit={handleVideoSubmit}
+        mode={videoModalMode} video={editingVideo as unknown as Video | null} defaultModuleId={targetModuleId}
       />
-
-      <UpcomingVideoModal
-        open={upcomingVideoModalOpen}
-        onClose={() => setUpcomingVideoModalOpen(false)}
-        onSubmit={handleUpcomingVideoSubmit}
-        defaultModuleId={targetModuleId}
-      />
-
-      <DocumentFormModal
-        open={documentModalOpen}
-        onClose={() => setDocumentModalOpen(false)}
-        onSubmit={handleDocumentSubmit}
-        mode="create"
-        defaultSeriesId={targetSeriesId}
-      />
+      <UpcomingVideoModal open={upcomingVideoModalOpen} onClose={() => setUpcomingVideoModalOpen(false)} onSubmit={handleUpcomingVideoSubmit} defaultModuleId={targetModuleId} />
+      <DocumentFormModal open={documentModalOpen} onClose={() => setDocumentModalOpen(false)} onSubmit={handleDocumentSubmit} mode="create" defaultSeriesId={targetSeriesId} />
     </div>
   )
+}
+
+function Fact({ icon: Icon, label, wide, children }: { icon: typeof Package; label: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={wide ? 'min-w-0 sm:col-span-2' : 'min-w-0'}>
+      <dt className="flex items-center gap-1 text-xs text-muted-foreground"><Icon aria-hidden="true" className="h-3.5 w-3.5" />{label}</dt>
+      <dd className="mt-0.5 break-words font-medium">{children}</dd>
+    </div>
+  )
+}
+
+function QuickStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col-reverse rounded-lg border border-border p-4 text-center">
+      <dt className="mt-1 text-xs text-muted-foreground">{label}</dt>
+      <dd className="font-display text-2xl font-semibold tabular-nums tracking-[-0.02em]">{value}</dd>
+    </div>
+  )
+}
+
+function NoSeries({ icon: Icon, hidden }: { icon: typeof Package; hidden?: boolean }) {
+  return <div className="py-9 text-center text-sm text-muted-foreground"><Icon aria-hidden="true" className="mx-auto mb-2 h-7 w-7 opacity-40" />{hidden ? 'Your role cannot view the series in this package' : 'No series in this package yet'}</div>
 }
 
 // --- Series Block (Video Hierarchy) ---
@@ -774,62 +434,46 @@ interface SeriesBlockProps {
   onToggle: () => void
   openModules: Set<string>
   onToggleModule: (id: string) => void
-  onAddModule: () => void
-  onAddVideo: (moduleId: string) => void
-  onAddUpcoming: (moduleId: string) => void
-  onEditVideo: (video: PackageDetailVideo) => void
+  onAddModule?: () => void
+  onAddVideo?: (moduleId: string) => void
+  onAddUpcoming?: (moduleId: string) => void
+  onEditVideo?: (video: PackageDetailVideo) => void
 }
 
+const Chip = ({ children }: { children: React.ReactNode }) => <span className="shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-px text-xs tabular-nums text-muted-foreground">{children}</span>
+const ActivePill = ({ active }: { active: boolean }) => <StatusPill tone={active ? 'success' : 'danger'} className="h-5 px-2 text-[11px]">{active ? 'Active' : 'Inactive'}</StatusPill>
+
 function SeriesBlock({ series, isOpen, onToggle, openModules, onToggleModule, onAddModule, onAddVideo, onAddUpcoming, onEditVideo }: SeriesBlockProps) {
+  const modules = series.modules || []
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-lg border border-border">
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50 transition-colors">
-            <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium truncate">{series.name}</span>
-                <Badge variant="secondary" className="text-[10px] shrink-0">
-                  {series.module_count} {series.module_count === 1 ? 'module' : 'modules'}
-                </Badge>
-                <Badge className={`text-[10px] shrink-0 ${series.is_active
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                  : 'bg-red-500/10 text-red-600 border-red-200'
-                }`}>
-                  {series.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-              {series.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{series.description}</p>
-              )}
-            </div>
+          <button type="button" className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50">
+            <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="min-w-0 break-words text-sm font-medium">{series.name}</span>
+                <Chip>{plural(series.module_count ?? modules.length, 'module')}</Chip>
+                <ActivePill active={series.is_active} />
+                {series.publish_status === 'draft' && <StatusPill tone="warning" className="h-5 px-2 text-[11px]">Draft</StatusPill>}
+              </span>
+              {series.description && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{series.description}</span>}
+            </span>
           </button>
         </CollapsibleTrigger>
-
         <CollapsibleContent>
-          <div className="border-t px-4 pb-4 pt-3 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
+            <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">Modules in this series</p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onAddModule}>
-                <Plus className="mr-1 h-3 w-3" />
-                Add Module
-              </Button>
+              {onAddModule && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onAddModule}><Plus aria-hidden="true" className="!size-3" />Add Module</Button>}
             </div>
-
-            {series.modules.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No modules yet</p>
-            ) : (
+            {modules.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">No modules yet</p> : (
               <div className="space-y-2">
-                {series.modules.map((mod) => (
+                {modules.map((mod) => (
                   <ModuleBlock
-                    key={mod._id}
-                    module={mod}
-                    isOpen={openModules.has(mod._id)}
-                    onToggle={() => onToggleModule(mod._id)}
-                    onAddVideo={() => onAddVideo(mod._id)}
-                    onAddUpcoming={() => onAddUpcoming(mod._id)}
-                    onEditVideo={onEditVideo}
+                    key={mod._id} module={mod} isOpen={openModules.has(mod._id)} onToggle={() => onToggleModule(mod._id)}
+                    onAddVideo={onAddVideo ? () => onAddVideo(mod._id) : undefined} onAddUpcoming={onAddUpcoming ? () => onAddUpcoming(mod._id) : undefined} onEditVideo={onEditVideo}
                   />
                 ))}
               </div>
@@ -847,167 +491,83 @@ interface ModuleBlockProps {
   module: PackageDetailModule
   isOpen: boolean
   onToggle: () => void
-  onAddVideo: () => void
-  onAddUpcoming: () => void
-  onEditVideo: (video: PackageDetailVideo) => void
+  onAddVideo?: () => void
+  onAddUpcoming?: () => void
+  onEditVideo?: (video: PackageDetailVideo) => void
 }
 
 function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming, onEditVideo }: ModuleBlockProps) {
-  const totalDuration = mod.videos.reduce((sum, v) => sum + v.duration_seconds, 0)
-
+  const videos = mod.videos || []
+  const totalDuration = videos.reduce((sum, v) => sum + (v.duration_seconds || 0), 0)
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <div className="rounded-md border bg-muted/30">
+      <div className="overflow-hidden rounded-md border border-border bg-muted/30">
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-3 p-3 text-left hover:bg-muted/50 transition-colors">
-            <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium truncate">{mod.name}</span>
-                <Badge variant="outline" className="text-[10px] shrink-0">
-                  {mod.video_count} {mod.video_count === 1 ? 'video' : 'videos'}
-                </Badge>
-                {totalDuration > 0 && (
-                  <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-0.5">
-                    <Clock className="h-3 w-3" />
-                    {formatDuration(totalDuration)}
-                  </span>
-                )}
-                <Badge className={`text-[10px] shrink-0 ${mod.is_active
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                  : 'bg-red-500/10 text-red-600 border-red-200'
-                }`}>
-                  {mod.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-            </div>
+          <button type="button" className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50">
+            <ChevronRight aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 break-words text-sm font-medium">{mod.name}</span>
+              <Chip>{plural(mod.video_count ?? videos.length, 'video')}</Chip>
+              {totalDuration > 0 && <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"><Clock aria-hidden="true" className="h-3 w-3" />{formatDuration(totalDuration)}</span>}
+              <ActivePill active={mod.is_active} />
+              {mod.publish_status === 'draft' && <StatusPill tone="warning" className="h-5 px-2 text-[11px]">Draft</StatusPill>}
+            </span>
           </button>
         </CollapsibleTrigger>
-
         <CollapsibleContent>
-          <div className="border-t">
-            <div className="flex items-center justify-between px-3 pt-2">
+          <div className="border-t border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <p className="text-xs text-muted-foreground">Videos in this module</p>
               <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onAddVideo}>
-                  <Plus className="mr-1 h-3 w-3" />
-                  Add Video
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={onAddUpcoming}>
-                  <Clock className="mr-1 h-3 w-3" />
-                  Add Upcoming
-                </Button>
+                {onAddVideo && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onAddVideo}><Plus aria-hidden="true" className="!size-3" />Add Video</Button>}
+                {onAddUpcoming && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-warning hover:bg-warning-soft hover:text-warning" onClick={onAddUpcoming}><Clock aria-hidden="true" className="!size-3" />Add Upcoming</Button>}
               </div>
             </div>
-            {mod.videos.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No videos yet</p>
-            ) : (
-              <Table>
+            {videos.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">No videos yet</p> : (
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-10 text-xs">#</TableHead>
-                    <TableHead className="text-xs">Title</TableHead>
-                    <TableHead className="w-20 text-xs">Duration</TableHead>
-                    <TableHead className="w-16 text-xs">Access</TableHead>
-                    <TableHead className="w-20 text-xs">Status</TableHead>
-                    <TableHead className="w-16 text-xs text-right">Views</TableHead>
-                    <TableHead className="w-10 text-xs" />
+                    <TableHead scope="col" className="w-10 text-xs">#</TableHead>
+                    <TableHead scope="col" className="text-xs">Title</TableHead>
+                    <TableHead scope="col" className="w-20 text-xs">Duration</TableHead>
+                    <TableHead scope="col" className="w-16 text-xs">Access</TableHead>
+                    <TableHead scope="col" className="w-28 text-xs">Status</TableHead>
+                    <TableHead scope="col" className="w-16 text-right text-xs">Views</TableHead>
+                    <TableHead scope="col" className="w-10 text-xs"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mod.videos.map((video) => {
-                    const scheduledInFuture =
-                      !!video.scheduled_release_at &&
-                      new Date(video.scheduled_release_at) > new Date()
-                    const isScheduled =
-                      video.processing_status === 'ready' && scheduledInFuture
+                  {videos.map((video) => {
+                    const scheduled = video.processing_status === 'ready' && !!video.scheduled_release_at && new Date(video.scheduled_release_at) > new Date()
                     return (
-                    <TableRow key={video._id} className="hover:bg-muted/30">
-                      <TableCell className="text-xs text-muted-foreground">
-                        {video.display_order}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Film className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="text-sm truncate">{video.title}</p>
-                            {video.faculty_id && (
-                              <p className="text-[10px] text-muted-foreground">
-                                {video.faculty_id.name}
-                              </p>
-                            )}
+                      <TableRow key={video._id} className="hover:bg-muted/30">
+                        <TableCell className="text-xs tabular-nums text-muted-foreground">{video.display_order}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Film aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 max-w-[320px]">
+                              <p className="truncate text-sm" title={video.title}>{video.title}</p>
+                              {video.faculty_id && <p className="truncate text-xs text-muted-foreground">{video.faculty_id.name}</p>}
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDuration(video.duration_seconds)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={video.is_free ? 'secondary' : 'outline'}
-                          className="text-[10px]"
-                        >
-                          {video.is_free ? 'Free' : 'Paid'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {video.processing_status === 'upcoming' ? (
-                            <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
-                              <Clock className="h-2.5 w-2.5 mr-1" />
-                              Upcoming
-                            </Badge>
-                          ) : isScheduled ? (
-                            <Badge className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-200">
-                              <CalendarClock className="h-2.5 w-2.5 mr-1" />
-                              Scheduled
-                            </Badge>
-                          ) : (
-                            <Badge className={`text-[10px] ${
-                              video.processing_status === 'ready'
-                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                                : video.processing_status === 'failed'
-                                ? 'bg-red-500/10 text-red-600 border-red-200'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-200'
-                            }`}>
-                              {video.processing_status}
-                            </Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDuration(video.duration_seconds)}</TableCell>
+                        <TableCell className="text-xs">{video.is_free ? 'Free' : 'Paid'}</TableCell>
+                        <TableCell>
+                          {video.processing_status === 'upcoming' ? <StatusPill tone="warning" className="h-5 px-2 text-[11px]">Upcoming</StatusPill>
+                            : scheduled ? <StatusPill tone="info" className="h-5 px-2 text-[11px]">Scheduled</StatusPill>
+                              : <StatusPill tone={video.processing_status === 'ready' ? 'success' : video.processing_status === 'failed' ? 'danger' : 'warning'} className="h-5 px-2 text-[11px] capitalize">{video.processing_status}</StatusPill>}
+                          {video.scheduled_release_at && <p className="mt-1 flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground"><CalendarClock aria-hidden="true" className="h-3 w-3" />{dayTimeIST(video.scheduled_release_at)}</p>}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground"><span className="inline-flex items-center gap-1 tabular-nums"><Eye aria-hidden="true" className="h-3 w-3" />{(video.view_count || 0).toLocaleString('en-IN')}</span></TableCell>
+                        <TableCell className="text-right">
+                          {onEditVideo && (
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={`Edit ${video.title}`} title={video.processing_status === 'upcoming' ? 'Edit upcoming: upload file or reschedule' : 'Edit video'} onClick={(e) => { e.stopPropagation(); onEditVideo(video) }}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
                           )}
-                          {video.scheduled_release_at && (
-                            <span className="text-[10px] text-orange-600">
-                              {new Date(video.scheduled_release_at).toLocaleDateString('en-IN', {
-                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                              })}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground text-right">
-                        <span className="flex items-center justify-end gap-1">
-                          <Eye className="h-3 w-3" />
-                          {video.view_count}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onEditVideo(video)
-                          }}
-                          title={
-                            video.processing_status === 'upcoming'
-                              ? 'Edit upcoming — upload file or reschedule'
-                              : 'Edit video'
-                          }
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
                 </TableBody>
@@ -1022,106 +582,59 @@ function ModuleBlock({ module: mod, isOpen, onToggle, onAddVideo, onAddUpcoming,
 
 // --- Document Series Block (Document Hierarchy) ---
 
-interface DocSeriesBlockProps {
-  series: PackageDetailSeries
-  isOpen: boolean
-  onToggle: () => void
-  onAddDocument: () => void
-}
-
-function DocSeriesBlock({ series, isOpen, onToggle, onAddDocument }: DocSeriesBlockProps) {
+function DocSeriesBlock({ series, isOpen, onToggle, onAddDocument }: { series: PackageDetailSeries; isOpen: boolean; onToggle: () => void; onAddDocument?: () => void }) {
   const documents = series.documents || []
-
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-lg border border-border">
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50 transition-colors">
-            <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium truncate">{series.name}</span>
-                <Badge variant="secondary" className="text-[10px] shrink-0">
-                  {series.document_count} {series.document_count === 1 ? 'document' : 'documents'}
-                </Badge>
-                <Badge className={`text-[10px] shrink-0 ${series.is_active
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                  : 'bg-red-500/10 text-red-600 border-red-200'
-                }`}>
-                  {series.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-              {series.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{series.description}</p>
-              )}
-            </div>
+          <button type="button" className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50">
+            <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="min-w-0 break-words text-sm font-medium">{series.name}</span>
+                <Chip>{plural(series.document_count ?? documents.length, 'document')}</Chip>
+                <ActivePill active={series.is_active} />
+              </span>
+              {series.description && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{series.description}</span>}
+            </span>
           </button>
         </CollapsibleTrigger>
-
         <CollapsibleContent>
-          <div className="border-t">
-            <div className="flex items-center justify-between px-4 pt-3">
+          <div className="border-t border-border">
+            <div className="flex items-center justify-between gap-2 px-4 py-2">
               <p className="text-xs text-muted-foreground">Documents in this series</p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onAddDocument}>
-                <Plus className="mr-1 h-3 w-3" />
-                Add Document
-              </Button>
+              {onAddDocument && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onAddDocument}><Plus aria-hidden="true" className="!size-3" />Add Document</Button>}
             </div>
-            {documents.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No documents yet</p>
-            ) : (
-              <Table>
+            {documents.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">No documents yet</p> : (
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-10 text-xs">#</TableHead>
-                    <TableHead className="text-xs">Title</TableHead>
-                    <TableHead className="w-16 text-xs">Format</TableHead>
-                    <TableHead className="w-16 text-xs">Size</TableHead>
-                    <TableHead className="w-16 text-xs">Access</TableHead>
-                    <TableHead className="w-20 text-xs text-right">Downloads</TableHead>
+                    <TableHead scope="col" className="w-10 pl-4 text-xs">#</TableHead>
+                    <TableHead scope="col" className="text-xs">Title</TableHead>
+                    <TableHead scope="col" className="w-16 text-xs">Format</TableHead>
+                    <TableHead scope="col" className="w-20 text-xs">Size</TableHead>
+                    <TableHead scope="col" className="w-16 text-xs">Access</TableHead>
+                    <TableHead scope="col" className="w-20 pr-4 text-right text-xs">Downloads</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {documents.map((doc) => (
                     <TableRow key={doc._id} className="hover:bg-muted/30">
-                      <TableCell className="text-xs text-muted-foreground">
-                        {doc.display_order}
-                      </TableCell>
+                      <TableCell className="pl-4 text-xs tabular-nums text-muted-foreground">{doc.display_order}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="text-sm truncate">{doc.title}</p>
-                            {doc.page_count && (
-                              <p className="text-[10px] text-muted-foreground">
-                                {doc.page_count} pages
-                              </p>
-                            )}
+                          <FileText aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0 max-w-[360px]">
+                            <p className="truncate text-sm" title={doc.title}>{doc.title}</p>
+                            {!!doc.page_count && <p className="text-xs text-muted-foreground">{plural(doc.page_count, 'page')}</p>}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[10px] uppercase">
-                          {doc.file_format}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatFileSize(doc.file_size_mb)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={doc.is_free ? 'secondary' : 'outline'}
-                          className="text-[10px]"
-                        >
-                          {doc.is_free ? 'Free' : 'Paid'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground text-right">
-                        <span className="flex items-center justify-end gap-1">
-                          <Download className="h-3 w-3" />
-                          {doc.download_count}
-                        </span>
-                      </TableCell>
+                      <TableCell className="font-mono text-xs uppercase">{doc.file_format || '—'}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatFileSize(doc.file_size_mb)}</TableCell>
+                      <TableCell className="text-xs">{doc.is_free ? 'Free' : 'Paid'}</TableCell>
+                      <TableCell className="pr-4 text-right text-xs text-muted-foreground"><span className="inline-flex items-center gap-1 tabular-nums"><Download aria-hidden="true" className="h-3 w-3" />{(doc.download_count || 0).toLocaleString('en-IN')}</span></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -3,33 +3,41 @@ import { useSearchParams } from 'react-router-dom'
 import { useServerSearch } from '@/hooks/useServerSearch'
 import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
 import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
 import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { VideoFormModal } from '@/components/videos/VideoFormModal'
-import { Plus, Video as VideoIcon } from 'lucide-react'
+import { CopyPlus, FolderInput, Plus, Video as VideoIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { videosService, Video, VideoFormData } from '@/services/videos.service'
 import { modulesService, Module } from '@/services/modules.service'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { useVideosColumns } from './VideosPage.columns'
+import { ContentMovePicker, type PickItem } from '@/components/modules/ContentMovePicker'
+import type { MoveKind } from '@/services/contentMove.service'
 
 export function VideosPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('videos.create')
+  const canEdit = hasPermission('videos.update')
+  const canDelete = hasPermission('videos.delete')
 
   // State
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [videos, setVideos] = useState<Video[]>([])
   const [loading, setLoading] = useState(true)
   const [moduleFilter, setModuleFilter] = useState(searchParams.get('module') || 'all')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || searchParams.get('processing_status') || 'all')
   const [accessFilter, setAccessFilter] = useState(searchParams.get('access') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Dropdown data
   const [modules, setModules] = useState<Module[]>([])
@@ -43,6 +51,9 @@ export function VideosPage() {
     entityId: string;
     action: 'publish' | 'unpublish';
   } | null>(null)
+  // Move / copy: the full-page picker, and the rows chosen for a bulk one
+  const [moving, setMoving] = useState<{ kind: MoveKind; items: PickItem[] } | null>(null)
+  const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [archiveBlocked, setArchiveBlocked] = useState(false)
   const [archiveBlockReason, setArchiveBlockReason] = useState('')
   const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
@@ -60,6 +71,7 @@ export function VideosPage() {
   const fetchVideos = useCallback(async () => {
     const fetchId = nextFetchId()
     setLoading(true)
+    setLoadError(null)
     try {
       const response = await videosService.getAll({
         page: currentPage,
@@ -76,12 +88,17 @@ export function VideosPage() {
         setVideos(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+        // The last row of the last page is gone: show the page before it
+        const pages = response.data.pagination?.totalPages || 1
+        if (currentPage > pages) setCurrentPage(pages)
       } else {
-        toast.error(response.message || 'Failed to load videos')
+        setLoadError(response.message || 'The videos could not be loaded.')
       }
     } catch (error: any) {
       if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load videos')
+      const message = error.status === 403 ? 'You do not have access to videos.' : error.message || 'The videos could not be loaded.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
@@ -92,15 +109,25 @@ export function VideosPage() {
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (debouncedSearch) params.search = debouncedSearch
     if (moduleFilter !== 'all') params.module = moduleFilter
     if (statusFilter !== 'all') params.status = statusFilter
     if (accessFilter !== 'all') params.access = accessFilter
     if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [moduleFilter, statusFilter, accessFilter, publishFilter, currentPage, setSearchParams])
+    setSearchParams(params, { replace: true })
+  }, [debouncedSearch, moduleFilter, statusFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
   useResetPageOnChange(setCurrentPage, [debouncedSearch, moduleFilter, statusFilter, accessFilter, publishFilter])
+  // A choice belongs to the rows on screen: another page or filter starts again
+  useEffect(() => { setChosen(new Set()) }, [currentPage, debouncedSearch, moduleFilter, statusFilter, accessFilter, publishFilter])
+  const pickItem = (v: Video): PickItem => ({ id: v._id, name: v.title, parentId: v.module_id && typeof v.module_id === 'object' ? v.module_id._id : null })
+  const chosenVideos = videos.filter((v) => chosen.has(v._id))
+  const toggleChosen = useCallback((id: string) => setChosen((prev) => {
+    const next = new Set(prev)
+    if (!next.delete(id)) next.add(id)
+    return next
+  }), [])
 
   // Handlers
   const handleCreate = () => {
@@ -169,7 +196,7 @@ export function VideosPage() {
         const response = await videosService.upload(data, file, onProgress, onPhaseChange)
         if (response.success) {
           videoId = response.data?.video_id
-          toast.success('Video uploaded successfully — processing will begin shortly')
+          toast.success('Video uploaded. Processing will begin shortly.')
         } else {
           toast.error(response.message || 'Failed to upload video')
           throw new Error(response.message || 'Failed to upload video')
@@ -190,8 +217,8 @@ export function VideosPage() {
           if (uploadResponse.success) {
             toast.success(
               releaseMode === 'scheduled'
-                ? 'Video file uploaded — will release on the scheduled date'
-                : 'Video file uploaded — processing will begin shortly',
+                ? 'Video file uploaded. It will be released on the scheduled date.'
+                : 'Video file uploaded. Processing will begin shortly.',
             )
           } else {
             toast.error(uploadResponse.message || 'Failed to upload video file')
@@ -301,10 +328,14 @@ export function VideosPage() {
   ]
 
   const columns = useVideosColumns({
+    canEdit,
+    canDelete,
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
     onPublishAction: handlePublishAction,
     onRetryTranscoding: handleRetryTranscoding,
+    onMove: canEdit ? (video, kind) => setMoving({ kind, items: [pickItem(video)] }) : undefined,
+    selection: canEdit ? { isSelected: (id) => chosen.has(id), toggle: toggleChosen } : undefined,
   })
 
   const hasFilters = debouncedSearch || moduleFilter !== 'all' || statusFilter !== 'all' || accessFilter !== 'all' || publishFilter !== 'all'
@@ -315,11 +346,11 @@ export function VideosPage() {
         title="Videos"
         description="Manage video content, uploads, and processing"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Videos' }]}
-        action={
+        action={canCreate && (
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />Upload Video
           </Button>
-        }
+        )}
       />
 
       <SearchWithFilters
@@ -336,10 +367,26 @@ export function VideosPage() {
         }}
       />
 
+      {canEdit && chosenVideos.length > 0 && (
+        <div role="toolbar" aria-label="Selected videos" className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-accent px-3 py-2">
+          <span aria-live="polite" className="mr-auto text-sm font-semibold tabular-nums text-accent-foreground">{chosenVideos.length} selected</span>
+          {chosenVideos.length < videos.length && (
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => setChosen(new Set(videos.map((v) => v._id)))}>Select all {videos.length} on this page</Button>
+          )}
+          <Button size="icon" variant="ghost" className="h-8 w-8 sm:order-last" aria-label="Clear selection" onClick={() => setChosen(new Set())}><X className="h-4 w-4" /></Button>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button size="sm" variant="outline" className="h-9 flex-1 gap-1.5 bg-card sm:h-8 sm:flex-none" onClick={() => setMoving({ kind: 'video-move', items: chosenVideos.map(pickItem) })}><FolderInput className="h-3.5 w-3.5" />Move to…</Button>
+            <Button size="sm" variant="outline" className="h-9 flex-1 gap-1.5 bg-card sm:h-8 sm:flex-none" onClick={() => setMoving({ kind: 'video-copy', items: chosenVideos.map(pickItem) })}><CopyPlus className="h-3.5 w-3.5" />Copy to…</Button>
+          </div>
+        </div>
+      )}
+
       <DataTable
         data={videos}
         columns={columns}
         isLoading={loading}
+        error={loadError}
+        onRetry={fetchVideos}
         pagination={{
           currentPage,
           totalPages,
@@ -350,13 +397,14 @@ export function VideosPage() {
           icon: VideoIcon,
           title: hasFilters ? 'No videos found matching your filters' : 'No videos yet',
           description: !hasFilters ? 'Get started by uploading your first video' : undefined,
-          action: !hasFilters ? (
+          action: canCreate && !hasFilters ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Upload your first video
             </Button>
           ) : undefined,
         }}
         getRowKey={(video) => video._id}
+        onRowClick={canEdit ? handleEdit : undefined}
       />
 
       <VideoFormModal
@@ -365,7 +413,17 @@ export function VideosPage() {
         onSubmit={handleFormSubmit}
         video={selectedVideo}
         mode={modalMode}
+        onMoved={fetchVideos}
       />
+
+      {moving && (
+        <ContentMovePicker
+          kind={moving.kind}
+          items={moving.items}
+          onClose={() => setMoving(null)}
+          onDone={() => { setMoving(null); setChosen(new Set()); fetchVideos() }}
+        />
+      )}
 
       <ArchiveModal
         open={archiveModalOpen}

@@ -1,11 +1,15 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Coupon } from '@/services/coupons.service'
-import { MoreVertical, Pencil, Trash2, Power, Ticket } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, Power, Eye } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { formatCount, formatDay } from '@/lib/format'
+import { discountDetail, discountHeadline, scopeSummary, targetLines } from '@/lib/couponCopy'
+import { CouponStatePill, couponState } from '@/components/coupons/CouponTicket'
 
 interface CouponsColumnsProps {
   onEdit: (coupon: Coupon) => void
@@ -14,98 +18,92 @@ interface CouponsColumnsProps {
 }
 
 export function useCouponsColumns({ onEdit, onToggle, onDelete }: CouponsColumnsProps): ColumnDef<Coupon>[] {
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission('coupons.update')
+  const canDelete = hasPermission('coupons.delete')
+
   return [
     {
       id: 'code',
-      header: 'Coupon',
+      header: 'Code',
       cell: (c) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded bg-muted shrink-0">
-            <Ticket className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-mono font-semibold truncate">{c.code}</p>
-            {c.description && <p className="text-xs text-muted-foreground truncate">{c.description}</p>}
-          </div>
+        <div className="min-w-0">
+          <p translate="no" className="truncate font-mono text-sm font-semibold tracking-[0.04em]">{c.code}</p>
+          {c.description && <p className="max-w-[260px] truncate text-xs text-muted-foreground">{c.description}</p>}
         </div>
       ),
     },
     {
       id: 'discount',
       header: 'Discount',
-      width: 'w-28',
+      width: 'w-32',
       cell: (c) => (
-        <div className="text-sm">
-          <span className="font-medium">
-            {c.discount_type === 'percentage' ? `${c.discount_value}%` : `₹${c.discount_value}`}
-          </span>
-          {c.discount_type === 'percentage' && c.max_discount_cap ? (
-            <p className="text-xs text-muted-foreground">up to ₹{c.max_discount_cap}</p>
-          ) : null}
+        <div className="whitespace-nowrap">
+          <span className="font-mono text-sm font-semibold" data-numeric>{discountHeadline(c)}</span>
+          <span className="ml-1 text-xs text-muted-foreground">{discountDetail(c)}</span>
         </div>
       ),
     },
     {
       id: 'applies_to',
-      header: 'Applies To',
-      width: 'w-40',
+      header: 'Applies to',
       cell: (c) => {
-        if (c.applies_to === 'all') return <Badge className="text-[10px] bg-gray-500/10 text-gray-600 border-gray-200">All products</Badge>
-        if (c.applies_to === 'type') {
-          return (
-            <div className="flex flex-wrap gap-1">
-              {(c.applicable_types || []).map((t) => (
-                <Badge key={t} className="text-[10px] capitalize bg-blue-500/10 text-blue-600 border-blue-200">{t}</Badge>
-              ))}
-            </div>
-          )
-        }
-        return <Badge className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-200">{(c.applicable_products || []).length} product(s)</Badge>
+        // Names come from the admin API. A backend older than tier targeting
+        // sends bare IDs; show a count then, and the detail page resolves them.
+        const named = (c.applicable_products || []).every((p) => !!p.product_name)
+        const text = c.applies_to !== 'products' || named
+          ? scopeSummary(c)
+          : `${(c.applicable_products || []).length} chosen product${(c.applicable_products || []).length === 1 ? '' : 's'}`
+        return (
+          <p className="max-w-[340px] truncate text-sm" title={c.applies_to === 'products' && named ? targetLines(c).join('\n') : undefined}>
+            {text}
+          </p>
+        )
       },
     },
     {
       id: 'usage',
-      header: 'Usage',
-      width: 'w-28',
-      cell: (c) => (
-        <div className="text-xs">
-          <span className="font-mono">{c.redemption_count}{c.max_redemptions != null ? ` / ${c.max_redemptions}` : ''}</span>
-          {c.per_user_limit != null && <p className="text-muted-foreground">{c.per_user_limit}/user</p>}
-          {c.min_order_value > 0 && <p className="text-muted-foreground">min ₹{c.min_order_value}</p>}
-        </div>
-      ),
+      header: 'Used',
+      width: 'w-32',
+      cell: (c) => {
+        const used = c.redemption_count || 0
+        const cap = c.max_redemptions
+        return (
+          <div className="w-24">
+            <p className="font-mono text-xs" data-numeric>
+              {formatCount(used)}{cap != null ? <span className="text-muted-foreground"> / {formatCount(cap)}</span> : null}
+            </p>
+            {cap != null && cap > 0 && (
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, (used / cap) * 100)}%` }} />
+              </div>
+            )}
+          </div>
+        )
+      },
     },
     {
       id: 'expiry',
-      header: 'Expiry',
-      width: 'w-28',
-      cell: (c) => (
-        <span className="text-xs text-muted-foreground">
-          {c.expiry_at ? new Date(c.expiry_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No expiry'}
-        </span>
-      ),
+      header: 'Last day',
+      width: 'w-32',
+      cell: (c) => <span className="whitespace-nowrap text-xs text-muted-foreground">{c.expiry_at ? formatDay(c.expiry_at) : 'No end date'}</span>,
     },
     {
       id: 'status',
       header: 'Status',
-      width: 'w-24',
+      width: 'w-32',
       cell: (c) => (
-        <div className="flex flex-wrap gap-1">
-          <Badge className={`text-[10px] ${c.is_active ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' : 'bg-red-500/10 text-red-600 border-red-200'}`}>
-            {c.is_active ? 'Active' : 'Inactive'}
-          </Badge>
-          {c.is_visible && (
-            <Badge className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-200" title="Shown on checkout">
-              Visible
-            </Badge>
-          )}
+        <div className="flex flex-wrap items-center gap-1">
+          <CouponStatePill state={couponState(c)} />
+          {c.is_visible && <span className="text-[11px] text-muted-foreground" title="Suggested at checkout">Suggested</span>}
           {c.customer_scope === 'specific' && (
-            <Badge
-              className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-200"
-              title={`Restricted to: ${(c.applicable_users || []).map((u) => u.name || u.email).join(', ')}`}
+            <span
+              className="rounded bg-warning-soft px-1.5 py-px text-[11px] font-medium text-warning"
+              title={`Only for: ${(c.applicable_users || []).map((u) => u.name || u.email).join(', ')}`}
             >
-              {(c.applicable_users || []).length} customer{(c.applicable_users || []).length === 1 ? '' : 's'} only
-            </Badge>
+              {(c.applicable_users || []).length} student{(c.applicable_users || []).length === 1 ? '' : 's'} only
+            </span>
           )}
         </div>
       ),
@@ -117,13 +115,18 @@ export function useCouponsColumns({ onEdit, onToggle, onDelete }: CouponsColumns
       cell: (c) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${c.code}`}><MoreVertical className="h-4 w-4" aria-hidden="true" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(c)}><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onToggle(c)}><Power className="mr-2 h-4 w-4" />{c.is_active ? 'Deactivate' : 'Activate'}</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(c)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(`/commerce/coupons/${c._id}`)}><Eye className="mr-2 h-4 w-4" />Open</DropdownMenuItem>
+            {canEdit && <DropdownMenuItem onClick={() => onEdit(c)}><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>}
+            {canEdit && <DropdownMenuItem onClick={() => onToggle(c)}><Power className="mr-2 h-4 w-4" />{c.is_active ? 'Pause' : 'Make live'}</DropdownMenuItem>}
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onDelete(c)} className="text-danger focus:text-danger"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

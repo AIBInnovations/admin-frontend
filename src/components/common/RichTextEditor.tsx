@@ -1,6 +1,5 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useEffect } from 'react'
@@ -45,6 +44,8 @@ function ToolbarButton({
           className={`h-8 w-8 ${isActive ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
           onClick={onClick}
           disabled={disabled}
+          aria-label={tooltip}
+          aria-pressed={isActive}
         >
           {children}
         </Button>
@@ -62,7 +63,6 @@ export default function RichTextEditor({ value, onChange, disabled = false, plac
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
       }),
-      Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder }),
     ],
@@ -81,7 +81,7 @@ export default function RichTextEditor({ value, onChange, disabled = false, plac
     const normalizedCurrent = currentHtml === '<p></p>' ? '' : currentHtml
     const normalizedValue = value || ''
     if (normalizedCurrent !== normalizedValue) {
-      editor.commands.setContent(normalizedValue, false)
+      editor.commands.setContent(normalizedValue, { emitUpdate: false })
     }
   }, [value, editor])
 

@@ -151,7 +151,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
         setSelectedBookId('')
       }
       if (mode === 'edit' && doc) {
-        const seriesId = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id._id : (doc.series_id as string) || ''
+        const seriesId = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id._id : (doc.series_id as unknown as string | null) || ''
         const subjectId = doc.subject_id && typeof doc.subject_id === 'object' ? (doc.subject_id as any)._id : (doc.subject_id as string) || ''
         reset({
           title: doc.title,
@@ -274,17 +274,17 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
               - Create mode: toggle to engage link mode + book picker
              ────────────────────────────────────────────────────────── */}
           {existingLinkedBook ? (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
+            <div className="rounded-lg border border-border bg-accent p-3">
               <div className="flex items-start gap-2">
-                <Link2 className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                <Link2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  <p className="text-sm font-medium text-foreground">
                     Linked to eBook: {existingLinkedBook.title}
                   </p>
                   {existingLinkedBook.author && (
-                    <p className="text-xs text-blue-700 dark:text-blue-300 truncate">by {existingLinkedBook.author}</p>
+                    <p className="text-xs text-muted-foreground truncate">by {existingLinkedBook.author}</p>
                   )}
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Title, description, cover image, and the file are managed on the source Book and update automatically.
                     Edit those on the Book page.
                   </p>
@@ -317,14 +317,14 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
           {/* Book picker (create + linkMode only) */}
           {linkMode && mode === 'create' && (
             <div className="space-y-2">
-              <Label>Source eBook <span className="text-red-500">*</span></Label>
+              <Label>Source eBook <span className="text-danger">*</span></Label>
               <Popover open={bookPopoverOpen} onOpenChange={setBookPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
                     variant="outline"
                     role="combobox"
-                    className="w-full justify-between font-normal"
+                    className="w-full justify-between text-left font-normal"
                     disabled={isSubmitting || booksLoading}
                   >
                     <MarqueeText>
@@ -379,7 +379,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                 if (!b) return null
                 return (
                   <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3">
-                    <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0 flex-1 text-xs">
                       <p className="font-medium truncate">{b.title}</p>
                       <p className="text-muted-foreground truncate">
@@ -393,7 +393,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                 The document's title, description, cover, and file will mirror this eBook.
               </p>
               {booksTruncated && (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 dark:bg-amber-950/30 dark:border-amber-900/50">
+                <p className="text-xs text-warning bg-warning-soft border border-warning/30 rounded-md px-2 py-1">
                   Showing the first 5000 books. If you can't find the eBook you want, contact support.
                 </p>
               )}
@@ -403,9 +403,9 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
           {/* Title — hidden when linked (mirrored from book) */}
           {!isLinked && (
             <div className="space-y-2">
-              <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
+              <Label htmlFor="title">Title <span className="text-danger">*</span></Label>
               <Input id="title" placeholder="e.g., Anatomy Notes Chapter 1" disabled={isSubmitting} {...register('title')} />
-              {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
+              {errors.title && <p className="text-sm text-danger">{errors.title.message}</p>}
             </div>
           )}
 
@@ -414,7 +414,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Textarea id="description" placeholder="Document description..." rows={2} disabled={isSubmitting} {...register('description')} />
-              {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+              {errors.description && <p className="text-sm text-danger">{errors.description.message}</p>}
             </div>
           )}
 
@@ -444,7 +444,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                   variant="outline"
                   role="combobox"
                   aria-expanded={subjectPopoverOpen}
-                  className="w-full justify-between font-normal"
+                  className="w-full justify-between text-left font-normal"
                   disabled={isSubmitting}
                 >
                   <MarqueeText>
@@ -499,7 +499,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                         variant="outline"
                         role="combobox"
                         aria-expanded={seriesPopoverOpen}
-                        className="w-full justify-between font-normal"
+                        className="w-full justify-between text-left font-normal"
                         disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
                       >
                         <MarqueeText>
@@ -539,10 +539,10 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
                                 <span className="flex items-center gap-2 min-w-0 flex-1">
                                   <span className="truncate">{s.name}{typeof s.package_id === 'object' ? ` (${s.package_id.name})` : ''}</span>
                                   {s.publish_status === 'draft' && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-warning-soft text-warning border-transparent">Draft</span>
                                   )}
                                   {s.is_active === false && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-danger-soft text-danger border-transparent">Inactive</span>
                                   )}
                                 </span>
                               </CommandItem>
@@ -558,20 +558,20 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
             <p className="text-xs text-muted-foreground">
               All items shown including drafts and inactive
             </p>
-            {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}
+            {errors.series_id && <p className="text-sm text-danger">{errors.series_id.message}</p>}
           </div>
 
           {/* Document File — hidden for linked docs (file is mirrored from Book) */}
           {!isLinked && (
           <div className="space-y-2">
             <Label>
-              Document File {mode === 'create' && <span className="text-red-500">*</span>}
+              Document File {mode === 'create' && <span className="text-danger">*</span>}
             </Label>
 
             {/* Existing file info card (edit mode, no new file picked yet) */}
             {mode === 'edit' && doc && !docFile && (
               <div className="flex items-center gap-2 rounded-md border bg-background p-3">
-                <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                <FileText className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">
                     Current: {doc.file_format?.toUpperCase()} file
@@ -586,7 +586,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
 
             {docFile ? (
               <div className="flex items-center gap-2 rounded-md border bg-background p-3">
-                <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                <FileText className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{docFile.name}</p>
                   <p className="text-xs text-muted-foreground">
@@ -678,7 +678,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  className="h-full bg-primary rounded-full transition-[width] duration-300"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -687,7 +687,7 @@ export function DocumentFormModal({ open, onClose, onSubmit, document: doc, mode
 
           {/* Inline submit error (the parent ALSO shows an error modal for thrown errors) */}
           {linkSubmitError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 dark:bg-red-950/30 dark:border-red-900/50">
+            <p className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-md px-3 py-2">
               {linkSubmitError}
             </p>
           )}

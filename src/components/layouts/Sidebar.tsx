@@ -1,227 +1,120 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { ChevronDown, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/contexts/AuthContext'
-import {
-  LayoutDashboard,
-  Users,
-  BookOpen,
-  Video,
-  ShoppingBag,
-  Calendar,
-  CalendarRange,
-  BarChart3,
-  Bell,
-  Settings,
-  FileText,
-  GraduationCap,
-  ChevronLeft,
-  ChevronDown,
-  Package,
-  BookCopy,
-  CreditCard,
-  Receipt,
-  TrendingUp,
-  Tags,
-  BookImage,
-  Image,
-  FileCheck,
-  UserCog,
-  ShieldCheck,
-  Wrench,
-  Archive,
-  Download,
-  Compass,
-  type LucideIcon,
-} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { useAuth } from '@/contexts/AuthContext'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { activeHref, visibleNavigation, type NavItem } from './navigation'
 
-interface NavChild {
-  name: string
-  href: string
-  icon?: LucideIcon
-  /** Backend permission required to see this item. Omit = always visible. '*' = super admin only. */
-  permission?: string
+function initials(name?: string | null) {
+  if (!name) return '·'
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '·'
 }
-
-interface NavItem {
-  name: string
-  href?: string
-  icon: LucideIcon
-  badge?: string
-  children?: NavChild[]
-  /** Backend permission required to see this item. Omit = always visible. '*' = super admin only. */
-  permission?: string
-}
-
-const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Explorer', href: '/content/explorer', icon: Compass, badge: 'Beta', permission: '*' },
-  {
-    name: 'Users',
-    icon: Users,
-    children: [
-      { name: 'All Users', href: '/users', permission: 'users.read' },
-      { name: 'Subscriptions', href: '/users/subscriptions', permission: 'users.read' },
-      { name: 'Grant Access', href: '/users/grant-access', permission: 'users.update' },
-      { name: 'Email Excluded', href: '/users/email-excluded', permission: 'users.read' },
-    ],
-  },
-  {
-    name: 'Content',
-    icon: BookOpen,
-    children: [
-      { name: 'Subjects', href: '/content/subjects', permission: 'subjects.read' },
-      { name: 'Packages', href: '/content/packages', permission: 'packages.read' },
-      { name: 'Series', href: '/content/series', permission: 'series.read' },
-      { name: 'Modules', href: '/content/modules', permission: 'modules.read' },
-      { name: 'Videos', href: '/content/videos', permission: 'videos.read' },
-      { name: 'Video Reviews', href: '/content/video-reviews', permission: 'videos.read' },
-      { name: 'Video Tags', href: '/content/video-tags', permission: 'video_tags.read' },
-      { name: 'Documents', href: '/content/documents', permission: 'documents.read' },
-      { name: 'Recordings', href: '/content/recordings', permission: 'live_sessions.read' },
-      { name: 'Books', href: '/content/books', permission: 'books.read' },
-      { name: 'Banners', href: '/content/banners', permission: 'banners.read' },
-      { name: 'Home Sections', href: '/content/home-sections', permission: 'home-sections.read' },
-      { name: 'Forms', href: '/content/forms', permission: 'forms.read' },
-      { name: 'Tutorials', href: '/content/tutorials', permission: 'tutorials.read' },
-      { name: 'Archives', href: '/content/archives', permission: '*' },
-    ],
-  },
-  { name: 'Live Sessions', href: '/sessions', icon: Calendar, permission: 'live_sessions.read' },
-  { name: 'Workshops', href: '/workshops', icon: CalendarRange, permission: 'live_sessions.read' },
-  { name: 'Faculty', href: '/faculty', icon: GraduationCap, permission: 'faculty.read' },
-  {
-    name: 'Commerce',
-    icon: ShoppingBag,
-    children: [
-      { name: 'Purchases', href: '/commerce/purchases', permission: 'payments.read' },
-      { name: 'Payments', href: '/commerce/payments', permission: 'payments.read' },
-      { name: 'Invoices', href: '/commerce/invoices', permission: 'invoices.read' },
-      { name: 'Coupons', href: '/commerce/coupons', permission: 'coupons.read' },
-      { name: 'Book Orders', href: '/commerce/book-orders', permission: 'book_orders.read' },
-      { name: 'Revenue', href: '/commerce/revenue', permission: 'analytics.read' },
-    ],
-  },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics.read' },
-  { name: 'Exports', href: '/exports', icon: Download, permission: 'users.read' },
-  { name: 'Notifications', href: '/notifications', icon: Bell, permission: 'notifications.read' },
-  {
-    name: 'Settings',
-    icon: Settings,
-    children: [
-      { name: 'Admin Users', href: '/settings/admin-users', permission: 'admin_users.read' },
-      { name: 'Admin Roles', href: '/settings/admin-roles', permission: 'admin_roles.read' },
-      { name: 'App Settings', href: '/settings/app', permission: 'settings.read' },
-      { name: 'Web Store Redirect', href: '/settings/web-store-redirect', permission: 'settings.read' },
-    ],
-  },
-]
 
 interface SidebarProps {
-  isOpen: boolean
-  onToggle: () => void
-  onClose: () => void
+  /** Desktop: icons only. Ignored on small screens, where the menu is a drawer. */
+  collapsed: boolean
+  onToggleCollapsed: () => void
+  isDesktop: boolean
+  mobileOpen: boolean
+  onMobileClose: () => void
 }
 
-export function Sidebar({ isOpen, onToggle, onClose }: SidebarProps) {
-  const { hasPermission } = useAuth()
+export function Sidebar({ collapsed, onToggleCollapsed, isDesktop, mobileOpen, onMobileClose }: SidebarProps) {
+  const { hasPermission, user } = useAuth()
+  const { pathname } = useLocation()
+  const asideRef = useRef<HTMLElement>(null)
+  const items = useMemo(() => visibleNavigation(hasPermission), [hasPermission, user])
+  const active = activeHref(items, pathname)
+  const rail = isDesktop && collapsed
+  const hidden = !isDesktop && !mobileOpen
 
-  // Filter nav by the current admin's permissions. A parent with children is
-  // dropped when none of its children are visible. Entries without a
-  // `permission` are always shown.
-  const visibleNavigation = navigation
-    .map((item) => {
-      if (item.children) {
-        const children = item.children.filter(
-          (child) => !child.permission || hasPermission(child.permission)
-        )
-        return children.length > 0 ? { ...item, children } : null
-      }
-      return !item.permission || hasPermission(item.permission) ? item : null
-    })
-    .filter((item): item is NavItem => item !== null)
+  // Drawer: move focus in, close on Escape, give focus back.
+  useEffect(() => {
+    if (isDesktop || !mobileOpen) return
+    const before = document.activeElement as HTMLElement | null
+    asideRef.current?.querySelector<HTMLElement>('a, button')?.focus()
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onMobileClose() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      before?.focus?.()
+    }
+  }, [isDesktop, mobileOpen, onMobileClose])
 
   return (
     <TooltipProvider delayDuration={0}>
-      {/* Mobile backdrop overlay */}
       <div
+        aria-hidden="true"
         className={cn(
-          'fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 lg:hidden',
-          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          'fixed inset-0 z-[45] touch-none bg-ink/50 transition-opacity duration-300 lg:hidden',
+          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
-        onClick={onClose}
+        onClick={onMobileClose}
       />
       <aside
+        ref={asideRef}
+        aria-label="Main menu"
+        // Off-screen must also mean out of the tab order
+        inert={hidden}
         className={cn(
-          'flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out',
+          'flex shrink-0 flex-col bg-rail text-rail-foreground transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none lg:transition-none',
           // Mobile: fixed overlay, always full-width, slide in/out
           'fixed inset-y-0 left-0 z-50 w-64',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
-          // Desktop: relative (part of flex flow), no translate, width toggles
-          'lg:relative lg:z-auto lg:translate-x-0',
-          isOpen ? 'lg:w-64' : 'lg:w-[68px]'
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          // Desktop: in the flow, width toggles. Above the header (z-40), so the
+          // collapsed arrow, which sits past the rail's edge, stays visible.
+          'lg:relative lg:z-[45] lg:translate-x-0',
+          rail ? 'lg:w-[68px]' : 'lg:w-64'
         )}
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center gap-2 border-b border-border px-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            P
-          </div>
-          {isOpen && (
-            <span className="text-lg font-semibold tracking-tight">
-              PGME
-            </span>
-          )}
+        {/* Brand edge: the cobalt-to-sky rule that runs down the rail */}
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-[2px]" style={{ backgroundImage: 'var(--brand-gradient-v)' }} />
+
+        {/* Logo and the collapse arrow, as on the live panel */}
+        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-white/[0.06] px-4">
+          <Link to="/" aria-label="PGME admin, go to dashboard" className="flex shrink-0 items-center gap-2 rounded-lg pointer-coarse:h-10">
+            <img src="/favicon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-9 w-9 shrink-0" />
+            {!rail && <span className="whitespace-nowrap font-display text-lg font-semibold tracking-tight text-white">PGME</span>}
+          </Link>
           <Button
             variant="ghost"
             size="icon"
-            onClick={onToggle}
-            className={cn('ml-auto h-8 w-8 shrink-0', !isOpen && 'ml-0')}
+            onClick={isDesktop ? onToggleCollapsed : onMobileClose}
+            aria-label={rail ? 'Expand menu' : isDesktop ? 'Collapse menu' : 'Close menu'}
+            aria-expanded={!rail}
+            className={cn(
+              'ml-auto h-8 w-8 shrink-0',
+              rail ? 'ml-0 text-foreground' : 'text-rail-muted hover:bg-rail-hover hover:text-white'
+            )}
           >
-            <ChevronLeft
-              className={cn(
-                'h-4 w-4 transition-transform duration-200',
-                !isOpen && 'rotate-180'
-              )}
-            />
+            <ChevronLeft aria-hidden="true" className={cn('h-4 w-4 transition-transform duration-200', rail && 'rotate-180')} />
           </Button>
         </div>
 
-        {/* Navigation */}
-        <ScrollArea className="flex-1 py-3">
-          <nav className="space-y-1 px-2">
-            {visibleNavigation.map((item) => (
-              <NavItemComponent
-                key={item.name}
-                item={item}
-                isOpen={isOpen}
-              />
+        <nav aria-label="Sections" className="pg-rail-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain py-3">
+          <ul className="space-y-1 px-2">
+            {items.map((item) => (
+              <li key={item.name}>
+                {rail ? <RailItem item={item} active={active} /> : <FullItem item={item} active={active} />}
+              </li>
             ))}
-          </nav>
-        </ScrollArea>
+          </ul>
+        </nav>
 
-        {/* User Profile (footer) */}
-        <div className="border-t border-border p-3">
-          <div className={cn('flex items-center gap-3', !isOpen && 'justify-center')}>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-              SA
-            </div>
-            {isOpen && (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">Super Admin</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  admin@pgme.com
-                </p>
-              </div>
+        <div className="shrink-0 border-t border-white/[0.06] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className={cn('flex items-center gap-3 overflow-hidden', rail && 'justify-center')} title={rail ? user?.name || undefined : undefined}>
+            <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white">
+              {initials(user?.name)}
+            </span>
+            {!rail && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-white">{user?.name || 'Signed in'}</span>
+                <span className="block truncate text-xs text-rail-muted">{user?.role_name || user?.email || ''}</span>
+              </span>
             )}
           </div>
         </div>
@@ -230,161 +123,150 @@ export function Sidebar({ isOpen, onToggle, onClose }: SidebarProps) {
   )
 }
 
-function NavItemComponent({
-  item,
-  isOpen,
-}: {
-  item: NavItem
-  isOpen: boolean
-}) {
-  const location = useLocation()
-  const isChildRoute = useCallback((href: string) => {
-    return location.pathname === href || location.pathname.startsWith(href + '/')
-  }, [location.pathname])
+const railButton = 'relative flex h-10 w-full items-center justify-center rounded-lg transition-colors'
 
-  const [isExpanded, setIsExpanded] = useState(() => {
-    if (item.children) {
-      return item.children.some((child) => isChildRoute(child.href))
-    }
-    return false
-  })
-
-  // Auto-expand when navigating to a child route
-  useEffect(() => {
-    if (item.children) {
-      const shouldExpand = item.children.some((child) => isChildRoute(child.href))
-      if (shouldExpand) setIsExpanded(true)
-    }
-  }, [item.children, isChildRoute])
-
+/** Collapsed: single pages are tooltipped links, groups open a flyout. */
+function RailItem({ item, active }: { item: NavItem; active: string | null }) {
+  const [open, setOpen] = useState(false)
+  const { pathname, search } = useLocation()
   const Icon = item.icon
-  const isActive = item.href ? location.pathname === item.href : false
-  const hasActiveChild = item.children?.some(
-    (child) => isChildRoute(child.href)
-  )
+  useEffect(() => { setOpen(false) }, [pathname, search])
 
-  // Collapsed sidebar with tooltip
-  if (!isOpen) {
-    if (item.children) {
-      return (
-        <div className="space-y-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={cn(
-                  'flex h-10 w-full items-center justify-center rounded-lg transition-colors',
-                  hasActiveChild
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                )}
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              {item.name}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      )
-    }
-
+  if (!item.children) {
+    const isActive = active === item.href
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <Link
             to={item.href!}
-            className={cn(
-              'relative flex h-10 items-center justify-center rounded-lg transition-colors',
-              isActive
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
+            aria-label={item.name}
+            aria-current={isActive ? 'page' : undefined}
+            className={cn(railButton, isActive ? 'bg-rail-active text-white' : 'text-rail-muted hover:bg-rail-hover hover:text-white')}
           >
-            <Icon className="h-5 w-5 shrink-0" />
-            {item.badge && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-medium text-primary-foreground">
-                !
-              </span>
-            )}
+            <Icon aria-hidden="true" className="h-5 w-5" />
           </Link>
         </TooltipTrigger>
-        <TooltipContent side="right">
-          {item.name}
-          {item.badge && ` (${item.badge})`}
-        </TooltipContent>
+        <TooltipContent side="right">{item.name}</TooltipContent>
       </Tooltip>
     )
   }
 
-  // Expanded sidebar - parent with children
-  if (item.children) {
-    return (
-      <div>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={cn(
-            'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-            hasActiveChild
-              ? 'text-primary'
-              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-          )}
-        >
-          <Icon className="h-5 w-5 shrink-0" />
-          <span className="flex-1 text-left">{item.name}</span>
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 shrink-0 transition-transform duration-200',
-              isExpanded && 'rotate-180'
-            )}
-          />
-        </button>
-        {isExpanded && (
-          <div className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-            {item.children.map((child) => {
-              const childActive = location.pathname === child.href
-              return (
+  const hasActive = item.children.some((c) => c.href === active)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip open={open ? false : undefined}>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={`${item.name} menu`}
+              aria-expanded={open}
+              className={cn(railButton, hasActive ? 'bg-rail-active text-white' : open ? 'bg-rail-hover text-white' : 'text-rail-muted hover:bg-rail-hover hover:text-white')}
+            >
+              <Icon aria-hidden="true" className="h-5 w-5" />
+              <span aria-hidden="true" className="absolute right-1 top-1/2 h-0 w-0 -translate-y-1/2 border-y-[3px] border-l-[4px] border-y-transparent border-l-current opacity-50" />
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="right">{item.name}</TooltipContent>
+      </Tooltip>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={14}
+        collisionPadding={12}
+        className="max-h-[min(70dvh,480px)] w-56 overflow-y-auto rounded-lg border-border p-1.5"
+      >
+        <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">{item.name}</p>
+        <ul>
+          {item.children.map((child) => {
+            const isActive = child.href === active
+            return (
+              <li key={child.href}>
                 <Link
-                  key={child.name}
                   to={child.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-all',
-                    childActive
-                      ? 'bg-primary text-primary-foreground shadow-sm border-l-2 border-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    'flex min-h-9 items-center rounded-md px-2.5 py-1.5 text-[13.5px] transition-colors',
+                    isActive ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground hover:bg-muted'
                   )}
                 >
                   {child.name}
                 </Link>
-              )
-            })}
-          </div>
+              </li>
+            )
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function FullItem({ item, active }: { item: NavItem; active: string | null }) {
+  const hasActive = !!item.children?.some((c) => c.href === active)
+  const [open, setOpen] = useState(hasActive)
+  const Icon = item.icon
+  const listId = `nav-${item.name.replace(/\s+/g, '-').toLowerCase()}`
+
+  // Arriving on one of its pages opens the group; it can still be closed after.
+  useEffect(() => { if (hasActive) setOpen(true) }, [hasActive])
+
+  if (!item.children) {
+    const isActive = active === item.href
+    return (
+      <Link
+        to={item.href!}
+        aria-current={isActive ? 'page' : undefined}
+        className={cn(
+          'flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+          isActive ? 'bg-rail-active text-white' : 'text-rail-foreground/85 hover:bg-rail-hover hover:text-white'
         )}
-      </div>
+      >
+        <Icon aria-hidden="true" className="h-5 w-5 shrink-0" />
+        <span className="truncate">{item.name}</span>
+      </Link>
     )
   }
 
-  // Expanded sidebar - single item
   return (
-    <Link
-      to={item.href!}
-      className={cn(
-        'flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-        isActive
-          ? 'bg-primary text-primary-foreground shadow-sm'
-          : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        className={cn(
+          'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+          hasActive ? 'text-white' : 'text-rail-foreground/85 hover:bg-rail-hover hover:text-white'
+        )}
+      >
+        <Icon aria-hidden="true" className="h-5 w-5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+        {hasActive && !open && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-sky" />}
+        <ChevronDown aria-hidden="true" className={cn('h-4 w-4 shrink-0 transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul id={listId} className="ml-4 mt-1 space-y-0.5 border-l border-white/[0.1] pl-3">
+          {item.children.map((child) => {
+            const isActive = child.href === active
+            return (
+              <li key={child.href}>
+                <Link
+                  to={child.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    'flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors pointer-coarse:h-10',
+                    isActive ? 'bg-rail-active text-white shadow-sm' : 'text-rail-muted hover:bg-rail-hover hover:text-white'
+                  )}
+                >
+                  <span className="truncate">{child.name}</span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       )}
-    >
-      <Icon className="h-5 w-5 shrink-0" />
-      <span className="flex-1">{item.name}</span>
-      {item.badge && (
-        <Badge
-          className="ml-auto h-5 px-1.5 text-[10px] font-medium bg-blue-500 text-white border-0"
-        >
-          {item.badge}
-        </Badge>
-      )}
-    </Link>
+    </>
   )
 }

@@ -1,241 +1,103 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/common/DataTable'
-import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { PackageFormModal } from '@/components/packages/PackageFormModal'
-import { Link } from 'react-router-dom'
-import { Plus, Package as PackageIcon, Layers } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Layers, Package as PackageIcon, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { packagesService, Package, PackageFormData } from '@/services/packages.service'
-import { subjectsService, Subject } from '@/services/subjects.service'
+import { PageHeader } from '@/components/common/PageHeader'
+import { DataTable } from '@/components/common/DataTable'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
+import { SearchWithFilters, type FilterConfig } from '@/components/common/SearchBar'
+import { Button } from '@/components/ui/button'
+import { Segmented, StaleNotice } from '@/components/users/kit'
+import { ensureOk, errText, unwrap, usePageInRange, useResource, useUrlSearch, useUrlState } from '@/components/users/lib'
+import { useAuth } from '@/contexts/AuthContext'
+import { packagesService, type Package } from '@/services/packages.service'
+import { subjectsService, type Subject } from '@/services/subjects.service'
+import type { ListResponse } from '@/types/api.types'
 import { usePackagesColumns } from './PackagesPage.columns'
+import { PackageSubscriptionsTable } from './PackageSubscriptionsTable'
 
 export function PackagesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('packages.create')
+  const canUpdate = hasPermission('packages.update')
 
-  // State
-  const [packages, setPackages] = useState<Package[]>([])
-  const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
-  const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
-  const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
-  const [saleFilter, setSaleFilter] = useState(searchParams.get('sale') || 'all')
-  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
+  const { state, set, page, setPage } = useUrlState({ search: '', subject: 'all', status: 'all', sale: 'all', publish_status: 'all', view: 'packages' })
+  const [search, setSearch] = useUrlSearch(state.search, (v) => set({ search: v }))
+  // "subscriptions" lists every tier as its own line (owner, 23 Nov)
+  const view = state.view === 'subscriptions' ? 'subscriptions' : 'packages'
+  const pageSize = view === 'subscriptions' ? 100 : 20
 
-  // Dropdown data
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const { data, loading, error, reload, setData } = useResource<ListResponse<Package>>(async () => unwrap(await packagesService.getAll({
+    page,
+    // The subscriptions view numbers every length across the catalogue, so it loads the whole list in one go
+    limit: pageSize,
+    search: state.search || undefined,
+    subject_id: state.subject !== 'all' ? state.subject : undefined,
+    is_active: state.status === 'all' ? null : state.status === 'active',
+    is_on_sale: state.sale === 'all' ? null : state.sale === 'on_sale',
+    publish_status: state.publish_status === 'all' ? null : state.publish_status,
+  }), 'Failed to load packages'), [page, pageSize, state.search, state.subject, state.status, state.sale, state.publish_status])
 
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null)
-  const [publishModal, setPublishModal] = useState<{
-    entityId: string;
-    action: 'publish' | 'unpublish';
-  } | null>(null)
+  const packages = data?.entities || []
+  const totalPages = data?.pagination?.totalPages || 1
+  usePageInRange(page, data ? totalPages : undefined, loading, setPage)
 
-  // Fetch subjects for filter dropdown
+  // Rows shown on earlier pages, so numbering continues if the catalogue ever spans pages
+  const [offsets, setOffsets] = useState<Record<number, number>>({})
   useEffect(() => {
-    subjectsService.getSubjects({ limit: 100, sort_by: 'name', sort_order: 'asc' }).then((res) => {
-      if (res.success && res.data) setSubjects(res.data.entities)
-    })
-  }, [])
+    if (!data || loading || view !== 'subscriptions') return
+    const rowsHere = data.entities.reduce((n, p) => n + Math.max(1, (p.tiers || []).length), 0)
+    setOffsets((prev) => ({ ...prev, [page + 1]: (prev[page] ?? 0) + rowsHere }))
+  }, [data, loading, page, view])
 
-  const { nextFetchId, isStale } = useLatestFetch()
+  const subjects = useResource<Subject[]>(async () => unwrap(await subjectsService.getSubjects({ limit: 100, sort_by: 'name', sort_order: 'asc' })).entities, [])
 
-  // Fetch packages
-  const fetchPackages = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
+  const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
+  const [toggling, setToggling] = useState<string | null>(null)
+
+  const toggleActive = async (pkg: Package) => {
+    if (toggling) return
+    setToggling(pkg._id)
     try {
-      const response = await packagesService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
-        is_active: activeFilter === 'all' ? null : activeFilter === 'active',
-        is_on_sale: saleFilter === 'all' ? null : saleFilter === 'on_sale',
-        publish_status: publishFilter === 'all' ? null : publishFilter,
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setPackages(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load packages')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load packages')
+      ensureOk(await packagesService.toggleActive(pkg._id, !pkg.is_active), 'Failed to update status')
+      setData((prev) => prev && { ...prev, entities: prev.entities.map((p) => (p._id === pkg._id ? { ...p, is_active: !pkg.is_active } : p)) })
+      toast.success(`Package ${!pkg.is_active ? 'activated' : 'deactivated'} successfully`)
+      void reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to update status'))
     } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, debouncedSearch, subjectFilter, activeFilter, saleFilter, publishFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchPackages() }, [fetchPackages])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (subjectFilter !== 'all') params.subject = subjectFilter
-    if (activeFilter !== 'all') params.status = activeFilter
-    if (saleFilter !== 'all') params.sale = saleFilter
-    if (publishFilter !== 'all') params.publish_status = publishFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [subjectFilter, activeFilter, saleFilter, publishFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, subjectFilter, activeFilter, saleFilter, publishFilter])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedPackage(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (pkg: Package) => {
-    setModalMode('edit')
-    setSelectedPackage(pkg)
-    setFormModalOpen(true)
-  }
-
-  const handleFormSubmit = async (data: PackageFormData) => {
-    try {
-      if (modalMode === 'create') {
-        const response = await packagesService.create(data)
-        if (response.success) {
-          toast.success('Package created successfully')
-          fetchPackages()
-        } else {
-          toast.error(response.message || 'Failed to create package')
-          throw new Error(response.message || 'Failed to create package')
-        }
-      } else if (selectedPackage) {
-        const response = await packagesService.update(selectedPackage._id, data)
-        if (response.success) {
-          toast.success('Package updated successfully')
-          fetchPackages()
-        } else {
-          toast.error(response.message || 'Failed to update package')
-          throw new Error(response.message || 'Failed to update package')
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save package')
-      throw error
+      setToggling(null)
     }
   }
 
-  const handleToggleActive = async (pkg: Package) => {
-    try {
-      const response = await packagesService.toggleActive(pkg._id, !pkg.is_active)
-      if (response.success) {
-        toast.success(`Package ${!pkg.is_active ? 'activated' : 'deactivated'} successfully`)
-        fetchPackages()
-      } else {
-        toast.error(response.message || 'Failed to update status')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update status')
-    }
-  }
-
-  // Filters
   const filters: FilterConfig[] = [
-    {
-      key: 'subject',
-      label: 'Subject',
-      type: 'select',
-      searchable: true,
-      options: [
-        { label: 'All Subjects', value: 'all' },
-        ...subjects.map((s) => ({ label: s.name, value: s._id })),
-      ],
-      placeholder: 'Filter by subject',
-      defaultValue: 'all',
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
-      placeholder: 'Filter by status',
-      defaultValue: 'all',
-    },
-    {
-      key: 'sale',
-      label: 'Sale',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'On Sale', value: 'on_sale' },
-        { label: 'Not on Sale', value: 'not_on_sale' },
-      ],
-      placeholder: 'Filter by sale',
-      defaultValue: 'all',
-    },
-    {
-      key: 'publish_status',
-      label: 'Publish Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Published', value: 'published' },
-        { label: 'Draft', value: 'draft' },
-      ],
-      placeholder: 'Filter by publish status',
-      defaultValue: 'all',
-    },
+    { key: 'subject', label: 'Subject', type: 'select', searchable: true, placeholder: 'Filter by subject', defaultValue: 'all', options: [{ label: 'All Subjects', value: 'all' }, ...(subjects.data || []).map((s) => ({ label: s.name, value: s._id }))] },
+    { key: 'status', label: 'Status', type: 'select', placeholder: 'Filter by status', defaultValue: 'all', options: [{ label: 'All', value: 'all' }, { label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }] },
+    { key: 'sale', label: 'Sale', type: 'select', placeholder: 'Filter by sale', defaultValue: 'all', options: [{ label: 'All', value: 'all' }, { label: 'On Sale', value: 'on_sale' }, { label: 'Not on Sale', value: 'not_on_sale' }] },
+    { key: 'publish_status', label: 'Publish Status', type: 'select', placeholder: 'Filter by publish status', defaultValue: 'all', options: [{ label: 'All', value: 'all' }, { label: 'Published', value: 'published' }, { label: 'Draft', value: 'draft' }] },
   ]
-
-  const handlePublishAction = useCallback((pkg: Package, action: 'publish' | 'unpublish') => {
-    setPublishModal({ entityId: pkg._id, action });
-  }, []);
-
-  const handleNavigate = (pkg: Package) => {
-    navigate(`/content/packages/${pkg._id}`)
-  }
+  const hasFilters = !!state.search || state.subject !== 'all' || state.status !== 'all' || state.sale !== 'all' || state.publish_status !== 'all'
+  const clearFilters = () => { setSearch(''); set({ search: '', subject: 'all', status: 'all', sale: 'all', publish_status: 'all' }) }
 
   const columns = usePackagesColumns({
-    onNavigate: handleNavigate,
-    onEdit: handleEdit,
-    onToggleActive: handleToggleActive,
-    onPublishAction: handlePublishAction,
+    onNavigate: (pkg) => navigate(`/content/packages/${pkg._id}`),
+    onEdit: canUpdate ? (pkg) => navigate(`/content/packages/${pkg._id}/edit`) : undefined,
+    onToggleActive: canUpdate ? toggleActive : undefined,
+    togglingId: toggling,
+    onPublishAction: canUpdate ? (pkg, action) => setPublishModal({ entityId: pkg._id, action }) : undefined,
   })
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
       <PageHeader
         title="Packages"
         description="Manage course packages, pricing, and enrollment"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Packages' }]}
         action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/content/package-types">
-                <Layers className="mr-2 h-4 w-4" />Manage Types
-              </Link>
-            </Button>
-            <Button onClick={handleCreate}>
-              <Plus className="mr-2 h-4 w-4" />Add Package
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" asChild className="bg-card"><Link to="/content/package-types"><Layers aria-hidden="true" />Manage Types</Link></Button>
+            {canCreate && <Button asChild><Link to="/content/packages/new"><Plus aria-hidden="true" />Add Package</Link></Button>}
           </div>
         }
       />
@@ -245,65 +107,65 @@ export function PackagesPage() {
         onChange={setSearch}
         placeholder="Search packages..."
         filters={filters}
-        activeFilters={{ subject: subjectFilter, status: activeFilter, sale: saleFilter, publish_status: publishFilter }}
-        onFiltersChange={(f) => {
-          if (f.subject !== undefined) setSubjectFilter(f.subject)
-          if (f.status !== undefined) setActiveFilter(f.status)
-          if (f.sale !== undefined) setSaleFilter(f.sale)
-          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
-        }}
+        activeFilters={{ subject: state.subject, status: state.status, sale: state.sale, publish_status: state.publish_status }}
+        onFiltersChange={(f) => set({ subject: f.subject ?? state.subject, status: f.status ?? state.status, sale: f.sale ?? state.sale, publish_status: f.publish_status ?? state.publish_status })}
       />
 
-      <DataTable
-        data={packages}
-        columns={columns}
-        isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
-        emptyState={{
-          icon: PackageIcon,
-          title: debouncedSearch || subjectFilter !== 'all' || activeFilter !== 'all' || saleFilter !== 'all' || publishFilter !== 'all'
-            ? 'No packages found matching your filters'
-            : 'No packages yet',
-          description: !debouncedSearch && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all'
-            ? 'Get started by creating your first package'
-            : undefined,
-          action: !debouncedSearch && subjectFilter === 'all' && activeFilter === 'all' && saleFilter === 'all' && publishFilter === 'all' ? (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Create your first package
-            </Button>
-          ) : undefined,
-        }}
-        onRowClick={handleNavigate}
-        getRowKey={(pkg) => pkg._id}
+      <Segmented
+        label="View" value={view}
+        onChange={(v) => { setOffsets({}); set({ view: v }) }}
+        options={[{ value: 'packages', label: 'Packages' }, { value: 'subscriptions', label: 'Subscriptions (one row per length)' }]}
       />
 
-      <PackageFormModal
-        open={formModalOpen}
-        onClose={() => { setFormModalOpen(false); fetchPackages() }}
-        onSubmit={handleFormSubmit}
-        pkg={selectedPackage}
-        mode={modalMode}
-      />
+      {error && data && <StaleNotice message={error} onRetry={() => reload()} />}
 
-      {publishModal && (
-        <PublishConfirmModal
-          open={!!publishModal}
-          onOpenChange={(open) => { if (!open) setPublishModal(null); }}
-          entityType="package"
-          entityId={publishModal.entityId}
-          action={publishModal.action}
-          onSuccess={() => {
-            setPublishModal(null);
-            fetchPackages();
+      {view === 'subscriptions' ? (
+        <>
+          <PackageSubscriptionsTable
+            packages={packages} loading={loading} error={!data ? error : null} onRetry={() => reload()}
+            firstSerial={(offsets[page] ?? 0) + 1} onClearFilters={hasFilters ? clearFilters : undefined}
+          />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Page {page} of {totalPages}</span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="bg-card" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Button size="sm" variant="outline" className="bg-card" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <DataTable
+          data={packages}
+          columns={columns}
+          isLoading={loading}
+          error={error}
+          onRetry={() => reload()}
+          pagination={{ currentPage: page, totalPages, totalCount: data?.pagination?.total || 0, onPageChange: setPage }}
+          emptyState={{
+            icon: PackageIcon,
+            title: hasFilters ? 'No packages found matching your filters' : 'No packages yet',
+            description: hasFilters ? undefined : 'Get started by creating your first package',
+            action: hasFilters
+              ? <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+              : canCreate ? <Button asChild variant="outline" size="sm"><Link to="/content/packages/new"><Plus aria-hidden="true" />Create your first package</Link></Button> : undefined,
           }}
+          onRowClick={(pkg) => navigate(`/content/packages/${pkg._id}`)}
+          getRowKey={(pkg) => pkg._id}
         />
       )}
 
+      {publishModal && (
+        <PublishConfirmModal
+          open
+          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          entityType="package"
+          entityId={publishModal.entityId}
+          action={publishModal.action}
+          onSuccess={() => { setPublishModal(null); void reload({ silent: true }) }}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 export function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-dvh bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl bg-white rounded-lg shadow p-8 sm:p-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
         <p className="text-lg font-semibold text-gray-700">PGME (PGME Medical Education LLP)</p>

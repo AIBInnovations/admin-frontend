@@ -26,34 +26,34 @@ export function ZohoSyncCard() {
         setResult(res.data)
         const { checked, fixed, failed } = res.data
         if (failed > 0) {
-          toast.error(`Checked ${checked} — fixed ${fixed}, ${failed} failed (see details below)`)
+          toast.error(`Checked ${checked}: fixed ${fixed}, ${failed} failed (see details below)`)
         } else if (fixed > 0) {
-          toast.success(`Checked ${checked} — fixed ${fixed} price mismatch${fixed === 1 ? '' : 'es'}`)
+          toast.success(`Checked ${checked}: fixed ${fixed} price mismatch${fixed === 1 ? '' : 'es'}`)
         } else {
-          toast.success(`Checked ${checked} — all prices already in sync`)
+          toast.success(`Checked ${checked}: all prices already in sync`)
         }
       } else {
         toast.error(res.message || 'Sync failed')
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Sync failed — it may still be running on the server')
+    } catch (err) {
+      toast.error((err instanceof Error && err.message) || 'Sync failed. It may still be running on the server')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Card className="mt-6">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
+    <Card className="rounded-xl shadow-card">
+      <CardHeader className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <CardTitle className="text-base font-semibold">Zoho Price Sync</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
+          <CardTitle className="text-[15px] font-semibold">Zoho Price Sync</CardTitle>
+          <p className="mt-1 text-[13px] text-muted-foreground">
             Checks every package, book, session, and form price against its live Zoho item and fixes any mismatch.
           </p>
         </div>
         <Button onClick={handleSync} disabled={loading} size="sm" className="shrink-0">
           {loading ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking...</>
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking…</>
           ) : (
             <><RefreshCw className="mr-2 h-4 w-4" />Sync Prices</>
           )}
@@ -66,17 +66,17 @@ export function ZohoSyncCard() {
             <span className="text-muted-foreground">Checked: <strong className="text-foreground">{result.checked}</strong></span>
             <span className="text-muted-foreground">Already matched: <strong className="text-foreground">{result.matched}</strong></span>
             {result.fixed > 0 && (
-              <span className="text-emerald-600">Fixed: <strong>{result.fixed}</strong></span>
+              <span className="text-success">Fixed: <strong>{result.fixed}</strong></span>
             )}
             {result.failed > 0 && (
-              <span className="text-red-600">Failed: <strong>{result.failed}</strong></span>
+              <span className="text-danger">Failed: <strong>{result.failed}</strong></span>
             )}
           </div>
 
           {result.mismatches.length === 0 ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              No drift found — Mongo and Zoho prices match everywhere.
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              No drift found. Mongo and Zoho prices match everywhere.
             </div>
           ) : (
             <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
@@ -87,11 +87,11 @@ export function ZohoSyncCard() {
                     <span className="text-muted-foreground capitalize">{m.type.replace('_', ' ')}</span>
                   </div>
                   {m.status === 'fixed' ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 text-[10px] shrink-0 whitespace-nowrap">
+                    <Badge className="bg-success-soft text-success border-transparent text-xs shrink-0 whitespace-nowrap">
                       ₹{m.zohoPriceBefore} → ₹{m.zohoPriceAfter}
                     </Badge>
                   ) : (
-                    <Badge className="bg-red-500/10 text-red-600 border-red-200 text-[10px] shrink-0 max-w-[200px] truncate" title={m.error}>
+                    <Badge className="bg-danger-soft text-danger border-transparent text-xs shrink-0 max-w-[200px] truncate" title={m.error}>
                       {m.error || 'Failed'}
                     </Badge>
                   )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
@@ -62,7 +62,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
     formState: { errors, isSubmitting },
     reset, setValue, watch,
   } = useForm<UpcomingFormValues>({
-    resolver: zodResolver(upcomingSchema),
+    resolver: zodResolver(upcomingSchema) as Resolver<UpcomingFormValues>,
     defaultValues: {
       title: '', description: '', module_id: '', faculty_id: '',
       display_order: 0, is_free: false, scheduled_release_at: '',
@@ -119,7 +119,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-orange-500" />
+            <Clock className="h-5 w-5 text-warning" />
             Add Upcoming Video
           </DialogTitle>
           <DialogDescription>
@@ -130,22 +130,22 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="upcoming-title">Title <span className="text-red-500">*</span></Label>
+            <Label htmlFor="upcoming-title">Title <span className="text-danger">*</span></Label>
             <Input id="upcoming-title" placeholder="e.g., Introduction to Anatomy" disabled={isSubmitting} {...register('title')} />
-            {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
+            {errors.title && <p className="text-sm text-danger">{errors.title.message}</p>}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="upcoming-description">Description <span className="text-red-500">*</span></Label>
+            <Label htmlFor="upcoming-description">Description <span className="text-danger">*</span></Label>
             <Textarea id="upcoming-description" placeholder="Brief description of the upcoming video..." rows={3} disabled={isSubmitting} {...register('description')} />
-            {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+            {errors.description && <p className="text-sm text-danger">{errors.description.message}</p>}
           </div>
 
           {/* Module + Faculty */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Module <span className="text-red-500">*</span></Label>
+              <Label>Module <span className="text-danger">*</span></Label>
               <Controller
                 name="module_id" control={control}
                 render={({ field }) => (
@@ -154,7 +154,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                       <Button
                         variant="outline" role="combobox"
                         disabled={isSubmitting || !!defaultModuleId}
-                        className="w-full justify-between font-normal h-9"
+                        className="w-full justify-between text-left font-normal h-9"
                       >
                         <MarqueeText>
                           {field.value
@@ -193,7 +193,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                   </Popover>
                 )}
               />
-              {errors.module_id && <p className="text-sm text-red-500">{errors.module_id.message}</p>}
+              {errors.module_id && <p className="text-sm text-danger">{errors.module_id.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Faculty</Label>
@@ -205,7 +205,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                       <Button
                         variant="outline" role="combobox"
                         disabled={isSubmitting}
-                        className="w-full justify-between font-normal h-9"
+                        className="w-full justify-between text-left font-normal h-9"
                       >
                         <MarqueeText>
                           {field.value ? faculty.find(f => f._id === field.value)?.name || 'Select faculty' : 'None'}
@@ -262,7 +262,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
                 {...register('display_order')}
               />
               <p className="text-xs text-muted-foreground">Order within the module (0 = auto)</p>
-              {errors.display_order && <p className="text-sm text-red-500">{errors.display_order.message}</p>}
+              {errors.display_order && <p className="text-sm text-danger">{errors.display_order.message}</p>}
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Access</Label>
@@ -282,7 +282,7 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
           {/* Schedule Release Date (required) */}
           <div className="space-y-2">
             <Label htmlFor="upcoming-scheduled_release_at" className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-orange-500" /> Release Date <span className="text-red-500">*</span>
+              <Clock className="h-3.5 w-3.5 text-warning" /> Release Date <span className="text-danger">*</span>
             </Label>
             <div className="flex gap-2">
               <Input
@@ -308,24 +308,24 @@ export function UpcomingVideoModal({ open, onClose, onSubmit, defaultModuleId }:
               When will this video be available? Time is in your local timezone.
             </p>
             {watchScheduledDate && new Date(watchScheduledDate) < new Date() && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning">
                 This date is in the past — the video will appear as available immediately.
               </p>
             )}
             {errors.scheduled_release_at && (
-              <p className="text-sm text-red-500">{errors.scheduled_release_at.message}</p>
+              <p className="text-sm text-danger">{errors.scheduled_release_at.message}</p>
             )}
           </div>
 
           {submitError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            <div className="rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
               {submitError}
             </div>
           )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-orange-600 hover:bg-orange-700">
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</>
               ) : (

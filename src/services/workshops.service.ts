@@ -95,8 +95,9 @@ export interface WorkshopFormData {
   subject_id: string
   faculty_ids?: string[]
   days?: WorkshopDayInput[]
-  thumbnail_url?: string
-  thumbnail_s3_key?: string
+  /** Send null to clear it. */
+  thumbnail_url?: string | null
+  thumbnail_s3_key?: string | null
   /** Brochure PDF. Send null to clear it without touching the thumbnail. */
   brochure_url?: string | null
   brochure_s3_key?: string | null

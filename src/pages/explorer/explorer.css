@@ -1,0 +1,9 @@
+/* The Explorer fills the space under the header; its panes scroll, the page
+   does not. Scoped with :has so no other page is affected. */
+#main-content:has([data-explorer]) { padding: 0; overflow: hidden; }
+#main-content:has([data-explorer]) > .pg-rise {
+  max-width: none;
+  height: 100%;
+  /* Moving between folders is not a new page: no entrance on every click */
+  animation: none;
+}

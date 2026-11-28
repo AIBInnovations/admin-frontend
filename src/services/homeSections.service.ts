@@ -94,38 +94,40 @@ export interface CardTypeInfo {
 
 // ─── Form Data Types ─────────────────────────────────────────────────────────
 
+/** On an edit, null clears a saved colour or date. */
 export interface HomeSectionFormData {
   title?: string
   subtitle?: string
-  background_color?: string
-  text_color?: string
+  background_color?: string | null
+  text_color?: string | null
   visible_to?: VisibleTo
   visible_to_subjects?: string[]
   visible_to_packages?: string[]
   display_order?: number
   is_active?: boolean
   publish_status?: PublishStatus
-  start_date?: string
-  end_date?: string
+  start_date?: string | null
+  end_date?: string | null
 }
 
+/** On an edit, null clears a saved image, icon or colour. */
 export interface HomeSectionItemFormData {
   card_type: string
   title?: string
   subtitle?: string
   description?: string
-  image_url?: string
-  image_s3_key?: string
-  icon_url?: string
-  icon_s3_key?: string
+  image_url?: string | null
+  image_s3_key?: string | null
+  icon_url?: string | null
+  icon_s3_key?: string | null
   tag_label?: string
-  tag_color?: string
-  background_color?: string
-  text_color?: string
-  border_color?: string
+  tag_color?: string | null
+  background_color?: string | null
+  text_color?: string | null
+  border_color?: string | null
   button_text?: string
-  button_color?: string
-  button_text_color?: string
+  button_color?: string | null
+  button_text_color?: string | null
   link_type?: string
   external_url?: string
   internal_route?: string

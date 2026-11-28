@@ -7,16 +7,19 @@ import {
 import { ColumnDef } from '@/components/common/DataTable'
 import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { Document } from '@/services/documents.service'
-import type { PopulatedRef } from '@/types/api.types'
 import { MoreVertical, Pencil, Archive, FileText, Download, Globe, GlobeLock, Link2 } from 'lucide-react'
+import type { PopulatedRef, PublishStatus } from '@/types/api.types'
+
+/** The parent as the list endpoint returns it; null once it was deleted. */
+type Parent = (PopulatedRef & { publish_status?: PublishStatus; is_active?: boolean }) | null
 
 const formatBadge: Record<string, string> = {
-  pdf: 'bg-red-500/10 text-red-600 border-red-200',
-  epub: 'bg-purple-500/10 text-purple-600 border-purple-200',
-  doc: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  docx: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  ppt: 'bg-orange-500/10 text-orange-600 border-orange-200',
-  pptx: 'bg-orange-500/10 text-orange-600 border-orange-200',
+  pdf: 'bg-danger-soft text-danger border-transparent',
+  epub: 'bg-accent text-accent-foreground border-transparent',
+  doc: 'bg-accent text-accent-foreground border-transparent',
+  docx: 'bg-accent text-accent-foreground border-transparent',
+  ppt: 'bg-warning-soft text-warning border-transparent',
+  pptx: 'bg-warning-soft text-warning border-transparent',
 }
 
 function formatFileSize(mb: number): string {
@@ -25,12 +28,16 @@ function formatFileSize(mb: number): string {
 }
 
 interface DocumentsColumnsProps {
+  canEdit: boolean
+  canDelete: boolean
   onEdit: (doc: Document) => void
   onArchive: (doc: Document) => void
   onPublishAction: (entityId: string, action: 'publish' | 'unpublish') => void
 }
 
 export function useDocumentsColumns({
+  canEdit,
+  canDelete,
   onEdit,
   onArchive,
   onPublishAction,
@@ -52,7 +59,7 @@ export function useDocumentsColumns({
                 {linkedBook && (
                   <span
                     title={`Linked to eBook: ${linkedBook.title}`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] border border-blue-200 shrink-0"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent text-accent-foreground text-[11px] shrink-0"
                   >
                     <Link2 className="h-2.5 w-2.5" />
                     Linked
@@ -84,7 +91,7 @@ export function useDocumentsColumns({
       id: 'series',
       header: 'Series',
       cell: (doc) => (
-        <Badge variant="secondary" className="text-[10px]">
+        <Badge variant="outline" className="text-[11px] font-medium">
           {doc.series_id && typeof doc.series_id === 'object' ? doc.series_id.name : '—'}
         </Badge>
       ),
@@ -94,7 +101,7 @@ export function useDocumentsColumns({
       header: 'Format',
       width: 'w-20',
       cell: (doc) => (
-        <Badge className={`text-[10px] uppercase ${formatBadge[doc.file_format] || ''}`}>
+        <Badge className={`text-[11px] uppercase ${formatBadge[doc.file_format] || ''}`}>
           {doc.file_format}
         </Badge>
       ),
@@ -120,7 +127,7 @@ export function useDocumentsColumns({
       header: 'Access',
       width: 'w-20',
       cell: (doc) => (
-        <Badge variant={doc.is_free ? 'secondary' : 'outline'} className="text-[10px]">
+        <Badge variant="outline" className={`text-[11px] ${doc.is_free ? 'bg-success-soft text-success border-transparent' : ''}`}>
           {doc.is_free ? 'Free' : 'Paid'}
         </Badge>
       ),
@@ -141,13 +148,13 @@ export function useDocumentsColumns({
       header: 'Publish',
       width: 'w-24',
       cell: (doc) => {
-        const series = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id : null
+        const series: Parent = doc.series_id && typeof doc.series_id === 'object' ? doc.series_id : null
         return (
           <div className="flex items-center gap-1.5">
-            <Badge className={`text-[10px] ${
+            <Badge className={`text-[11px] ${
               doc.publish_status === 'published'
-                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                : 'bg-amber-500/10 text-amber-600 border-amber-200'
+                ? 'bg-success-soft text-success border-transparent'
+                : 'bg-warning-soft text-warning border-transparent'
             }`}>
               {doc.publish_status === 'published' ? 'Published' : 'Draft'}
             </Badge>
@@ -166,18 +173,20 @@ export function useDocumentsColumns({
       id: 'actions',
       header: '',
       width: 'w-10',
-      cell: (doc) => (
+      cell: (doc) => (canEdit || canDelete) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${doc.title}`}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(doc)}>
-              <Pencil className="mr-2 h-4 w-4" />Edit
-            </DropdownMenuItem>
-            {doc.publish_status === 'published' ? (
+            {canEdit && (
+              <DropdownMenuItem onClick={() => onEdit(doc)}>
+                <Pencil className="mr-2 h-4 w-4" />Edit
+              </DropdownMenuItem>
+            )}
+            {!canEdit ? null : doc.publish_status === 'published' ? (
               <DropdownMenuItem onClick={() => onPublishAction(doc._id, 'unpublish')}>
                 <GlobeLock className="mr-2 h-4 w-4" />Unpublish
               </DropdownMenuItem>
@@ -186,10 +195,14 @@ export function useDocumentsColumns({
                 <Globe className="mr-2 h-4 w-4" />Publish
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onArchive(doc)} className="text-amber-600">
-              <Archive className="mr-2 h-4 w-4" />Archive
-            </DropdownMenuItem>
+            {canDelete && (
+              <>
+                {canEdit && <DropdownMenuSeparator />}
+                <DropdownMenuItem onClick={() => onArchive(doc)} className="text-warning">
+                  <Archive className="mr-2 h-4 w-4" />Archive
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

@@ -4,6 +4,8 @@ import type { BaseListParams, PopulatedRef, PublishStatus } from '@/types/api.ty
 
 // Types
 export interface PackageTier {
+  /** Subdocument id. Returned on GET; coupons target tiers by this id. */
+  _id?: string
   name: string
   duration_days: number
   price: number
@@ -145,6 +147,8 @@ export interface PackagesListParams extends BaseListParams {
   is_active?: boolean | null
   is_on_sale?: boolean | null
   publish_status?: string | null
+  /** Adds is_combo, bundled_count and content_summary to each package. */
+  with_counts?: boolean
 }
 
 class PackagesService extends BaseCrudService<Package, PackageFormData, PackagesListParams> {

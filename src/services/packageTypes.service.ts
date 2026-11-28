@@ -43,10 +43,10 @@ class PackageTypesService extends BaseCrudService<PackageType, PackageTypeFormDa
       const mapped = response.data.packageTypes.map((t) => ({
         ...t,
         _id: t.type_id,
-      })) as PackageType[]
+      })) as unknown as PackageType[]
       return { ...response, data: mapped }
     }
-    return response as ApiResponse<PackageType[]>
+    return response as unknown as ApiResponse<PackageType[]>
   }
 
   /**

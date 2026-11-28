@@ -1,183 +1,73 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Image, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
-import { BannerFormModal } from '@/components/banners/BannerFormModal'
-import { Plus, Image } from 'lucide-react'
-import { toast } from 'sonner'
-import { bannersService, Banner, BannerFormData } from '@/services/banners.service'
-import { useBannersColumns } from './BannersPage.columns'
+import { useAuth } from '@/contexts/AuthContext'
+import { bannersService, Banner } from '@/services/banners.service'
+import { ConfirmDock, impactOf, must } from '@/components/forms/editor/ConfirmDock'
+import { ListTable, useListState, useRemoteList } from '@/components/forms/editor/list'
+import { getBannersColumns } from './BannersPage.columns'
+
+const FILTERS: FilterConfig[] = [
+  {
+    key: 'status',
+    label: 'Status',
+    type: 'select',
+    options: [
+      { label: 'All', value: 'all' },
+      { label: 'Active', value: 'active' },
+      { label: 'Inactive', value: 'inactive' },
+    ],
+    placeholder: 'Filter by status',
+    defaultValue: 'all',
+  },
+  {
+    key: 'publish_status',
+    label: 'Publish Status',
+    type: 'select',
+    options: [
+      { label: 'All', value: 'all' },
+      { label: 'Published', value: 'published' },
+      { label: 'Draft', value: 'draft' },
+    ],
+    placeholder: 'Filter by publish status',
+    defaultValue: 'all',
+  },
+]
 
 export function BannersPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('banners.create')
 
-  // State
-  const [banners, setBanners] = useState<Banner[]>([])
-  const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
+  const { search, setSearch, query, values, setFilters, page, setPage, filtered, clear } = useListState({ status: 'all', publish_status: 'all' })
+  const list = useRemoteList<Banner>(
+    JSON.stringify([page, query, values]),
+    () => bannersService.getAll({
+      page,
+      limit: 20,
+      search: query || undefined,
+      is_active: values.status === 'all' ? null : values.status === 'active',
+      publish_status: values.publish_status === 'all' ? null : values.publish_status,
+    }),
+    page,
+    setPage,
+  )
 
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedBanner, setSelectedBanner] = useState<Banner | null>(null)
+  const [archiving, setArchiving] = useState<Banner | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
+  const open = (b: Banner) => navigate(`/content/banners/${b._id}/edit`)
 
-  const { nextFetchId, isStale } = useLatestFetch()
-
-  // Fetch banners
-  const fetchBanners = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
-    try {
-      const response = await bannersService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        is_active: statusFilter === 'all' ? null : statusFilter === 'active',
-        publish_status: publishFilter === 'all' ? null : publishFilter,
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setBanners(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load banners')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load banners')
-    } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, debouncedSearch, statusFilter, publishFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchBanners() }, [fetchBanners])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (search) params.search = search
-    if (statusFilter !== 'all') params.status = statusFilter
-    if (publishFilter !== 'all') params.publish_status = publishFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, publishFilter])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedBanner(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (banner: Banner) => {
-    setModalMode('edit')
-    setSelectedBanner(banner)
-    setFormModalOpen(true)
-  }
-
-  const handleArchiveClick = (banner: Banner) => {
-    setSelectedBanner(banner)
-    setArchiveModalOpen(true)
-  }
-
-  const handleFormSubmit = async (data: BannerFormData) => {
-    try {
-      if (modalMode === 'create') {
-        const response = await bannersService.create(data)
-        if (response.success) {
-          toast.success('Banner created successfully')
-          fetchBanners()
-        } else {
-          toast.error(response.message || 'Failed to create banner')
-          throw new Error(response.message || 'Failed to create banner')
-        }
-      } else if (selectedBanner) {
-        const response = await bannersService.update(selectedBanner._id, data)
-        if (response.success) {
-          toast.success('Banner updated successfully')
-          fetchBanners()
-        } else {
-          toast.error(response.message || 'Failed to update banner')
-          throw new Error(response.message || 'Failed to update banner')
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save banner')
-      throw error
-    }
-  }
-
-  const handleArchiveConfirm = async () => {
-    if (!selectedBanner) return
-    try {
-      const response = await bannersService.archive(selectedBanner._id)
-      if (response.success) {
-        toast.success('Banner archived successfully')
-        fetchBanners()
-      } else {
-        toast.error(response.message || 'Failed to archive banner')
-        throw new Error(response.message || 'Failed to archive banner')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to archive banner')
-      throw error
-    }
-  }
-
-  const handlePublishAction = useCallback((banner: Banner, action: 'publish' | 'unpublish') => {
-    setPublishModal({ entityId: banner._id, action })
-  }, [])
-
-  // Filters
-  const filters: FilterConfig[] = [
-    {
-      key: 'status',
-      label: 'Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
-      placeholder: 'Filter by status',
-      defaultValue: 'all',
-    },
-    {
-      key: 'publish_status',
-      label: 'Publish Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Published', value: 'published' },
-        { label: 'Draft', value: 'draft' },
-      ],
-      placeholder: 'Filter by publish status',
-      defaultValue: 'all',
-    },
-  ]
-
-  const columns = useBannersColumns({
-    onEdit: handleEdit,
-    onArchive: handleArchiveClick,
-    onPublishAction: handlePublishAction,
+  const columns = getBannersColumns({
+    canUpdate: hasPermission('banners.update'),
+    canDelete: hasPermission('banners.delete'),
+    onEdit: open,
+    onArchive: setArchiving,
+    onPublishAction: (b, action) => setPublishModal({ entityId: b._id, action }),
   })
 
   return (
@@ -186,79 +76,63 @@ export function BannersPage() {
         title="Banners"
         description="Manage homepage banners and promotions"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Banners' }]}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Banner
-          </Button>
-        }
+        action={canCreate ? <Button asChild><Link to="/content/banners/new"><Plus aria-hidden="true" />Add Banner</Link></Button> : undefined}
       />
 
       <SearchWithFilters
         value={search}
         onChange={setSearch}
         placeholder="Search banners..."
-        filters={filters}
-        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
-        onFiltersChange={(f) => {
-          if (f.status !== undefined) setStatusFilter(f.status)
-          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
-        }}
+        filters={FILTERS}
+        activeFilters={values}
+        onFiltersChange={(f) => setFilters({ status: f.status, publish_status: f.publish_status })}
       />
 
-      <DataTable
-        data={banners}
+      <ListTable
+        list={list}
         columns={columns}
-        isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
-        emptyState={{
+        page={page}
+        onPage={setPage}
+        rowKey={(b) => b._id}
+        onRowClick={open}
+        filtered={filtered}
+        filteredTitle="No banners found matching your filters"
+        onClear={clear}
+        empty={{
           icon: Image,
-          title: debouncedSearch || statusFilter !== 'all' || publishFilter !== 'all'
-            ? 'No banners found matching your filters'
-            : 'No banners yet',
-          description: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all'
-            ? 'Get started by adding your first banner'
-            : undefined,
-          action: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all' ? (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Add your first banner
-            </Button>
-          ) : undefined,
+          title: 'No banners yet',
+          description: canCreate ? 'Get started by adding your first banner' : undefined,
+          action: canCreate ? <Button asChild variant="outline" size="sm"><Link to="/content/banners/new"><Plus aria-hidden="true" />Add your first banner</Link></Button> : undefined,
         }}
-        getRowKey={(banner) => banner._id}
       />
 
-      <BannerFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        banner={selectedBanner}
-        mode={modalMode}
-      />
-
-      <ArchiveModal
-        open={archiveModalOpen}
-        onClose={() => setArchiveModalOpen(false)}
-        onConfirm={handleArchiveConfirm}
+      <ConfirmDock
+        open={!!archiving}
+        onClose={() => setArchiving(null)}
         title="Archive Banner"
-        itemName={selectedBanner?.title}
-      />
+        confirmLabel="Archive"
+        busyLabel="Archiving..."
+        blockedText="Cannot archive. Remove dependencies first:"
+        loadImpact={archiving ? () => impactOf(bannersService.getDeleteImpact(archiving._id)) : undefined}
+        onConfirm={async () => {
+          if (!archiving) return
+          must(await bannersService.archive(archiving._id), 'Failed to archive banner')
+          toast.success('Banner archived successfully')
+          list.refresh()
+        }}
+      >
+        <p>Are you sure you want to archive <span className="font-medium text-foreground">{archiving?.title}</span>?</p>
+        <p>Archived items are hidden from the app and will be permanently deleted after 30 days. You can restore them from the Archives page at any time before that.</p>
+      </ConfirmDock>
 
       {publishModal && (
         <PublishConfirmModal
-          open={!!publishModal}
-          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          open
+          onOpenChange={(o) => { if (!o) setPublishModal(null) }}
           entityType="banner"
           entityId={publishModal.entityId}
           action={publishModal.action}
-          onSuccess={() => {
-            setPublishModal(null)
-            fetchBanners()
-          }}
+          onSuccess={() => { setPublishModal(null); list.refresh() }}
         />
       )}
     </div>

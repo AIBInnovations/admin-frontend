@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useServerSearch } from '@/hooks/useServerSearch'
 import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
 import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -19,10 +20,14 @@ import { useDocumentsColumns } from './DocumentsPage.columns'
 
 export function DocumentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('documents.create')
+  const canEdit = hasPermission('documents.update')
+  const canDelete = hasPermission('documents.delete')
 
   // State
   const [documents, setDocuments] = useState<Document[]>([])
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [loading, setLoading] = useState(true)
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [formatFilter, setFormatFilter] = useState(searchParams.get('format') || 'all')
@@ -31,6 +36,7 @@ export function DocumentsPage() {
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Dropdown data
   const [seriesList, setSeriesList] = useState<Series[]>([])
@@ -62,6 +68,7 @@ export function DocumentsPage() {
   const fetchDocuments = useCallback(async () => {
     const fetchId = nextFetchId()
     setLoading(true)
+    setLoadError(null)
     try {
       const response = await documentsService.getAll({
         page: currentPage,
@@ -78,12 +85,17 @@ export function DocumentsPage() {
         setDocuments(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+        // The last row of the last page is gone: show the page before it
+        const pages = response.data.pagination?.totalPages || 1
+        if (currentPage > pages) setCurrentPage(pages)
       } else {
-        toast.error(response.message || 'Failed to load documents')
+        setLoadError(response.message || 'The documents could not be loaded.')
       }
     } catch (error: any) {
       if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load documents')
+      const message = error.status === 403 ? 'You do not have access to documents.' : error.message || 'The documents could not be loaded.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
@@ -94,13 +106,14 @@ export function DocumentsPage() {
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (debouncedSearch) params.search = debouncedSearch
     if (seriesFilter !== 'all') params.series = seriesFilter
     if (formatFilter !== 'all') params.format = formatFilter
     if (accessFilter !== 'all') params.access = accessFilter
     if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [seriesFilter, formatFilter, accessFilter, publishFilter, currentPage, setSearchParams])
+    setSearchParams(params, { replace: true })
+  }, [debouncedSearch, seriesFilter, formatFilter, accessFilter, publishFilter, currentPage, setSearchParams])
 
   useResetPageOnChange(setCurrentPage, [debouncedSearch, seriesFilter, formatFilter, accessFilter, publishFilter])
 
@@ -310,6 +323,8 @@ export function DocumentsPage() {
   ]
 
   const columns = useDocumentsColumns({
+    canEdit,
+    canDelete,
     onEdit: handleEdit,
     onArchive: handleArchiveClick,
     onPublishAction: handlePublishAction,
@@ -323,11 +338,11 @@ export function DocumentsPage() {
         title="Documents"
         description="Manage PDF notes, slides, and study materials"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Documents' }]}
-        action={
+        action={canCreate && (
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />Upload Document
           </Button>
-        }
+        )}
       />
 
       <SearchWithFilters
@@ -348,6 +363,8 @@ export function DocumentsPage() {
         data={documents}
         columns={columns}
         isLoading={loading}
+        error={loadError}
+        onRetry={fetchDocuments}
         pagination={{
           currentPage,
           totalPages,
@@ -358,13 +375,14 @@ export function DocumentsPage() {
           icon: FileText,
           title: hasFilters ? 'No documents found matching your search and filters' : 'No documents yet',
           description: !hasFilters ? 'Get started by uploading your first document' : undefined,
-          action: !hasFilters ? (
+          action: canCreate && !hasFilters ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Upload your first document
             </Button>
           ) : undefined,
         }}
         getRowKey={(doc) => doc._id}
+        onRowClick={canEdit ? handleEdit : undefined}
       />
 
       <DocumentFormModal

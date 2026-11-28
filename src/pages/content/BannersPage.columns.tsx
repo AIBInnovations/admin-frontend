@@ -1,42 +1,37 @@
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Archive, BookMarked, BookOpen, CalendarRange, ExternalLink, Eye, FlaskConical, Globe, GlobeLock, Image, Layers, Pencil, Users, Video, type LucideIcon } from 'lucide-react'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Banner } from '@/services/banners.service'
-import { MoreVertical, Pencil, Archive, Image, ExternalLink, BookOpen, FlaskConical, BookMarked, Users, Eye } from 'lucide-react'
+import { ActivePill, PublishStatusPill, RowMenu, Tag, Thumb } from '@/components/forms/editor/list'
+import { istDay, storedDay, toIstInputs } from '@/components/forms/editor/ist'
 
 interface BannersColumnsProps {
+  canUpdate: boolean
+  canDelete: boolean
   onEdit: (banner: Banner) => void
   onArchive: (banner: Banner) => void
   onPublishAction: (banner: Banner, action: 'publish' | 'unpublish') => void
 }
 
-export function useBannersColumns({
-  onEdit,
-  onArchive,
-  onPublishAction,
-}: BannersColumnsProps): ColumnDef<Banner>[] {
+const ACTIONS: Record<string, { label: string; icon: LucideIcon }> = {
+  theory_package: { label: 'Theory Package', icon: BookOpen },
+  practical_package: { label: 'Practical Package', icon: FlaskConical },
+  combo_package: { label: 'Combo Package', icon: Layers },
+  ebook: { label: 'Book', icon: BookMarked },
+  live_session: { label: 'Live Session', icon: Video },
+  workshop: { label: 'Workshop', icon: CalendarRange },
+}
+
+export function getBannersColumns({ canUpdate, canDelete, onEdit, onArchive, onPublishAction }: BannersColumnsProps): ColumnDef<Banner>[] {
   return [
     {
       id: 'banner',
       header: 'Banner',
       cell: (banner) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-16 items-center justify-center rounded bg-muted overflow-hidden shrink-0">
-            {banner.image_url ? (
-              <img src={banner.image_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <Image className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
+        <div className="flex min-w-[200px] max-w-[340px] items-center gap-3">
+          <Thumb src={banner.image_url} icon={Image} className="h-10 w-16" />
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{banner.title}</p>
-            {banner.subtitle && (
-              <p className="text-xs text-muted-foreground truncate">{banner.subtitle}</p>
-            )}
+            <p className="truncate text-sm font-medium" title={banner.title}>{banner.title}</p>
+            {banner.subtitle && <p className="truncate text-xs text-muted-foreground">{banner.subtitle}</p>}
           </div>
         </div>
       ),
@@ -44,43 +39,18 @@ export function useBannersColumns({
     {
       id: 'link',
       header: 'Click Action',
-      width: 'w-36',
+      width: 'w-40',
       cell: (banner) => {
-        if (banner.banner_type === 'theory_package') {
-          return (
-            <Badge className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200">
-              <BookOpen className="mr-1 h-3 w-3" />Theory Package
-            </Badge>
-          )
-        }
-        if (banner.banner_type === 'practical_package') {
-          return (
-            <Badge className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-200">
-              <FlaskConical className="mr-1 h-3 w-3" />Practical Package
-            </Badge>
-          )
-        }
-        if (banner.banner_type === 'ebook') {
-          return (
-            <Badge className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-200">
-              <BookMarked className="mr-1 h-3 w-3" />Book
-            </Badge>
-          )
-        }
+        const action = ACTIONS[banner.banner_type]
+        if (action) return <Tag><action.icon aria-hidden="true" className="h-3 w-3 shrink-0" />{action.label}</Tag>
         if (banner.click_url && banner.link_type === 'external') {
           return (
-            <a
-              href={banner.click_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-blue-600 hover:underline truncate max-w-[120px]"
-            >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              External Link
+            <a href={banner.click_url} target="_blank" rel="noopener noreferrer" title={banner.click_url} className="inline-flex items-center gap-1 text-[13px] text-primary hover:underline">
+              <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />External Link
             </a>
           )
         }
-        return <span className="text-xs text-muted-foreground">No Action</span>
+        return <span className="text-[13px] text-muted-foreground">No Action</span>
       },
     },
     {
@@ -88,105 +58,45 @@ export function useBannersColumns({
       header: 'Visible To',
       width: 'w-32',
       cell: (banner) => {
-        const visibleTo = banner.visible_to || 'all'
-        if (visibleTo === 'subject') {
-          const count = banner.visible_to_subjects?.length || 0
-          return (
-            <Badge className="text-[10px] bg-teal-500/10 text-teal-600 border-teal-200">
-              <Eye className="mr-1 h-3 w-3" />{count} Subject{count !== 1 ? 's' : ''}
-            </Badge>
-          )
-        }
-        if (visibleTo === 'package') {
-          const count = banner.visible_to_packages?.length || 0
-          return (
-            <Badge className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">
-              <Eye className="mr-1 h-3 w-3" />{count} Package{count !== 1 ? 's' : ''}
-            </Badge>
-          )
-        }
-        return (
-          <Badge className="text-[10px] bg-gray-500/10 text-gray-600 border-gray-200">
-            <Users className="mr-1 h-3 w-3" />All Users
-          </Badge>
-        )
+        const to = banner.visible_to || 'all'
+        if (to === 'all') return <Tag><Users aria-hidden="true" className="h-3 w-3" />All Users</Tag>
+        const n = (to === 'subject' ? banner.visible_to_subjects : banner.visible_to_packages)?.length || 0
+        const noun = to === 'subject' ? 'Subject' : 'Package'
+        return <Tag><Eye aria-hidden="true" className="h-3 w-3" />{n} {noun}{n !== 1 ? 's' : ''}</Tag>
       },
     },
-    {
-      id: 'order',
-      header: 'Order',
-      width: 'w-16',
-      cell: (banner) => (
-        <span className="text-sm font-mono">{banner.display_order}</span>
-      ),
-    },
+    { id: 'order', header: 'Order', width: 'w-16', cell: (banner) => <span className="text-sm tabular-nums">{banner.display_order ?? '—'}</span> },
     {
       id: 'dates',
       header: 'Date Range',
       width: 'w-40',
-      cell: (banner) => (
-        <div className="text-xs text-muted-foreground">
-          <p>{new Date(banner.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-          {banner.end_date && (
-            <p>to {new Date(banner.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-          )}
-        </div>
-      ),
+      cell: (banner) => {
+        const ended = banner.end_date && storedDay(banner.end_date) < toIstInputs(new Date()).date
+        return (
+          <div className="whitespace-nowrap text-[13px] text-muted-foreground">
+            <p>{istDay(banner.start_date)}</p>
+            {banner.end_date && <p className={ended ? 'text-warning' : undefined}>to {istDay(banner.end_date)}{ended ? ' (ended)' : ''}</p>}
+          </div>
+        )
+      },
     },
-    {
-      id: 'status',
-      header: 'Status',
-      width: 'w-24',
-      cell: (banner) => (
-        <Badge className={`text-[10px] ${
-          banner.is_active
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-            : 'bg-red-500/10 text-red-600 border-red-200'
-        }`}>
-          {banner.is_active ? 'Active' : 'Inactive'}
-        </Badge>
-      ),
-    },
-    {
-      id: 'publish_status',
-      header: 'Publish',
-      width: 'w-24',
-      cell: (banner) => (
-        <Badge className={`text-[10px] ${
-          banner.publish_status === 'published'
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-            : 'bg-amber-500/10 text-amber-600 border-amber-200'
-        }`}>
-          {banner.publish_status === 'published' ? 'Published' : 'Draft'}
-        </Badge>
-      ),
-    },
+    { id: 'status', header: 'Status', width: 'w-24', cell: (banner) => <ActivePill active={banner.is_active} /> },
+    { id: 'publish_status', header: 'Publish', width: 'w-28', cell: (banner) => <PublishStatusPill status={banner.publish_status} /> },
     {
       id: 'actions',
       header: '',
       width: 'w-10',
       cell: (banner) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(banner)}>
-              <Pencil className="mr-2 h-4 w-4" />Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onPublishAction(banner, banner.publish_status === 'draft' ? 'publish' : 'unpublish')}
-            >
-              {banner.publish_status === 'draft' ? 'Publish' : 'Unpublish'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onArchive(banner)} className="text-amber-600">
-              <Archive className="mr-2 h-4 w-4" />Archive
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowMenu
+          label={`Actions for ${banner.title}`}
+          actions={[
+            { label: 'Edit', icon: Pencil, onSelect: () => onEdit(banner), hidden: !canUpdate },
+            banner.publish_status === 'draft'
+              ? { label: 'Publish', icon: Globe, onSelect: () => onPublishAction(banner, 'publish'), hidden: !canUpdate }
+              : { label: 'Unpublish', icon: GlobeLock, onSelect: () => onPublishAction(banner, 'unpublish'), hidden: !canUpdate },
+            { label: 'Archive', icon: Archive, onSelect: () => onArchive(banner), tone: 'warning', separated: true, hidden: !canDelete },
+          ]}
+        />
       ),
     },
   ]

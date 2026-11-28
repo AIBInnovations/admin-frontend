@@ -38,10 +38,10 @@ export function PageHeader({
                 <BreadcrumbItem>
                   {crumb.href ? (
                     <BreadcrumbLink asChild>
-                      <Link to={crumb.href}>{crumb.label}</Link>
+                      <Link to={crumb.href} title={crumb.label}>{crumb.label}</Link>
                     </BreadcrumbLink>
                   ) : (
-                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                    <BreadcrumbPage title={crumb.label}>{crumb.label}</BreadcrumbPage>
                   )}
                 </BreadcrumbItem>
               </Fragment>
@@ -51,7 +51,7 @@ export function PageHeader({
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="break-words font-display text-[22px] font-semibold leading-tight tracking-[-0.015em] sm:text-[26px]">{title}</h1>
           {description && (
             <p className="mt-1 text-sm text-muted-foreground">
               {description}

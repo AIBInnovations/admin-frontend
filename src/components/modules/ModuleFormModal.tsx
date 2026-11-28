@@ -125,21 +125,21 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
+            <Label htmlFor="name">Name <span className="text-danger">*</span></Label>
             <Input id="name" placeholder="e.g., Shoulder Joint Module" disabled={isSubmitting} {...register('name')} />
-            {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+            {errors.name && <p className="text-sm text-danger">{errors.name.message}</p>}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
+            <Label htmlFor="description">Description <span className="text-danger">*</span></Label>
             <Textarea id="description" placeholder="Module description..." rows={3} disabled={isSubmitting} {...register('description')} />
-            {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+            {errors.description && <p className="text-sm text-danger">{errors.description.message}</p>}
           </div>
 
           {/* Series */}
           <div className="space-y-2">
-            <Label>Series <span className="text-red-500">*</span></Label>
+            <Label>Series <span className="text-danger">*</span></Label>
             <Controller
               name="series_id" control={control}
               render={({ field }) => (
@@ -148,7 +148,7 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
                     <Button
                       variant="outline" role="combobox"
                       disabled={isSubmitting || (mode === 'create' && !!defaultSeriesId)}
-                      className="w-full justify-between font-normal h-9"
+                      className="w-full justify-between text-left font-normal h-9"
                     >
                       <MarqueeText>
                         {field.value ? seriesList.find(s => s._id === field.value)?.name || 'Select series' : 'Select series'}
@@ -175,10 +175,10 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
                               <span className="flex items-center gap-2">
                                 {s.name}
                                 {s.publish_status === 'draft' && (
-                                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-warning-soft text-warning border-transparent">Draft</span>
                                 )}
                                 {s.is_active === false && (
-                                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-danger-soft text-danger border-transparent">Inactive</span>
                                 )}
                               </span>
                             </CommandItem>
@@ -193,7 +193,7 @@ export function ModuleFormModal({ open, onClose, onSubmit, module: mod, mode, de
             <p className="text-xs text-muted-foreground">
               All items shown including drafts and inactive
             </p>
-            {errors.series_id && <p className="text-sm text-red-500">{errors.series_id.message}</p>}
+            {errors.series_id && <p className="text-sm text-danger">{errors.series_id.message}</p>}
           </div>
 
           {/* Display Order */}

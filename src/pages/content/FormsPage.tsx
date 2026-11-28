@@ -1,207 +1,60 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/common/DataTable'
-import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
-import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
-import { FormFormModal } from '@/components/forms/FormFormModal'
-import { Plus, FileText } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { FileText, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { formsService, Form, FormFormData } from '@/services/forms.service'
-import { subjectsService, Subject } from '@/services/subjects.service'
-import { useFormsColumns } from './FormsPage.columns'
+import { PageHeader } from '@/components/common/PageHeader'
+import { apiErrorMessage } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
+import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
+import { useAuth } from '@/contexts/AuthContext'
+import { formsService, Form } from '@/services/forms.service'
+import { ConfirmDock, impactOf, must } from '@/components/forms/editor/ConfirmDock'
+import { ListTable, useListState, useRemoteList } from '@/components/forms/editor/list'
+import { loadSubjects, useOptions } from '@/components/forms/editor/pickers'
+import { getFormsColumns } from './FormsPage.columns'
 
 export function FormsPage() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('forms.create')
 
-  // State
-  const [forms, setForms] = useState<Form[]>([])
-  const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [subjectFilter, setSubjectFilter] = useState(searchParams.get('subject') || 'all')
-  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const { search, setSearch, query, values, setFilters, page, setPage, filtered, clear } = useListState({ status: 'all', subject: 'all', publish_status: 'all' })
+  const list = useRemoteList<Form>(
+    JSON.stringify([page, query, values]),
+    () => formsService.getAll({
+      page,
+      limit: 20,
+      search: query || undefined,
+      is_active: values.status === 'all' ? null : values.status === 'active',
+      subject_id: values.subject === 'all' ? null : values.subject,
+      publish_status: values.publish_status === 'all' ? null : values.publish_status,
+    }),
+    page,
+    setPage,
+  )
+  const subjects = useOptions(loadSubjects(false))
 
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedForm, setSelectedForm] = useState<Form | null>(null)
-  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false)
-  const [deleteWarning, setDeleteWarning] = useState<string | undefined>()
+  const [deleting, setDeleting] = useState<Form | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
+  const toggling = useRef(new Set<string>())
+  const open = (f: Form) => navigate(`/content/forms/${f._id}/edit`)
 
-  // Load subjects for filter dropdown
-  useEffect(() => {
-    subjectsService.getSubjects({ page: 1, limit: 100 }).then((res) => {
-      if (res.success && res.data) {
-        setSubjects(res.data.entities || [])
-      }
-    }).catch(() => { /* subjects filter will just be empty */ })
-  }, [])
-
-  const { nextFetchId, isStale } = useLatestFetch()
-
-  // Fetch forms
-  const fetchForms = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
+  const toggleActive = async (form: Form) => {
+    if (toggling.current.has(form._id)) return
+    toggling.current.add(form._id)
     try {
-      const response = await formsService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        is_active: statusFilter === 'all' ? null : statusFilter === 'active',
-        subject_id: subjectFilter === 'all' ? null : subjectFilter,
-        publish_status: publishFilter === 'all' ? null : publishFilter,
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setForms(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load forms')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load forms')
+      must(await formsService.toggleActive(form._id), 'Failed to toggle status')
+      toast.success(`Form ${form.is_active ? 'deactivated' : 'activated'}`)
+      list.refresh()
+    } catch (e) {
+      toast.error(apiErrorMessage(e, 'Failed to toggle status'))
     } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, debouncedSearch, statusFilter, subjectFilter, publishFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchForms() }, [fetchForms])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (search) params.search = search
-    if (statusFilter !== 'all') params.status = statusFilter
-    if (subjectFilter !== 'all') params.subject = subjectFilter
-    if (publishFilter !== 'all') params.publish_status = publishFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [search, statusFilter, subjectFilter, publishFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, subjectFilter, publishFilter])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedForm(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (form: Form) => {
-    setModalMode('edit')
-    setSelectedForm(form)
-    setFormModalOpen(true)
-  }
-
-  const handleDeleteClick = async (form: Form) => {
-    setSelectedForm(form)
-    setDeleteImpactLoading(true)
-    setDeleteModalOpen(true)
-    try {
-      const impact = await formsService.getDeleteImpact(form._id)
-      if (impact.success && impact.data) {
-        const deps = impact.data.dependencies || []
-        const msg = deps.map((d: any) => d.message).join('. ')
-        setDeleteWarning(msg || undefined)
-      }
-    } catch {
-      setDeleteWarning(undefined)
-    } finally {
-      setDeleteImpactLoading(false)
+      toggling.current.delete(form._id)
     }
   }
 
-  const handleToggleActive = async (form: Form) => {
-    try {
-      const response = await formsService.toggleActive(form._id)
-      if (response.success) {
-        toast.success(`Form ${form.is_active ? 'deactivated' : 'activated'}`)
-
-        fetchForms()
-      } else {
-        toast.error(response.message || 'Failed to toggle status')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to toggle status')
-    }
-  }
-
-  const handleViewSubmissions = (form: Form) => {
-    navigate(`/content/forms/${form._id}/submissions`)
-  }
-
-  const handleFormSubmit = async (data: FormFormData) => {
-    try {
-      if (modalMode === 'create') {
-        const response = await formsService.create(data)
-        if (response.success) {
-          toast.success('Form created successfully')
-          fetchForms()
-        } else {
-          toast.error(response.message || 'Failed to create form')
-          throw new Error(response.message)
-        }
-      } else if (selectedForm) {
-        const response = await formsService.update(selectedForm._id, data)
-        if (response.success) {
-          toast.success('Form updated successfully')
-          fetchForms()
-        } else {
-          toast.error(response.message || 'Failed to update form')
-          throw new Error(response.message)
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save form')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedForm) return
-    try {
-      const response = await formsService.delete(selectedForm._id)
-      if (response.success) {
-        toast.success('Form deleted successfully')
-        fetchForms()
-      } else {
-        toast.error(response.message || 'Failed to delete form')
-        throw new Error(response.message)
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete form')
-      throw error
-    }
-  }
-
-  const handlePublishAction = useCallback((form: Form, action: 'publish' | 'unpublish') => {
-    setPublishModal({ entityId: form._id, action })
-  }, [])
-
-  // Filters
-  const subjectOptions = [
-    { label: 'All Subjects', value: 'all' },
-    ...subjects.map((s) => ({ label: s.name, value: s._id })),
-  ]
-
-  const filters: FilterConfig[] = [
+  const filters: FilterConfig[] = useMemo(() => [
     {
       key: 'status',
       label: 'Status',
@@ -218,7 +71,7 @@ export function FormsPage() {
       key: 'subject',
       label: 'Subject',
       type: 'select',
-      options: subjectOptions,
+      options: [{ label: 'All Subjects', value: 'all' }, ...subjects.options.map((s) => ({ label: s.name, value: s.id }))],
       placeholder: 'Filter by subject',
       defaultValue: 'all',
     },
@@ -234,14 +87,16 @@ export function FormsPage() {
       placeholder: 'Filter by publish status',
       defaultValue: 'all',
     },
-  ]
+  ], [subjects.options])
 
-  const columns = useFormsColumns({
-    onEdit: handleEdit,
-    onDelete: handleDeleteClick,
-    onToggleActive: handleToggleActive,
-    onViewSubmissions: handleViewSubmissions,
-    onPublishAction: handlePublishAction,
+  const columns = getFormsColumns({
+    canUpdate: hasPermission('forms.update'),
+    canDelete: hasPermission('forms.delete'),
+    onEdit: open,
+    onDelete: setDeleting,
+    onToggleActive: toggleActive,
+    onViewSubmissions: (f) => navigate(`/content/forms/${f._id}/submissions`),
+    onPublishAction: (f, action) => setPublishModal({ entityId: f._id, action }),
   })
 
   return (
@@ -250,11 +105,7 @@ export function FormsPage() {
         title="Forms"
         description="Manage registration forms for examiners and examinees"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Forms' }]}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Form
-          </Button>
-        }
+        action={canCreate ? <Button asChild><Link to="/content/forms/new"><Plus aria-hidden="true" />Add Form</Link></Button> : undefined}
       />
 
       <SearchWithFilters
@@ -262,70 +113,64 @@ export function FormsPage() {
         onChange={setSearch}
         placeholder="Search forms..."
         filters={filters}
-        activeFilters={{ status: statusFilter, subject: subjectFilter, publish_status: publishFilter }}
-        onFiltersChange={(f) => {
-          if (f.status !== undefined) setStatusFilter(f.status)
-          if (f.subject !== undefined) setSubjectFilter(f.subject)
-          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
-        }}
+        activeFilters={values}
+        onFiltersChange={(f) => setFilters({ status: f.status, subject: f.subject, publish_status: f.publish_status })}
       />
 
-      <DataTable
-        data={forms}
+      <ListTable
+        list={list}
         columns={columns}
-        isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
-        emptyState={{
+        page={page}
+        onPage={setPage}
+        rowKey={(f) => f._id}
+        onRowClick={open}
+        filtered={filtered}
+        filteredTitle="No forms found matching your filters"
+        onClear={clear}
+        empty={{
           icon: FileText,
-          title: debouncedSearch || statusFilter !== 'all' || subjectFilter !== 'all' || publishFilter !== 'all'
-            ? 'No forms found matching your filters'
-            : 'No forms yet',
-          description: !debouncedSearch && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all'
-            ? 'Get started by creating your first form'
-            : undefined,
-          action: !debouncedSearch && statusFilter === 'all' && subjectFilter === 'all' && publishFilter === 'all' ? (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Create your first form
-            </Button>
-          ) : undefined,
+          title: 'No forms yet',
+          description: canCreate ? 'Get started by creating your first form' : undefined,
+          action: canCreate ? <Button asChild variant="outline" size="sm"><Link to="/content/forms/new"><Plus aria-hidden="true" />Create your first form</Link></Button> : undefined,
         }}
-        getRowKey={(form) => form._id}
       />
 
-      <FormFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        form={selectedForm}
-        mode={modalMode}
-      />
-
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={handleDeleteConfirm}
+      <ConfirmDock
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
         title="Delete Form"
-        itemName={selectedForm?.title}
-        warning={deleteWarning}
-        isLoadingImpact={deleteImpactLoading}
-      />
+        confirmLabel="Delete"
+        busyLabel="Deleting..."
+        tone="danger"
+        loadImpact={deleting ? async () => {
+          const impact = await impactOf(formsService.getDeleteImpact(deleting._id))
+          if (!impact) return null
+          // This endpoint names its counts differently from the others
+          return {
+            blocked: !!impact.blocked,
+            dependencies: (impact.dependencies || [])
+              .filter((d) => d.count > 0)
+              .map((d) => ({ ...d, label: d.label || `submission${d.count === 1 ? '' : 's'} will be deleted`, blocking: !!d.blocking })),
+          }
+        } : undefined}
+        onConfirm={async () => {
+          if (!deleting) return
+          must(await formsService.delete(deleting._id), 'Failed to delete form')
+          toast.success('Form deleted successfully')
+          list.refresh()
+        }}
+      >
+        <p>Are you sure you want to delete <span className="font-medium text-foreground">{deleting?.title}</span>? This action cannot be undone.</p>
+      </ConfirmDock>
 
       {publishModal && (
         <PublishConfirmModal
-          open={!!publishModal}
-          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          open
+          onOpenChange={(o) => { if (!o) setPublishModal(null) }}
           entityType="form"
           entityId={publishModal.entityId}
           action={publishModal.action}
-          onSuccess={() => {
-            setPublishModal(null)
-            fetchForms()
-          }}
+          onSuccess={() => { setPublishModal(null); list.refresh() }}
         />
       )}
     </div>

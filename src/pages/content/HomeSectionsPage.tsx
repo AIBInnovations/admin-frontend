@@ -1,211 +1,85 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
-import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Layers, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
+import { useAuth } from '@/contexts/AuthContext'
+import { homeSectionsService, HomeSection, HomeSectionFormData } from '@/services/homeSections.service'
 import { HomeSectionFormModal } from '@/components/homeSections/HomeSectionFormModal'
-import { Plus, Layers } from 'lucide-react'
-import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
-import {
-  homeSectionsService,
-  HomeSection,
-  HomeSectionFormData,
-} from '@/services/homeSections.service'
-import { useHomeSectionsColumns } from './HomeSectionsPage.columns'
+import { DeleteSectionDock } from '@/components/homeSections/DeleteSectionDock'
+import { must } from '@/components/forms/editor/ConfirmDock'
+import { ListTable, useListState, useRemoteList } from '@/components/forms/editor/list'
+import { getHomeSectionsColumns } from './HomeSectionsPage.columns'
+
+const FILTERS: FilterConfig[] = [
+  {
+    key: 'status',
+    label: 'Status',
+    type: 'select',
+    options: [
+      { label: 'All', value: 'all' },
+      { label: 'Active', value: 'active' },
+      { label: 'Inactive', value: 'inactive' },
+    ],
+    placeholder: 'Filter by status',
+    defaultValue: 'all',
+  },
+  {
+    key: 'publish_status',
+    label: 'Publish Status',
+    type: 'select',
+    options: [
+      { label: 'All', value: 'all' },
+      { label: 'Published', value: 'published' },
+      { label: 'Draft', value: 'draft' },
+    ],
+    placeholder: 'Filter by publish status',
+    defaultValue: 'all',
+  },
+]
 
 export function HomeSectionsPage() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('home-sections.create')
 
-  // State
-  const [sections, setSections] = useState<HomeSection[]>([])
-  const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
+  const { search, setSearch, query, values, setFilters, page, setPage, filtered, clear } = useListState({ status: 'all', publish_status: 'all' })
+  const list = useRemoteList<HomeSection>(
+    JSON.stringify([page, query, values]),
+    () => homeSectionsService.getAll({
+      page,
+      limit: 20,
+      search: query || undefined,
+      is_active: values.status === 'all' ? null : values.status === 'active',
+      publish_status: values.publish_status === 'all' ? null : values.publish_status,
+    }),
+    page,
+    setPage,
+  )
 
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedSection, setSelectedSection] = useState<HomeSection | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
+  const [editing, setEditing] = useState<{ section: HomeSection | null } | null>(null)
+  const [deleting, setDeleting] = useState<HomeSection | null>(null)
   const [publishModal, setPublishModal] = useState<{ entityId: string; action: 'publish' | 'unpublish' } | null>(null)
+  const open = (s: HomeSection) => navigate(`/content/home-sections/${s._id}`)
 
-  const { nextFetchId, isStale } = useLatestFetch()
-
-  // Fetch sections
-  const fetchSections = useCallback(async () => {
-    const fetchId = nextFetchId()
-    setLoading(true)
-    try {
-      const response = await homeSectionsService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        is_active: statusFilter === 'all' ? null : statusFilter === 'active',
-        publish_status: publishFilter === 'all' ? null : publishFilter,
-      })
-      if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setSections(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load home sections')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load home sections')
-    } finally {
-      if (!isStale(fetchId)) setLoading(false)
-    }
-  }, [currentPage, debouncedSearch, statusFilter, publishFilter, nextFetchId, isStale])
-
-  useEffect(() => { fetchSections() }, [fetchSections])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (search) params.search = search
-    if (statusFilter !== 'all') params.status = statusFilter
-    if (publishFilter !== 'all') params.publish_status = publishFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [search, statusFilter, publishFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, publishFilter])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedSection(null)
-    setFormModalOpen(true)
+  const save = async (data: HomeSectionFormData) => {
+    const section = editing?.section
+    if (section) must(await homeSectionsService.update(section._id, data), 'Failed to update home section')
+    else must(await homeSectionsService.create(data), 'Failed to create home section')
+    toast.success(section ? 'Home section updated successfully' : 'Home section created successfully')
+    list.refresh()
   }
 
-  const handleEdit = (section: HomeSection) => {
-    setModalMode('edit')
-    setSelectedSection(section)
-    setFormModalOpen(true)
-  }
-
-  const handleViewItems = (section: HomeSection) => {
-    navigate(`/content/home-sections/${section._id}`)
-  }
-
-  const handleDeleteClick = async (section: HomeSection) => {
-    setSelectedSection(section)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await homeSectionsService.getDeleteImpact(section._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
-
-  const handleFormSubmit = async (data: HomeSectionFormData) => {
-    try {
-      if (modalMode === 'create') {
-        const response = await homeSectionsService.create(data)
-        if (response.success) {
-          toast.success('Home section created successfully')
-          fetchSections()
-        } else {
-          toast.error(response.message || 'Failed to create home section')
-          throw new Error(response.message || 'Failed to create home section')
-        }
-      } else if (selectedSection) {
-        const response = await homeSectionsService.update(selectedSection._id, data)
-        if (response.success) {
-          toast.success('Home section updated successfully')
-          fetchSections()
-        } else {
-          toast.error(response.message || 'Failed to update home section')
-          throw new Error(response.message || 'Failed to update home section')
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save home section')
-      throw error
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedSection) return
-    try {
-      const response = await homeSectionsService.delete(selectedSection._id)
-      if (response.success) {
-        toast.success('Home section deleted successfully')
-        fetchSections()
-      } else {
-        toast.error(response.message || 'Failed to delete home section')
-        throw new Error(response.message || 'Failed to delete home section')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete home section')
-      throw error
-    }
-  }
-
-  const handlePublishAction = useCallback((section: HomeSection, action: 'publish' | 'unpublish') => {
-    setPublishModal({ entityId: section._id, action })
-  }, [])
-
-  // Filters
-  const filters: FilterConfig[] = [
-    {
-      key: 'status',
-      label: 'Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
-      placeholder: 'Filter by status',
-      defaultValue: 'all',
-    },
-    {
-      key: 'publish_status',
-      label: 'Publish Status',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Published', value: 'published' },
-        { label: 'Draft', value: 'draft' },
-      ],
-      placeholder: 'Filter by publish status',
-      defaultValue: 'all',
-    },
-  ]
-
-  const columns = useHomeSectionsColumns({
-    onEdit: handleEdit,
-    onDelete: handleDeleteClick,
-    onViewItems: handleViewItems,
-    onPublishAction: handlePublishAction,
+  const columns = getHomeSectionsColumns({
+    canUpdate: hasPermission('home-sections.update'),
+    canDelete: hasPermission('home-sections.delete'),
+    onEdit: (section) => setEditing({ section }),
+    onDelete: setDeleting,
+    onViewItems: open,
+    onPublishAction: (s, action) => setPublishModal({ entityId: s._id, action }),
   })
 
   return (
@@ -214,92 +88,47 @@ export function HomeSectionsPage() {
         title="Home Sections"
         description="Manage dynamic sections on the app home screen"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Home Sections' }]}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />Add Section
-          </Button>
-        }
+        action={canCreate ? <Button onClick={() => setEditing({ section: null })}><Plus aria-hidden="true" />Add Section</Button> : undefined}
       />
 
       <SearchWithFilters
         value={search}
         onChange={setSearch}
         placeholder="Search sections..."
-        filters={filters}
-        activeFilters={{ status: statusFilter, publish_status: publishFilter }}
-        onFiltersChange={(f) => {
-          if (f.status !== undefined) setStatusFilter(f.status)
-          if (f.publish_status !== undefined) setPublishFilter(f.publish_status)
-        }}
+        filters={FILTERS}
+        activeFilters={values}
+        onFiltersChange={(f) => setFilters({ status: f.status, publish_status: f.publish_status })}
       />
 
-      <DataTable
-        data={sections}
+      <ListTable
+        list={list}
         columns={columns}
-        isLoading={loading}
-        pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
-        }}
-        onRowClick={handleViewItems}
-        emptyState={{
+        page={page}
+        onPage={setPage}
+        rowKey={(s) => s._id}
+        onRowClick={open}
+        filtered={filtered}
+        filteredTitle="No sections found matching your filters"
+        onClear={clear}
+        empty={{
           icon: Layers,
-          title: debouncedSearch || statusFilter !== 'all' || publishFilter !== 'all'
-            ? 'No sections found matching your filters'
-            : 'No home sections yet',
-          description: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all'
-            ? 'Get started by adding your first home section'
-            : undefined,
-          action: !debouncedSearch && statusFilter === 'all' && publishFilter === 'all' ? (
-            <Button onClick={handleCreate} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />Add your first section
-            </Button>
-          ) : undefined,
+          title: 'No home sections yet',
+          description: canCreate ? 'Get started by adding your first home section' : undefined,
+          action: canCreate ? <Button onClick={() => setEditing({ section: null })} variant="outline" size="sm"><Plus aria-hidden="true" />Add your first section</Button> : undefined,
         }}
-        getRowKey={(section) => section._id}
       />
 
-      <HomeSectionFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        section={selectedSection}
-        mode={modalMode}
-      />
-
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null) }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Home Section"
-        itemName={selectedSection?.title || 'this section'}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
+      <HomeSectionFormModal open={!!editing} onClose={() => setEditing(null)} onSubmit={save} section={editing?.section} mode={editing?.section ? 'edit' : 'create'} />
+      <DeleteSectionDock section={deleting} onClose={() => setDeleting(null)} onDone={list.refresh} />
 
       {publishModal && (
         <PublishConfirmModal
-          open={!!publishModal}
-          onOpenChange={(open) => { if (!open) setPublishModal(null) }}
+          open
+          onOpenChange={(o) => { if (!o) setPublishModal(null) }}
           entityType="homesection"
           entityId={publishModal.entityId}
           action={publishModal.action}
-          onSuccess={() => {
-            setPublishModal(null)
-            fetchSections()
-          }}
+          onSuccess={() => { setPublishModal(null); list.refresh() }}
         />
       )}
     </div>

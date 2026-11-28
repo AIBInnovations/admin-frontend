@@ -1,1096 +1,254 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMemo, useRef, useState } from 'react'
+import { Eye, Loader2, Paperclip, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Section } from '@/components/common/detail'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Mail,
-  Users,
-  BookOpen,
-  UserCheck,
-  X,
-  Search,
-  Loader2,
-  Paperclip,
-  Trash2,
-  Eye,
-  Send,
-  Package,
-  Layers,
-  Video,
-} from 'lucide-react'
-import { toast } from 'sonner'
+import { Field, StudentPicker, personName } from '@/components/users/kit'
+import { dayTimeIST, errStatus, errText, istInputToISO, isoToIstInput, plural, unwrap } from '@/components/users/lib'
 import { notificationsService, type EmailAttachment } from '@/services/notifications.service'
-import { subjectsService, type Subject } from '@/services/subjects.service'
-import { packagesService, type Package as PackageType } from '@/services/packages.service'
-import { seriesService, type Series } from '@/services/series.service'
-import { usersService, type User } from '@/services/users.service'
-import { liveSessionsService, type LiveSession } from '@/services/liveSessions.service'
-
-type TargetAudience = 'all' | 'subject' | 'specific' | 'session'
-type SubjectScope = 'subscribers' | 'package' | 'series'
+import type { User } from '@/services/users.service'
+import { AudiencePicker, audienceProblem, countText, describeAudience, EMPTY_AUDIENCE, loadUsers, scheduleTarget, useAudienceCount, useExcludedIds, useScheduledDraft, type Audience } from './compose/audience'
+import { ComposeFrame, NO_SCHEDULE, ReviewDock, ScheduleSection, scheduleProblem, type Schedule } from './compose/frame'
 
 interface PendingAttachment {
-  file: File
+  id: string
+  /** Null for one that is already on the server (an edited schedule). */
+  file: File | null
   filename: string
-  url: string | null // null until uploaded
+  url: string | null
   uploading: boolean
 }
+interface EmailDraft { subject: string; header: string; body: string; footer: string }
+const EMPTY: EmailDraft = { subject: '', header: '', body: '', footer: '' }
 
-export function SendEmailTab() {
-  // Audience
-  const [target, setTarget] = useState<TargetAudience>('all')
-  const [subjectId, setSubjectId] = useState('')
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loadingSubjects, setLoadingSubjects] = useState(false)
-
-  // Subject scope (depth targeting)
-  const [subjectScope, setSubjectScope] = useState<SubjectScope>('subscribers')
-  const [packageId, setPackageId] = useState('')
-  const [seriesId, setSeriesId] = useState('')
-  const [packages, setPackages] = useState<PackageType[]>([])
-  const [series, setSeries] = useState<Series[]>([])
-  const [loadingPackages, setLoadingPackages] = useState(false)
-  const [loadingSeries, setLoadingSeries] = useState(false)
-
-  // User search
-  const [userSearch, setUserSearch] = useState('')
-  const [userResults, setUserResults] = useState<User[]>([])
-  const [searchingUsers, setSearchingUsers] = useState(false)
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([])
-
-  // Per-send exclude (admin "exclude once")
-  const [excludeSearch, setExcludeSearch] = useState('')
-  const [excludeResults, setExcludeResults] = useState<User[]>([])
-  const [searchingExcludes, setSearchingExcludes] = useState(false)
-  const [excludedUsers, setExcludedUsers] = useState<User[]>([])
-
-  // Session selection
-  const [sessions, setSessions] = useState<LiveSession[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [sessionId, setSessionId] = useState('')
-
-  // Email template fields
-  const [emailSubject, setEmailSubject] = useState('')
-  const [header, setHeader] = useState('')
-  const [body, setBody] = useState('')
-  const [footer, setFooter] = useState('')
-
-  // Attachments
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Preview
-  const [previewOpen, setPreviewOpen] = useState(false)
-
-  // Send state
-  const [sending, setSending] = useState(false)
-
-  // Schedule state
-  const [scheduleEnabled, setScheduleEnabled] = useState(false)
-  const [scheduledAt, setScheduledAt] = useState('')
-
-  // ── Subject loading ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (target === 'subject' && subjects.length === 0) {
-      setLoadingSubjects(true)
-      subjectsService
-        .getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' })
-        .then((res) => {
-          if (res.success && res.data) setSubjects(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load subjects'))
-        .finally(() => setLoadingSubjects(false))
-    }
-  }, [target, subjects.length])
-
-  // Load sessions when target changes to 'session'
-  useEffect(() => {
-    if (target === 'session' && sessions.length === 0) {
-      setLoadingSessions(true)
-      liveSessionsService
-        .getAll({ limit: 100, publish_status: 'published' })
-        .then((res) => {
-          if (res.success && res.data) setSessions(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load sessions'))
-        .finally(() => setLoadingSessions(false))
-    }
-  }, [target, sessions.length])
-
-  // Load packages when subject is selected and scope is package or series
-  useEffect(() => {
-    if (subjectId && (subjectScope === 'package' || subjectScope === 'series')) {
-      setLoadingPackages(true)
-      setPackageId('')
-      setSeriesId('')
-      setSeries([])
-      packagesService
-        .getAll({ subject_id: subjectId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setPackages(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load packages'))
-        .finally(() => setLoadingPackages(false))
-    }
-  }, [subjectId, subjectScope])
-
-  // Load series when package is selected and scope is series
-  useEffect(() => {
-    if (packageId && subjectScope === 'series') {
-      setLoadingSeries(true)
-      setSeriesId('')
-      seriesService
-        .getAll({ package_id: packageId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setSeries(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load series'))
-        .finally(() => setLoadingSeries(false))
-    }
-  }, [packageId, subjectScope])
-
-  // ── User search ──────────────────────────────────────────────────────────
-  const searchUsers = useCallback(
-    async (query: string) => {
-      if (query.length < 2) {
-        setUserResults([])
-        return
-      }
-      setSearchingUsers(true)
-      try {
-        const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
-        if (res.success && res.data) {
-          const selectedIds = new Set(selectedUsers.map((u) => u._id))
-          setUserResults((res.data.entities || []).filter((u) => !selectedIds.has(u._id)))
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setSearchingUsers(false)
-      }
-    },
-    [selectedUsers]
-  )
-
-  useEffect(() => {
-    const timer = setTimeout(() => searchUsers(userSearch), 300)
-    return () => clearTimeout(timer)
-  }, [userSearch, searchUsers])
-
-  const addUser = (user: User) => {
-    setSelectedUsers((prev) => [...prev, user])
-    setUserResults((prev) => prev.filter((u) => u._id !== user._id))
-    setUserSearch('')
-  }
-
-  const removeUser = (userId: string) => {
-    setSelectedUsers((prev) => prev.filter((u) => u._id !== userId))
-  }
-
-  // ── Per-send exclude search ──────────────────────────────────────────────
-  const searchExcludes = useCallback(
-    async (query: string) => {
-      if (query.length < 2) {
-        setExcludeResults([])
-        return
-      }
-      setSearchingExcludes(true)
-      try {
-        const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
-        if (res.success && res.data) {
-          const excludedIds = new Set(excludedUsers.map((u) => u._id))
-          setExcludeResults((res.data.entities || []).filter((u) => !excludedIds.has(u._id)))
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setSearchingExcludes(false)
-      }
-    },
-    [excludedUsers]
-  )
-
-  useEffect(() => {
-    const timer = setTimeout(() => searchExcludes(excludeSearch), 300)
-    return () => clearTimeout(timer)
-  }, [excludeSearch, searchExcludes])
-
-  const addExcludedUser = (user: User) => {
-    setExcludedUsers((prev) => [...prev, user])
-    setExcludeResults((prev) => prev.filter((u) => u._id !== user._id))
-    setExcludeSearch('')
-  }
-
-  const removeExcludedUser = (userId: string) => {
-    setExcludedUsers((prev) => prev.filter((u) => u._id !== userId))
-  }
-
-  // ── Attachments ──────────────────────────────────────────────────────────
-  const handleAttachmentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (!files.length) return
-
-    if (attachments.length + files.length > 5) {
-      toast.error('Maximum 5 attachments allowed')
-      return
-    }
-
-    const tooBig = files.find((f) => f.size > 25 * 1024 * 1024)
-    if (tooBig) {
-      toast.error(`"${tooBig.name}" exceeds the 25 MB limit`)
-      return
-    }
-
-    const newItems: PendingAttachment[] = files.map((f) => ({
-      file: f,
-      filename: f.name,
-      url: null,
-      uploading: false,
-    }))
-    setAttachments((prev) => [...prev, ...newItems])
-
-    // Reset input so the same file can be re-selected after removal
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const removeAttachment = (index: number) => {
-    setAttachments((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const uploadAttachment = async (index: number): Promise<string | null> => {
-    const item = attachments[index]
-    if (!item || item.url) return item?.url ?? null
-
-    setAttachments((prev) =>
-      prev.map((a, i) => (i === index ? { ...a, uploading: true } : a))
-    )
-
-    try {
-      const urlRes = await notificationsService.getAttachmentUploadUrl(item.file.type, item.filename)
-      if (!urlRes.success || !urlRes.data) {
-        toast.error(`Failed to get upload URL for "${item.filename}"`)
-        return null
-      }
-
-      const { uploadUrl, fileUrl } = urlRes.data
-
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        body: item.file,
-        headers: { 'Content-Type': item.file.type },
-      })
-
-      setAttachments((prev) =>
-        prev.map((a, i) => (i === index ? { ...a, url: fileUrl, uploading: false } : a))
-      )
-      return fileUrl
-    } catch {
-      toast.error(`Failed to upload "${item.filename}"`)
-      setAttachments((prev) =>
-        prev.map((a, i) => (i === index ? { ...a, uploading: false } : a))
-      )
-      return null
-    }
-  }
-
-  // ── Validation ────────────────────────────────────────────────────────────
-  const canSend = () => {
-    if (!emailSubject.trim() || !body.trim()) return false
-    if (target === 'subject') {
-      if (!subjectId) return false
-      if (subjectScope === 'package' && !packageId) return false
-      if (subjectScope === 'series' && !seriesId) return false
-    }
-    if (target === 'specific' && selectedUsers.length === 0) return false
-    if (target === 'session' && !sessionId) return false
-    if (scheduleEnabled) {
-      if (!scheduledAt) return false
-      const when = new Date(scheduledAt)
-      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
-    }
-    return true
-  }
-
-  // ── Preview HTML ─────────────────────────────────────────────────────────
-  // Mirrors backend `buildHtml` + the auto-injected unsubscribe footer so admin
-  // sees exactly what the recipient will see.
-  const buildPreviewHtml = () => {
-    const headerHtml = header.trim()
-      ? `<div style="background-color:#1e40af;color:#ffffff;padding:24px;text-align:center;">${header}</div>`
-      : ''
-    const unsubHtml = 'You are receiving this email because you have an account with PGME. <a href="#" style="color:#1e40af;text-decoration:underline;">Unsubscribe</a> at any time.'
-    const combinedFooter = footer.trim()
-      ? `${footer}<div style="margin-top:12px;">${unsubHtml}</div>`
-      : unsubHtml
-    const footerHtml = `<div style="background-color:#f9fafb;padding:16px 24px;text-align:center;color:#6b7280;font-size:13px;border-top:1px solid #e5e7eb;">${combinedFooter}</div>`
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+/** Mirrors the backend's template and its automatic unsubscribe line. */
+function buildPreviewHtml(d: EmailDraft): string {
+  const headerHtml = d.header.trim() ? `<div style="background-color:#1e40af;color:#ffffff;padding:24px;text-align:center;">${d.header}</div>` : ''
+  const unsub = 'You are receiving this email because you have an account with PGME. <a href="#" style="color:#1e40af;text-decoration:underline;">Unsubscribe</a> at any time.'
+  const footer = d.footer.trim() ? `${d.footer}<div style="margin-top:12px;">${unsub}</div>` : unsub
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"></head>
 <body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
   <div style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     ${headerHtml}
-    <div style="padding:24px;color:#333333;line-height:1.6;">${body || '<p style="color:#9ca3af;">Body will appear here…</p>'}</div>
-    ${footerHtml}
+    <div style="padding:24px;color:#333333;line-height:1.6;">${d.body || '<p style="color:#9ca3af;">Body will appear here</p>'}</div>
+    <div style="background-color:#f9fafb;padding:16px 24px;text-align:center;color:#6b7280;font-size:13px;border-top:1px solid #e5e7eb;">${footer}</div>
   </div>
 </body></html>`
+}
+
+/** The email on its own, with scripts off. */
+function EmailFrame({ draft, height }: { draft: EmailDraft; height: number }) {
+  const html = useMemo(() => buildPreviewHtml(draft), [draft])
+  return <iframe title="Email preview" sandbox="" srcDoc={html} className="w-full rounded-lg border border-border bg-white" style={{ height }} />
+}
+
+export function SendEmailTab({ editId, onStopEdit, onSent }: { editId: string | null; onStopEdit: () => void; onSent: (scheduled: boolean) => void }) {
+  const [audience, setAudience] = useState<Audience>(EMPTY_AUDIENCE)
+  const [excluded, setExcluded] = useState<User[]>([])
+  const [draft, setDraft] = useState<EmailDraft>(EMPTY)
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [schedule, setSchedule] = useState<Schedule>(NO_SCHEDULE)
+  const [review, setReview] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [showProblems, setShowProblems] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const set = (patch: Partial<EmailDraft>) => setDraft((d) => ({ ...d, ...patch }))
+  const reset = () => { setAudience(EMPTY_AUDIENCE); setExcluded([]); setDraft(EMPTY); setAttachments([]); setSchedule(NO_SCHEDULE); setShowProblems(false) }
+
+  const edit = useScheduledDraft(editId, 'email', async (id) => unwrap(await notificationsService.getScheduledNotification(id)), async (doc, aud) => {
+    setAudience(aud)
+    setDraft({ subject: doc.email_subject || '', header: doc.email_header || '', body: doc.email_body || '', footer: doc.email_footer || '' })
+    setAttachments((doc.email_attachments || []).map((a) => ({ id: a.url, file: null, filename: a.filename, url: a.url, uploading: false })))
+    setSchedule({ enabled: true, at: isoToIstInput(doc.scheduled_at) })
+    setExcluded(await loadUsers((doc.email_excluded_user_ids || []).map(String)))
+  })
+  useUnsavedChanges(!!(draft.subject || draft.body || draft.header || draft.footer || attachments.length) && !edit.loading)
+
+  const excludedIds = useExcludedIds(excluded)
+  const count = useAudienceCount(audience, 'email', excludedIds)
+  const errors = { subject: draft.subject.trim() ? undefined : 'Enter a subject', body: draft.body.trim() ? undefined : 'Enter the email body' }
+  const when = scheduleProblem(schedule)
+  const problem = audienceProblem(audience) ?? errors.subject ?? errors.body ?? when
+  const uploading = attachments.some((a) => a.uploading)
+
+  const addFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = '' // so the same file can be chosen again after removal
+    if (!files.length) return
+    if (attachments.length + files.length > 5) { toast.error('Maximum 5 attachments allowed'); return }
+    const tooBig = files.find((f) => f.size > 25 * 1024 * 1024)
+    if (tooBig) { toast.error(`"${tooBig.name}" exceeds the 25 MB limit`); return }
+    setAttachments((prev) => [...prev, ...files.map((file, i) => ({ id: `${file.name}-${file.size}-${prev.length + i}`, file, filename: file.name, url: null, uploading: false }))])
   }
 
-  // ── Send ──────────────────────────────────────────────────────────────────
-  const handleSend = async () => {
-    if (!canSend()) return
-    setSending(true)
-
-    console.log('[SendEmail] Starting send. Target:', target, 'Subject:', emailSubject)
-
-    try {
-      // Upload all pending attachments
-      const uploadedAttachments: EmailAttachment[] = []
-      for (let i = 0; i < attachments.length; i++) {
-        const item = attachments[i]
-        console.log(`[SendEmail] Uploading attachment ${i + 1}/${attachments.length}: ${item.filename}`)
-        const url = item.url ?? (await uploadAttachment(i))
-        if (!url) {
-          console.error(`[SendEmail] Attachment upload failed for: ${item.filename}`)
-          setSending(false)
-          return // upload failure already toasted
-        }
-        uploadedAttachments.push({ url, filename: item.filename })
+  const uploadAll = async (): Promise<EmailAttachment[]> => {
+    const done: EmailAttachment[] = []
+    for (const item of attachments) {
+      if (item.url || !item.file) { if (item.url) done.push({ url: item.url, filename: item.filename }); continue }
+      setAttachments((prev) => prev.map((a) => (a.id === item.id ? { ...a, uploading: true } : a)))
+      try {
+        const { uploadUrl, fileUrl } = unwrap(await notificationsService.getAttachmentUploadUrl(item.file.type, item.filename), `"${item.filename}" could not be uploaded.`)
+        const res = await fetch(uploadUrl, { method: 'PUT', body: item.file, headers: { 'Content-Type': item.file.type } })
+        if (!res.ok) throw new Error(`"${item.filename}" could not be uploaded. Try again or remove it.`)
+        setAttachments((prev) => prev.map((a) => (a.id === item.id ? { ...a, url: fileUrl, uploading: false } : a)))
+        done.push({ url: fileUrl, filename: item.filename })
+      } catch (err) {
+        setAttachments((prev) => prev.map((a) => (a.id === item.id ? { ...a, uploading: false } : a)))
+        throw new Error(errText(err, `"${item.filename}" could not be uploaded.`))
       }
+    }
+    return done
+  }
 
-      const payload = {
-        subject: emailSubject.trim(),
-        body: body.trim(),
-        ...(header.trim() && { header: header.trim() }),
-        ...(footer.trim() && { footer: footer.trim() }),
-        ...(uploadedAttachments.length > 0 && { attachments: uploadedAttachments }),
-        ...(excludedUsers.length > 0 && { excluded_user_ids: excludedUsers.map((u) => u._id) }),
-      }
+  const openReview = () => {
+    if (problem) { setShowProblems(true); toast.error(problem); return }
+    setReview(true)
+  }
 
-      // ── Scheduled path ────────────────────────────────────────────────
-      if (scheduleEnabled) {
-        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
-        let scheduleTargetId: string | undefined
-        let scheduleUserIds: string[] | undefined
-        if (target === 'all') {
-          scheduleTargetType = 'all'
-        } else if (target === 'subject') {
-          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
-          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
-          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
-        } else if (target === 'session') {
-          scheduleTargetType = 'session'
-          scheduleTargetId = sessionId
-        } else {
-          scheduleTargetType = 'users'
-          scheduleUserIds = selectedUsers.map((u) => u._id)
-        }
-
-        const schedRes = await notificationsService.scheduleNotification({
-          channel: 'email',
-          target_type: scheduleTargetType,
-          ...(scheduleTargetId && { target_id: scheduleTargetId }),
-          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
-          scheduled_at: new Date(scheduledAt).toISOString(),
-          email_subject: payload.subject,
-          email_body: payload.body,
-          email_header: payload.header,
-          email_footer: payload.footer,
-          email_attachments: payload.attachments,
-          ...(excludedUsers.length > 0 && { email_excluded_user_ids: excludedUsers.map((u) => u._id) }),
-        })
-        if (schedRes.success) {
-          toast.success(`Email scheduled for ${new Date(scheduledAt).toLocaleString()}`)
-          resetForm()
-        } else {
-          toast.error(schedRes.message || 'Failed to schedule email')
-        }
-        setSending(false)
+  const send = async () => {
+    const files = await uploadAll()
+    const payload = {
+      subject: draft.subject.trim(), body: draft.body.trim(),
+      ...(draft.header.trim() && { header: draft.header.trim() }),
+      ...(draft.footer.trim() && { footer: draft.footer.trim() }),
+      ...(files.length > 0 && { attachments: files }),
+      ...(excludedIds.length > 0 && { excluded_user_ids: excludedIds }),
+    }
+    if (schedule.enabled) {
+      const at = istInputToISO(schedule.at)
+      if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was changed.')
+      unwrap(await notificationsService.scheduleNotification({
+        channel: 'email', ...scheduleTarget(audience), scheduled_at: at,
+        email_subject: payload.subject, email_body: payload.body, email_header: payload.header, email_footer: payload.footer, email_attachments: payload.attachments,
+        ...(excludedIds.length > 0 && { email_excluded_user_ids: excludedIds }),
+      }), 'Failed to schedule email')
+      toast.success(`Email scheduled for ${dayTimeIST(at)}`)
+      reset(); onSent(true)
+      return
+    }
+    if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was sent.')
+    const res = audience.target === 'all' ? await notificationsService.sendEmailToAll(payload)
+      : audience.target === 'session' ? await notificationsService.sendEmailToSession({ ...payload, session_id: audience.sessionId })
+        : audience.target === 'specific' ? await notificationsService.sendEmailToUsers({ ...payload, user_ids: audience.users.map((u) => u._id) })
+          : audience.subjectScope === 'package' ? await notificationsService.sendEmailToPackage({ ...payload, package_id: audience.packageId })
+            : audience.subjectScope === 'series' ? await notificationsService.sendEmailToSeries({ ...payload, series_id: audience.seriesId })
+              : await notificationsService.sendEmailToSubject({ ...payload, subject_id: audience.subjectId })
+    const { sent, failed, total, failedEmails, account } = unwrap(res, 'Failed to send email')
+    const note = account === 'fallback' ? ' (via fallback account)' : ''
+    if (sent === 0 && total > 0) throw new Error(`All ${total} emails failed${note}. Reason: ${failedEmails?.[0]?.error || 'not given'}`)
+    if (failed === 0) toast.success(`All ${sent} emails delivered successfully!${note}`)
+    else toast.warning(`${sent}/${total} delivered, ${failed} failed${note}.${failedEmails?.[0]?.error ? ` Common error: ${failedEmails[0].error}` : ''}`, { duration: 10000 })
+    reset(); onSent(false)
+  }
+  const sendSafely = async () => {
+    try { await send() } catch (err) {
+      const status = errStatus(err)
+      if (!schedule.enabled && (status === 504 || status === 408)) {
+        // The server is probably still sending; sending again would email people twice
+        toast.warning('The server took too long to answer, but the emails are probably still being sent. Check History in a few minutes before sending again.', { duration: 15000 })
+        setReview(false)
         return
       }
-
-      let response
-      if (target === 'all') {
-        console.log('[SendEmail] Sending to ALL users')
-        response = await notificationsService.sendEmailToAll(payload)
-      } else if (target === 'subject') {
-        if (subjectScope === 'package') {
-          console.log('[SendEmail] Sending to package users, package_id:', packageId)
-          response = await notificationsService.sendEmailToPackage({ ...payload, package_id: packageId })
-        } else if (subjectScope === 'series') {
-          console.log('[SendEmail] Sending to series users, series_id:', seriesId)
-          response = await notificationsService.sendEmailToSeries({ ...payload, series_id: seriesId })
-        } else {
-          console.log('[SendEmail] Sending to subject users, subject_id:', subjectId)
-          response = await notificationsService.sendEmailToSubject({ ...payload, subject_id: subjectId })
-        }
-      } else if (target === 'session') {
-        console.log('[SendEmail] Sending to session enrollees, session_id:', sessionId)
-        response = await notificationsService.sendEmailToSession({ ...payload, session_id: sessionId })
-      } else {
-        console.log('[SendEmail] Sending to', selectedUsers.length, 'specific users')
-        response = await notificationsService.sendEmailToUsers({
-          ...payload,
-          user_ids: selectedUsers.map((u) => u._id),
-        })
-      }
-
-      console.log('[SendEmail] Response:', response)
-
-      if (response.success && response.data) {
-        const { sent, failed, total, failedEmails, account } = response.data
-        const accountNote = account === 'fallback' ? ' (via fallback account)' : ''
-
-        if (failed === 0) {
-          toast.success(`All ${sent} emails delivered successfully!${accountNote}`)
-        } else if (sent === 0) {
-          const reason = failedEmails?.[0]?.error || 'Unknown error'
-          toast.error(`All ${total} emails failed${accountNote}. Reason: ${reason}`, { duration: 10000 })
-          console.error('[SendEmail] All failed. Errors:', failedEmails)
-        } else {
-          toast.warning(
-            `${sent}/${total} delivered, ${failed} failed${accountNote}.${failedEmails?.[0]?.error ? ` Common error: ${failedEmails[0].error}` : ''}`,
-            { duration: 10000 }
-          )
-          console.warn('[SendEmail] Partial failure. Failed emails:', failedEmails)
-        }
-
-        if (sent > 0) resetForm()
-      } else {
-        toast.error(response.message || 'Failed to send email')
-        console.error('[SendEmail] Unsuccessful response:', response)
-      }
-    } catch (error: any) {
-      const msg = error.message || 'Failed to send email'
-      const status = error.status
-      console.error('[SendEmail] Error:', msg, 'Status:', status, error)
-
-      if (status === 504 || status === 408 || msg.includes('timeout') || msg.includes('ECONNABORTED')) {
-        toast.warning('Request timed out — but emails are likely still being sent on the server. Check back in a minute.', { duration: 15000 })
-        resetForm()
-      } else if (status === 403) {
-        toast.error(`Permission denied: ${msg}`, { duration: 10000 })
-      } else if (status === 401) {
-        toast.error('Session expired — please log in again.', { duration: 8000 })
-      } else if (msg.includes('Network Error') || msg.includes('No response from server')) {
-        toast.error('Network error — could not reach the server. Check your connection.', { duration: 8000 })
-      } else {
-        toast.error(msg, { duration: 10000 })
-      }
-    } finally {
-      setSending(false)
+      throw new Error(errText(err, 'Failed to send email'))
     }
   }
 
-  const resetForm = () => {
-    setEmailSubject('')
-    setHeader('')
-    setBody('')
-    setFooter('')
-    setAttachments([])
-    setSubjectId('')
-    setSubjectScope('subscribers')
-    setPackageId('')
-    setSeriesId('')
-    setPackages([])
-    setSeries([])
-    setSelectedUsers([])
-    setUserSearch('')
-    setUserResults([])
-    setExcludedUsers([])
-    setExcludeSearch('')
-    setExcludeResults([])
-    setSessionId('')
-    setScheduleEnabled(false)
-    setScheduledAt('')
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Mail className="h-5 w-5" />
-            Send Email
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+    <>
+      <ComposeFrame
+        title="Send Email"
+        editing={editId ? { loading: edit.loading, error: edit.error, scheduledFor: edit.doc?.scheduled_at ?? null, onStop: () => { reset(); onStopEdit() } } : null}
+        preview={(
+          <Section title="Preview" description="What the recipient sees.">
+            <p className="mb-3 break-words rounded-lg border border-border bg-muted/40 px-3.5 py-2 text-[13px]"><span className="text-muted-foreground">Subject: </span>{draft.subject || <span className="text-muted-foreground">No subject</span>}</p>
+            <EmailFrame draft={draft} height={420} />
+            {attachments.length > 0 && <ul className="mt-3 flex flex-wrap gap-1.5">{attachments.map((a) => <li key={a.id} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs"><Paperclip aria-hidden="true" className="h-3 w-3 shrink-0" /><span className="truncate">{a.filename}</span></li>)}</ul>}
+          </Section>
+        )}
+        status={`${describeAudience(audience, 'email')}${countText(count) ? ` · ${countText(count)}` : ''}`}
+        problem={showProblems ? problem : audienceProblem(audience)}
+        primaryLabel={schedule.enabled ? (edit.doc ? 'Save Schedule' : 'Schedule Email') : 'Send Email'}
+        busyLabel={uploading && !review ? 'Uploading attachments…' : null}
+        onPrimary={openReview}
+        extraAction={<Button type="button" variant="outline" className="bg-card" onClick={() => setPreviewOpen(true)} disabled={!draft.body.trim()}><Eye aria-hidden="true" />Preview</Button>}
+      >
+        <Section title="Target Audience"><AudiencePicker idPrefix="email" value={audience} onChange={setAudience} /></Section>
 
-          {/* ── Target Audience ── */}
-          <div className="space-y-2">
-            <Label>Target Audience</Label>
-            <div className="grid grid-cols-4 gap-3">
-              {(
-                [
-                  { value: 'all' as const, icon: Users, label: 'All Users', desc: 'Send to everyone' },
-                  { value: 'subject' as const, icon: BookOpen, label: 'By Subject', desc: 'Subject subscribers' },
-                  { value: 'session' as const, icon: Video, label: 'By Session', desc: 'Session enrollees' },
-                  { value: 'specific' as const, icon: UserCheck, label: 'Specific Users', desc: 'Pick individual users' },
-                ]
-              ).map(({ value, icon: Icon, label, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTarget(value)}
-                  className={`flex items-center gap-3 rounded-lg border-2 p-4 text-left transition-colors ${
-                    target === value
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-muted-foreground/30'
-                  }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                      target === value ? 'bg-primary/10' : 'bg-muted'
-                    }`}
-                  >
-                    <Icon
-                      className={`h-5 w-5 ${target === value ? 'text-primary' : 'text-muted-foreground'}`}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+        <Section title={<>Exclude these users from this send <span className="text-[13px] font-normal text-muted-foreground">(optional)</span></>} description="Skip specific users for this send only. Their persistent email preference is not changed.">
+          <StudentPicker id="email-exclude" label="Users to exclude" value={excluded} onChange={setExcluded} placeholder="Search users to exclude..." />
+        </Section>
 
-          {/* ── Subject selector + Scope ── */}
-          {target === 'subject' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Subject</Label>
-                {loadingSubjects ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading subjects…
-                  </div>
-                ) : (
-                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setSubjectScope('subscribers'); setPackageId(''); setSeriesId('') }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Target Scope within Subject */}
-              {subjectId && (
-                <div className="space-y-2">
-                  <Label>Target Scope</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      { value: 'subscribers' as const, icon: Users, label: 'All Subscribers', desc: 'All subject subscribers' },
-                      { value: 'package' as const, icon: Package, label: 'Package', desc: 'Package purchasers' },
-                      { value: 'series' as const, icon: Layers, label: 'Series', desc: 'Series subscribers' },
-                    ]).map(({ value, icon: Icon, label, desc }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => { setSubjectScope(value); setPackageId(''); setSeriesId('') }}
-                        className={`flex items-center gap-2 rounded-lg border p-3 text-left transition-colors ${
-                          subjectScope === value
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-muted-foreground/30'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 shrink-0 ${subjectScope === value ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <div>
-                          <p className="text-xs font-medium">{label}</p>
-                          <p className="text-[10px] text-muted-foreground">{desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Package Selector */}
-              {subjectId && (subjectScope === 'package' || subjectScope === 'series') && (
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  {loadingPackages ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading packages…
-                    </div>
-                  ) : packages.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No packages found for this subject</p>
-                  ) : (
-                    <Select value={packageId} onValueChange={(v) => { setPackageId(v); setSeriesId('') }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a package" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {packages.map((p) => (
-                          <SelectItem key={p._id} value={p._id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              {/* Series Selector */}
-              {subjectId && subjectScope === 'series' && packageId && (
-                <div className="space-y-2">
-                  <Label>Series</Label>
-                  {loadingSeries ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading series…
-                    </div>
-                  ) : series.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No series found for this package</p>
-                  ) : (
-                    <Select value={seriesId} onValueChange={setSeriesId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a series" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {series.map((s) => (
-                          <SelectItem key={s._id} value={s._id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Session selector ── */}
-          {target === 'session' && (
-            <div className="space-y-2">
-              <Label>Live Session</Label>
-              {loadingSessions ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading sessions...
-                </div>
-              ) : (
-                <Select value={sessionId} onValueChange={setSessionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a live session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sessions.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.title}
-                        {s.enrollment_count !== undefined ? ` (${s.enrollment_count} enrolled)` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          )}
-
-          {/* ── User selector ── */}
-          {target === 'specific' && (
-            <div className="space-y-3">
-              <Label>Select Users</Label>
-              {selectedUsers.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedUsers.map((user) => (
-                    <Badge key={user._id} variant="secondary" className="gap-1 py-1 pl-2 pr-1">
-                      {user.name || user.phone_number}
-                      <button
-                        type="button"
-                        onClick={() => removeUser(user._id)}
-                        className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search users by name, email, or phone…"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="pl-9"
-                />
-                {searchingUsers && (
-                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                )}
-              </div>
-              {userResults.length > 0 && (
-                <div className="rounded-lg border">
-                  {userResults.map((user) => (
-                    <button
-                      key={user._id}
-                      type="button"
-                      onClick={() => addUser(user)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                        {(user.name || '?')[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{user.name || 'Unnamed'}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {user.phone_number}
-                          {user.email ? ` · ${user.email}` : ''}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {userSearch.length >= 2 && !searchingUsers && userResults.length === 0 && (
-                <p className="text-sm text-muted-foreground">No users found</p>
-              )}
-            </div>
-          )}
-
-          {/* ── Per-send Exclude (always visible) ── */}
-          <div className="space-y-3 border-t pt-6">
-            <div>
-              <Label className="flex items-center gap-2">
-                <X className="h-4 w-4 text-orange-600" />
-                Exclude these users from this send
-                <span className="text-muted-foreground font-normal text-xs">(optional)</span>
-              </Label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Skip specific users for this send only — their persistent email preference is not changed.
-              </p>
-            </div>
-            {excludedUsers.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {excludedUsers.map((user) => (
-                  <Badge
-                    key={user._id}
-                    className="gap-1 py-1 pl-2 pr-1 bg-orange-500/10 text-orange-700 border-orange-200"
-                  >
-                    {user.name || user.phone_number}
-                    <button
-                      type="button"
-                      onClick={() => removeExcludedUser(user._id)}
-                      className="ml-1 rounded-full p-0.5 hover:bg-orange-200/50"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search users to exclude…"
-                value={excludeSearch}
-                onChange={(e) => setExcludeSearch(e.target.value)}
-                className="pl-9"
-              />
-              {searchingExcludes && (
-                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            {excludeResults.length > 0 && (
-              <div className="rounded-lg border">
-                {excludeResults.map((user) => (
-                  <button
-                    key={user._id}
-                    type="button"
-                    onClick={() => addExcludedUser(user)}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 text-xs font-medium text-orange-700">
-                      {(user.name || '?')[0].toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{user.name || 'Unnamed'}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {user.phone_number}
-                        {user.email ? ` · ${user.email}` : ''}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {excludeSearch.length >= 2 && !searchingExcludes && excludeResults.length === 0 && (
-              <p className="text-sm text-muted-foreground">No users found</p>
-            )}
-          </div>
-
-          {/* ── Email template ── */}
-          <div className="space-y-5 border-t pt-6">
-            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Email Template
-            </p>
-
-            {/* Subject */}
-            <div className="space-y-2">
-              <Label htmlFor="email-subject">
-                Subject <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="email-subject"
-                placeholder="e.g. New Live Session Available — Don't Miss It!"
-                value={emailSubject}
-                onChange={(e) => setEmailSubject(e.target.value)}
-                maxLength={200}
-              />
-              <p className="text-xs text-muted-foreground">{emailSubject.length}/200</p>
-            </div>
-
-            {/* Header */}
-            <div className="space-y-2">
-              <Label htmlFor="email-header">
-                Header{' '}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
+        <Section title="Email Template">
+          <div className="space-y-5">
+            <Field id="email-subject" label="Subject" required error={showProblems ? errors.subject : undefined} aside={`${draft.subject.length}/200`}>
+              <Input placeholder="e.g. New Live Session Available. Don't Miss It!" value={draft.subject} onChange={(e) => set({ subject: e.target.value })} maxLength={200} />
+            </Field>
+            <Field id="email-header" label="Header" optional hint="Displayed at the top of the email in a highlighted banner. Supports HTML." aside={`${draft.header.length}/2000`}>
+              <Textarea placeholder="e.g. <strong>PGME</strong> · Your Medical Education Partner" value={draft.header} onChange={(e) => set({ header: e.target.value })} maxLength={2000} rows={2} />
+            </Field>
+            <Field id="email-body" label="Body" required error={showProblems ? errors.body : undefined} hint="Main email content. Supports HTML tags for formatting." aside={`${draft.body.length.toLocaleString('en-IN')}/50,000`}>
               <Textarea
-                id="email-header"
-                placeholder="e.g. <strong>PGME</strong> · Your Medical Education Partner"
-                value={header}
-                onChange={(e) => setHeader(e.target.value)}
-                maxLength={2000}
-                rows={2}
+                placeholder={'e.g. <p>Dear Student,</p>\n<p>Dr. Sharma is going live on <strong>Anatomy</strong> at 5 PM today. Join now to ask questions in real time!</p>\n<p>Best,<br>The PGME Team</p>'}
+                value={draft.body} onChange={(e) => set({ body: e.target.value })} maxLength={50000} rows={10} className="font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                Displayed at the top of the email in a highlighted banner. Supports HTML.
-              </p>
-            </div>
-
-            {/* Body */}
-            <div className="space-y-2">
-              <Label htmlFor="email-body">
-                Body <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="email-body"
-                placeholder={`e.g. <p>Dear Student,</p>\n<p>Dr. Sharma is going live on <strong>Anatomy</strong> at 5 PM today. Join now to ask questions in real time!</p>\n<p>Best,<br>The PGME Team</p>`}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                maxLength={50000}
-                rows={10}
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                Main email content. Supports HTML tags for formatting.{' '}
-                <span className="font-medium">{body.length.toLocaleString()}</span>/50,000
-              </p>
-            </div>
-
-            {/* Footer */}
-            <div className="space-y-2">
-              <Label htmlFor="email-footer">
-                Footer{' '}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Textarea
-                id="email-footer"
-                placeholder="e.g. © 2025 PGME. All rights reserved. · You are receiving this because you are enrolled in PGME."
-                value={footer}
-                onChange={(e) => setFooter(e.target.value)}
-                maxLength={2000}
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown at the bottom of the email in a muted footer strip. Supports HTML.
-              </p>
-            </div>
-
-            {/* Attachments */}
-            <div className="space-y-3">
-              <Label>
-                Attachments{' '}
-                <span className="text-muted-foreground font-normal">(optional, max 5 × 25 MB)</span>
-              </Label>
-
+            </Field>
+            <Field id="email-footer" label="Footer" optional hint="Shown at the bottom of the email in a muted footer strip. Supports HTML." aside={`${draft.footer.length}/2000`}>
+              <Textarea placeholder="e.g. © 2025 PGME. All rights reserved. · You are receiving this because you are enrolled in PGME." value={draft.footer} onChange={(e) => set({ footer: e.target.value })} maxLength={2000} rows={2} />
+            </Field>
+            <div className="space-y-2.5">
+              <p className="text-[13px] font-medium">Attachments <span className="font-normal text-muted-foreground">(optional, max 5 × 25 MB)</span></p>
               {attachments.length > 0 && (
-                <ul className="space-y-2">
-                  {attachments.map((att, i) => (
-                    <li
-                      key={i}
-                      className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{att.filename}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {(att.file.size / 1024 / 1024).toFixed(1)} MB
-                      </span>
-                      {att.uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
-                      ) : att.url ? (
-                        <span className="text-xs text-emerald-600 shrink-0">Uploaded</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground shrink-0">Pending</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(i)}
-                        className="shrink-0 rounded p-0.5 hover:bg-muted"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {attachments.map((a) => (
+                    <li key={a.id} className="flex items-center gap-3 px-3.5 py-2 text-sm">
+                      <Paperclip aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate" title={a.filename}>{a.filename}</span>
+                      {a.file && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{(a.file.size / 1024 / 1024).toFixed(1)} MB</span>}
+                      {a.uploading ? <Loader2 aria-label="Uploading" className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" /> : <span className={a.url ? 'shrink-0 text-xs text-success' : 'shrink-0 text-xs text-muted-foreground'}>{a.url ? 'Uploaded' : 'Pending'}</span>}
+                      <button type="button" onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))} disabled={a.uploading} aria-label={`Remove ${a.filename}`} className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 aria-hidden="true" className="h-3.5 w-3.5" /></button>
                     </li>
                   ))}
                 </ul>
               )}
-
               {attachments.length < 5 && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                >
-                  <Paperclip className="h-4 w-4" />
-                  Attach file
+                <button type="button" onClick={() => fileInput.current?.click()} className="flex items-center gap-2 rounded-lg border-2 border-dashed border-input px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary">
+                  <Paperclip aria-hidden="true" className="h-4 w-4" />Attach file
                 </button>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleAttachmentSelect}
-                className="hidden"
-              />
+              <input ref={fileInput} type="file" multiple onChange={addFiles} className="sr-only" tabIndex={-1} aria-label="Attachments" />
             </div>
           </div>
+        </Section>
 
-          {/* ── Schedule ── */}
-          <div className="space-y-3 border-t pt-6">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={scheduleEnabled}
-                onChange={(e) => setScheduleEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-border"
-              />
-              <span className="text-sm font-medium">Schedule for later</span>
-            </label>
-            {scheduleEnabled && (
-              <div className="space-y-2 pl-7">
-                <Label htmlFor="email-schedule-at">Send at <span className="text-red-500">*</span></Label>
-                <Input
-                  id="email-schedule-at"
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
-                  className="max-w-xs"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Email will be queued and sent automatically at this time.
-                </p>
-              </div>
-            )}
-          </div>
+        <ScheduleSection id="email-schedule-at" noun="Email" value={schedule} onChange={setSchedule} problem={showProblems ? when : null} />
+      </ComposeFrame>
 
-          {/* ── Actions ── */}
-          <div className="flex items-center justify-between border-t pt-6">
-            <p className="text-sm text-muted-foreground">
-              {target === 'all' && 'Will be sent to all active users with an email address'}
-              {target === 'subject' && !subjectId && 'Select a subject first'}
-              {target === 'subject' && subjectId && subjectScope === 'subscribers' && 'Sending to all subscribers of the selected subject'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && !packageId && 'Select a package'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && packageId && 'Sending to active purchasers of the selected package'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && !seriesId && 'Select a package and series'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && seriesId && 'Sending to users with access to the selected series'}
-              {target === 'session' && !sessionId && 'Select a live session first'}
-              {target === 'session' && sessionId && 'Sending to all confirmed enrollees of the selected session'}
-              {target === 'specific' &&
-                selectedUsers.length > 0 &&
-                `Sending to ${selectedUsers.length} selected user${selectedUsers.length > 1 ? 's' : ''}`}
-              {target === 'specific' && selectedUsers.length === 0 && 'Search and select users first'}
-            </p>
-
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPreviewOpen(true)}
-                disabled={!body.trim()}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Preview
-              </Button>
-
-              <Button onClick={handleSend} disabled={!canSend() || sending} size="lg">
-                {sending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {scheduleEnabled ? 'Scheduling…' : 'Sending…'}
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    {scheduleEnabled ? 'Schedule Email' : 'Send Email'}
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Preview Modal ── */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen} guardUnsaved={false}>
+        <DialogContent size="default" backLabel="Back to the email">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-4 w-4" />
-              Email Preview
-            </DialogTitle>
+            <DialogTitle>Email Preview</DialogTitle>
+            <DialogDescription className="break-words">Subject: {draft.subject || 'No subject'}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm">
-              <span className="font-medium text-muted-foreground">Subject: </span>
-              {emailSubject || <span className="italic text-muted-foreground">No subject</span>}
-            </div>
-            <div
-              className="rounded-lg border overflow-hidden"
-              dangerouslySetInnerHTML={{ __html: buildPreviewHtml() }}
-            />
-            {attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {attachments.map((a, i) => (
-                  <span
-                    key={i}
-                    className="flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs"
-                  >
-                    <Paperclip className="h-3 w-3" />
-                    {a.filename}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          <EmailFrame draft={draft} height={640} />
+          {attachments.length > 0 && <ul className="flex flex-wrap gap-2">{attachments.map((a) => <li key={a.id} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs"><Paperclip aria-hidden="true" className="h-3 w-3 shrink-0" /><span className="truncate">{a.filename}</span></li>)}</ul>}
         </DialogContent>
       </Dialog>
-    </div>
+
+      <ReviewDock
+        open={review} onClose={() => setReview(false)} onConfirm={sendSafely} noun="email" audience={describeAudience(audience, 'email')} count={count}
+        scheduledAt={schedule.enabled && schedule.at ? istInputToISO(schedule.at) : null} replacing={!!edit.doc}
+        rows={[
+          { label: 'Subject', value: <span className="font-medium">{draft.subject}</span> },
+          ...(attachments.length ? [{ label: 'Attachments', value: attachments.map((a) => a.filename).join(', ') }] : []),
+          ...(excluded.length ? [{ label: 'Left out', value: excluded.length <= 5 ? excluded.map(personName).join(', ') : plural(excluded.length, 'user') }] : []),
+          { label: 'Unsubscribed', value: 'People who unsubscribed or were excluded are skipped.' },
+        ]}
+      />
+    </>
   )
 }

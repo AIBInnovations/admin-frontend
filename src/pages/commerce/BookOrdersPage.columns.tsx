@@ -1,25 +1,20 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ColumnDef } from '@/components/common/DataTable'
+import { StatusPill } from '@/components/common/detail'
+import { formatINR } from '@/lib/format'
 import { BookOrder } from '@/services/bookOrders.service'
 import { MoreVertical, Eye, Truck } from 'lucide-react'
-
-const orderStatusColors: Record<string, string> = {
-  pending: 'bg-amber-500/10 text-amber-600 border-amber-200',
-  confirmed: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  processing: 'bg-violet-500/10 text-violet-600 border-violet-200',
-  shipped: 'bg-cyan-500/10 text-cyan-600 border-cyan-200',
-  delivered: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
-}
+import { ORDER_STATUS, PAYMENT_STATUS, istDay } from './components/labels'
+import { StudentLink } from '@/components/students/StudentLink'
 
 interface BookOrdersColumnsProps {
   onViewDetails: (order: BookOrder) => void
-  onUpdateShipping: (order: BookOrder) => void
+  /** Left out when the admin may not change orders. */
+  onUpdateShipping?: (order: BookOrder) => void
 }
 
 export function useBookOrdersColumns({
@@ -31,9 +26,12 @@ export function useBookOrdersColumns({
       id: 'order',
       header: 'Order',
       cell: (order) => (
-        <div className="min-w-0">
-          <p className="text-sm font-medium font-mono">{order.order_number}</p>
-          <p className="text-xs text-muted-foreground">{order.recipient_name}</p>
+        <div className="min-w-[170px] max-w-[260px]">
+          <p className="truncate font-mono text-sm font-medium">{order.order_number || 'No number'}</p>
+          <p className="truncate text-xs"><StudentLink student={typeof order.user_id === 'string' ? { _id: order.user_id } : order.user_id} fallback="Student" from="Book orders" className="text-xs" /></p>
+          {typeof order.user_id === 'object' && order.user_id && order.recipient_name && order.recipient_name.trim() !== (order.user_id.name || '').trim() && (
+            <p className="truncate text-xs text-muted-foreground" title={order.recipient_name}>Ship to {order.recipient_name}</p>
+          )}
         </div>
       ),
     },
@@ -41,8 +39,8 @@ export function useBookOrdersColumns({
       id: 'items',
       header: 'Items',
       cell: (order) => (
-        <div className="min-w-0">
-          <p className="text-sm truncate">{order.items[0]?.title || '—'}</p>
+        <div className="min-w-[150px] max-w-[260px]">
+          <p className="truncate text-sm" title={order.items[0]?.title}>{order.items[0]?.title || '—'}</p>
           {order.items.length > 1 && (
             <p className="text-xs text-muted-foreground">+{order.items.length - 1} more</p>
           )}
@@ -54,18 +52,26 @@ export function useBookOrdersColumns({
       header: 'Amount',
       width: 'w-24',
       cell: (order) => (
-        <span className="text-sm font-medium">₹{order.total_amount.toLocaleString('en-IN')}</span>
+        <span className="whitespace-nowrap text-sm font-medium tabular-nums">{formatINR(order.total_amount)}</span>
       ),
     },
     {
       id: 'orderStatus',
       header: 'Order Status',
       width: 'w-28',
-      cell: (order) => (
-        <Badge className={`text-[10px] capitalize ${orderStatusColors[order.order_status] || ''}`}>
-          {order.order_status}
-        </Badge>
-      ),
+      cell: (order) => {
+        const s = ORDER_STATUS[order.order_status]
+        return <StatusPill tone={s?.tone}>{s?.label || order.order_status}</StatusPill>
+      },
+    },
+    {
+      id: 'payment',
+      header: 'Payment',
+      width: 'w-28',
+      cell: (order) => {
+        const s = PAYMENT_STATUS[order.payment_status]
+        return <StatusPill tone={s?.tone}>{s?.label || order.payment_status}</StatusPill>
+      },
     },
     {
       id: 'tracking',
@@ -73,9 +79,9 @@ export function useBookOrdersColumns({
       width: 'w-28',
       cell: (order) => (
         order.tracking_number ? (
-          <div className="min-w-0">
-            <p className="text-xs font-mono truncate">{order.tracking_number}</p>
-            <p className="text-[10px] text-muted-foreground">{order.courier_name}</p>
+          <div className="max-w-[150px]">
+            <p className="truncate font-mono text-xs">{order.tracking_number}</p>
+            <p className="truncate text-xs text-muted-foreground">{order.courier_name}</p>
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -86,13 +92,7 @@ export function useBookOrdersColumns({
       id: 'date',
       header: 'Date',
       width: 'w-28',
-      cell: (order) => (
-        <span className="text-xs text-muted-foreground">
-          {new Date(order.createdAt).toLocaleDateString('en-IN', {
-            day: 'numeric', month: 'short', year: 'numeric',
-          })}
-        </span>
-      ),
+      cell: (order) => <span className="whitespace-nowrap text-xs text-muted-foreground">{istDay(order.createdAt)}</span>,
     },
     {
       id: 'actions',
@@ -101,7 +101,7 @@ export function useBookOrdersColumns({
       cell: (order) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${order.order_number}`}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -109,7 +109,7 @@ export function useBookOrdersColumns({
             <DropdownMenuItem onClick={() => onViewDetails(order)}>
               <Eye className="mr-2 h-4 w-4" />View Details
             </DropdownMenuItem>
-            {(order.order_status === 'processing' || order.order_status === 'confirmed') && (
+            {onUpdateShipping && (order.order_status === 'processing' || order.order_status === 'confirmed' || order.order_status === 'shipped') && (
               <DropdownMenuItem onClick={() => onUpdateShipping(order)}>
                 <Truck className="mr-2 h-4 w-4" />Update Shipping
               </DropdownMenuItem>

@@ -1,35 +1,29 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { CalendarClock, Loader2, X, Mail, MessageSquare, Megaphone, CheckCircle2, AlertCircle, Ban, Clock } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CalendarClock, Loader2, Mail, Megaphone, MessageSquare, Pencil, RotateCw, X } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  notificationsService,
-  type ScheduledNotification,
-  type ScheduledStatus,
-  type ScheduledChannel,
-} from '@/services/notifications.service'
+import { ErrorState, StatusPill, type Tone } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConfirmDock, RowsSkeleton, StaleNotice } from '@/components/users/kit'
+import { dayTimeIST, ensureOk, plural, unwrap, usePageInRange, useResource, useUrlState } from '@/components/users/lib'
+import { relativeTime } from '@/lib/relativeTime'
+import { useAuth } from '@/contexts/AuthContext'
+import { notificationsService, type ScheduledChannel, type ScheduledNotification, type ScheduledStatus } from '@/services/notifications.service'
+import type { ListResponse } from '@/types/api.types'
 
-const channelMeta: Record<ScheduledChannel, { label: string; icon: typeof Megaphone; color: string }> = {
-  push: { label: 'Push', icon: Megaphone, color: 'text-blue-600' },
-  email: { label: 'Email', icon: Mail, color: 'text-purple-600' },
-  sms: { label: 'SMS', icon: MessageSquare, color: 'text-emerald-600' },
+const CHANNEL: Record<ScheduledChannel, { label: string; icon: typeof Megaphone; tab: string }> = {
+  push: { label: 'Push', icon: Megaphone, tab: 'send' },
+  email: { label: 'Email', icon: Mail, tab: 'email' },
+  sms: { label: 'SMS', icon: MessageSquare, tab: 'sms' },
 }
-
-const statusMeta: Record<ScheduledStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Clock }> = {
-  pending: { label: 'Pending', variant: 'default', icon: Clock },
-  sent: { label: 'Sent', variant: 'secondary', icon: CheckCircle2 },
-  failed: { label: 'Failed', variant: 'destructive', icon: AlertCircle },
-  cancelled: { label: 'Cancelled', variant: 'outline', icon: Ban },
+const STATUS: Record<ScheduledStatus, { label: string; tone: Tone }> = {
+  pending: { label: 'Pending', tone: 'info' },
+  sent: { label: 'Sent', tone: 'success' },
+  failed: { label: 'Failed', tone: 'danger' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
 }
+const PAGE = 20
 
 function describeTarget(item: ScheduledNotification): string {
   switch (item.target_type) {
@@ -38,72 +32,48 @@ function describeTarget(item: ScheduledNotification): string {
     case 'package': return 'Package purchasers'
     case 'series': return 'Series users'
     case 'session': return 'Session enrollees'
-    case 'users': return `${item.user_ids?.length || 0} specific users`
+    case 'users': return plural(item.user_ids?.length || 0, 'specific user')
     default: return item.target_type
   }
 }
 
 function summarize(item: ScheduledNotification): { primary: string; secondary: string } {
-  if (item.channel === 'push') return { primary: item.title || '(no title)', secondary: item.message || '' }
-  if (item.channel === 'email') return { primary: item.email_subject || '(no subject)', secondary: '' }
-  if (item.channel === 'sms') return { primary: item.sms_message || '', secondary: '' }
-  return { primary: '', secondary: '' }
+  if (item.channel === 'push') return { primary: item.title || 'No title', secondary: item.message || '' }
+  if (item.channel === 'email') return { primary: item.email_subject || 'No subject', secondary: '' }
+  return { primary: item.sms_message || 'No message', secondary: '' }
 }
 
 export function ScheduledNotificationsTab() {
-  const [items, setItems] = useState<ScheduledNotification[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>('pending')
-  const [channelFilter, setChannelFilter] = useState<string>('all')
-  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canCancel = hasPermission('notifications.delete')
+  const canEdit = canCancel && hasPermission('notifications.create')
+  const { state, set, page, setPage } = useUrlState({ sched_status: 'pending', sched_channel: 'all' })
+  const [cancelling, setCancelling] = useState<ScheduledNotification | null>(null)
 
-  const fetchScheduled = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await notificationsService.listScheduledNotifications({
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        channel: channelFilter !== 'all' ? channelFilter : undefined,
-        limit: 100,
-      })
-      if (res.success && res.data) {
-        setItems(res.data.entities || [])
-      } else {
-        toast.error(res.message || 'Failed to load scheduled notifications')
-      }
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to load scheduled notifications')
-    } finally {
-      setLoading(false)
-    }
-  }, [statusFilter, channelFilter])
+  const { data, loading, error, reload } = useResource<ListResponse<ScheduledNotification>>(async () => unwrap(await notificationsService.listScheduledNotifications({
+    status: state.sched_status !== 'all' ? state.sched_status : undefined,
+    channel: state.sched_channel !== 'all' ? state.sched_channel : undefined,
+    page, limit: PAGE,
+  }), 'Failed to load scheduled notifications'), [state.sched_status, state.sched_channel, page])
+  const items = data?.entities || []
+  const total = data?.pagination?.total ?? 0
+  const totalPages = Math.max(1, data?.pagination?.totalPages || 1)
+  usePageInRange(page, data ? totalPages : undefined, loading, setPage)
+  const hasFilters = state.sched_status !== 'pending' || state.sched_channel !== 'all'
 
-  useEffect(() => { fetchScheduled() }, [fetchScheduled])
-
-  const handleCancel = async (id: string) => {
-    if (!confirm('Cancel this scheduled notification? This cannot be undone.')) return
-    setCancellingId(id)
-    try {
-      const res = await notificationsService.cancelScheduledNotification(id)
-      if (res.success) {
-        toast.success('Scheduled notification cancelled')
-        fetchScheduled()
-      } else {
-        toast.error(res.message || 'Failed to cancel')
-      }
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to cancel')
-    } finally {
-      setCancellingId(null)
-    }
+  const cancel = async () => {
+    if (!cancelling) return
+    ensureOk(await notificationsService.cancelScheduledNotification(cancelling._id), 'Failed to cancel')
+    toast.success('Scheduled notification cancelled')
+    await reload({ silent: true })
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={state.sched_status} onValueChange={(v) => set({ sched_status: v })}>
+          <SelectTrigger aria-label="Status" className="h-9 w-44 bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
@@ -112,10 +82,8 @@ export function ScheduledNotificationsTab() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
+        <Select value={state.sched_channel} onValueChange={(v) => set({ sched_channel: v })}>
+          <SelectTrigger aria-label="Channel" className="h-9 w-44 bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
             <SelectItem value="push">Push</SelectItem>
@@ -123,95 +91,73 @@ export function ScheduledNotificationsTab() {
             <SelectItem value="sms">SMS</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" size="sm" onClick={fetchScheduled} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
+        <Button variant="outline" size="sm" className="h-9 bg-card" onClick={() => reload({ silent: !!data })} disabled={loading}>
+          {loading ? <Loader2 aria-hidden="true" className="animate-spin" /> : <RotateCw aria-hidden="true" />}Refresh
         </Button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : items.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
-            <CalendarClock className="h-10 w-10 opacity-40" />
-            <p className="text-sm">No scheduled notifications</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) => {
-            const ch = channelMeta[item.channel]
-            const st = statusMeta[item.status]
-            const ChIcon = ch.icon
-            const StIcon = st.icon
-            const summary = summarize(item)
-            const when = new Date(item.scheduled_at)
+      {error && data && <StaleNotice message={error} onRetry={() => reload({ silent: true })} />}
 
-            return (
-              <Card key={item._id}>
-                <CardContent className="flex items-start gap-4 p-4">
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted ${ch.color}`}>
-                    <ChIcon className="h-5 w-5" />
-                  </div>
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card" aria-busy={loading}>
+        {loading && !data ? <RowsSkeleton /> : !data ? <ErrorState message={error ?? undefined} onRetry={() => reload()} /> : items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+            <CalendarClock aria-hidden="true" className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium">No scheduled notifications</p>
+            <p className="text-sm text-muted-foreground">{hasFilters ? 'Nothing matches these filters.' : 'Tick "Schedule for later" when you write a message and it appears here.'}</p>
+            {hasFilters && <Button size="sm" variant="outline" className="mt-1" onClick={() => set({ sched_status: 'pending', sched_channel: 'all' })}>Clear filters</Button>}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {items.map((item) => {
+              const ch = CHANNEL[item.channel] ?? CHANNEL.push
+              const st = STATUS[item.status] ?? { label: item.status, tone: 'neutral' as Tone }
+              const Icon = ch.icon
+              const summary = summarize(item)
+              const editHref = `/notifications?tab=${ch.tab}&edit=${item._id}`
+              const open = canEdit && item.status === 'pending'
+              return (
+                <li key={item._id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start">
+                  <Icon aria-hidden="true" className="mt-0.5 hidden h-5 w-5 shrink-0 text-muted-foreground sm:block" />
                   <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium truncate">{summary.primary}</p>
-                      <Badge variant={st.variant} className="gap-1">
-                        <StIcon className="h-3 w-3" />
-                        {st.label}
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <p className="min-w-0 max-w-full break-words text-sm font-medium">{summary.primary}</p>
+                      <StatusPill tone={st.tone}>{st.label}</StatusPill>
                     </div>
-                    {summary.secondary && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">{summary.secondary}</p>
-                    )}
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <CalendarClock className="h-3 w-3" />
-                        {when.toLocaleString()}
-                      </span>
-                      <span>·</span>
-                      <span>{describeTarget(item)}</span>
-                      {item.created_by?.name && (
-                        <>
-                          <span>·</span>
-                          <span>by {item.created_by.name}</span>
-                        </>
-                      )}
-                    </div>
-                    {item.status === 'sent' && item.result && (
-                      <p className="text-xs text-emerald-600">
-                        Delivered {item.result.sent}/{item.result.total}{item.result.failed > 0 ? ` · ${item.result.failed} failed` : ''}
-                      </p>
-                    )}
-                    {item.status === 'failed' && item.failure_reason && (
-                      <p className="text-xs text-red-600">{item.failure_reason}</p>
-                    )}
+                    {summary.secondary && <p className="line-clamp-2 text-sm text-muted-foreground">{summary.secondary}</p>}
+                    <p className="text-[13px] text-muted-foreground">
+                      {ch.label} · {dayTimeIST(item.scheduled_at)}{item.status === 'pending' && Math.abs(new Date(item.scheduled_at).getTime() - Date.now()) < 30 * 86_400_000 ? ` (${relativeTime(item.scheduled_at)})` : ''} · {describeTarget(item)}{item.created_by?.name ? ` · by ${item.created_by.name}` : ''}
+                    </p>
+                    {item.status === 'sent' && item.result && <p className="text-[13px] text-success">Delivered {item.result.sent.toLocaleString('en-IN')}/{item.result.total.toLocaleString('en-IN')}{item.result.failed > 0 ? ` · ${item.result.failed.toLocaleString('en-IN')} failed` : ''}</p>}
+                    {item.status === 'failed' && item.failure_reason && <p className="break-words text-[13px] text-danger">{item.failure_reason}</p>}
                   </div>
-                  {item.status === 'pending' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleCancel(item._id)}
-                      disabled={cancellingId === item._id}
-                    >
-                      {cancellingId === item._id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <X className="mr-1 h-4 w-4" />
-                          Cancel
-                        </>
-                      )}
-                    </Button>
+                  {item.status === 'pending' && (open || canCancel) && (
+                    <div className="flex shrink-0 gap-2">
+                      {open && <Button variant="outline" size="sm" className="bg-card" onClick={() => navigate(editHref)}><Pencil aria-hidden="true" />Edit</Button>}
+                      {canCancel && <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-soft hover:text-danger" onClick={() => setCancelling(item)}><X aria-hidden="true" />Cancel</Button>}
+                    </div>
                   )}
-                </CardContent>
-              </Card>
-            )
-          })}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Page {page} of {totalPages} · {plural(total, 'message')}</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="bg-card" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+            <Button size="sm" variant="outline" className="bg-card" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+          </div>
         </div>
       )}
+
+      <ConfirmDock
+        open={!!cancelling} onClose={() => setCancelling(null)} onConfirm={cancel}
+        title="Cancel this scheduled notification?" description={cancelling ? <p className="break-words">"{summarize(cancelling).primary}" will not be sent on {dayTimeIST(cancelling.scheduled_at)}. This cannot be undone.</p> : undefined}
+        confirmLabel="Cancel notification" workingLabel="Cancelling…" cancelLabel="Keep it"
+      />
     </div>
   )
 }

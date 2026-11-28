@@ -158,21 +158,21 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
+            <Label htmlFor="name">Name <span className="text-danger">*</span></Label>
             <Input id="name" placeholder="e.g., Upper Limb Series" disabled={isSubmitting} {...register('name')} />
-            {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+            {errors.name && <p className="text-sm text-danger">{errors.name.message}</p>}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
+            <Label htmlFor="description">Description <span className="text-danger">*</span></Label>
             <Textarea id="description" placeholder="Series description..." rows={3} disabled={isSubmitting} {...register('description')} />
-            {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+            {errors.description && <p className="text-sm text-danger">{errors.description.message}</p>}
           </div>
 
           {/* Package */}
           <div className="space-y-2">
-            <Label>Package <span className="text-red-500">*</span></Label>
+            <Label>Package <span className="text-danger">*</span></Label>
             <Controller
               name="package_id" control={control}
               render={({ field }) => (
@@ -181,7 +181,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
                     <Button
                       variant="outline" role="combobox"
                       disabled={isSubmitting || (mode === 'create' && !!defaultPackageId)}
-                      className="w-full justify-between font-normal h-9"
+                      className="w-full justify-between text-left font-normal h-9"
                     >
                       <MarqueeText>
                         {field.value ? packages.find(p => p._id === field.value)?.name || 'Select package' : 'Select package'}
@@ -208,10 +208,10 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
                               <span className="flex items-center gap-2">
                                 {p.name}
                                 {p.publish_status === 'draft' && (
-                                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-warning-soft text-warning border-transparent">Draft</span>
                                 )}
                                 {p.is_active === false && (
-                                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-danger-soft text-danger border-transparent">Inactive</span>
                                 )}
                               </span>
                             </CommandItem>
@@ -226,7 +226,7 @@ export function SeriesFormModal({ open, onClose, onSubmit, series, mode, default
             <p className="text-xs text-muted-foreground">
               All items shown including drafts and inactive
             </p>
-            {errors.package_id && <p className="text-sm text-red-500">{errors.package_id.message}</p>}
+            {errors.package_id && <p className="text-sm text-danger">{errors.package_id.message}</p>}
           </div>
 
           {/* Thumbnail */}

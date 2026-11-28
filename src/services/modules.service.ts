@@ -49,7 +49,7 @@ class ModulesService extends BaseCrudService<Module, ModuleFormData, ModulesList
     if (response.success && response.data) {
       return { ...response, data: response.data.module }
     }
-    return response as ApiResponse<Module>
+    return response as unknown as ApiResponse<Module>
   }
 
   /**

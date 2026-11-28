@@ -1,379 +1,106 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  Video, Users, Calendar, Clock, DollarSign, Settings,
-  Monitor, Link as LinkIcon, UserCheck, Eye, Edit, Archive,
-  CheckCircle, XCircle, AlertCircle, PlayCircle, ExternalLink, Film,
-  Package, Loader2, Bell, Image,
+  Archive, Bell, CheckCircle, ExternalLink, Eye, Film, Image, Link as LinkIcon, Loader2, Package, Pencil, RotateCw, ShieldCheck, UserCheck, Users, XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { liveSessionsService, LiveSession, LiveSessionFormData } from '@/services/liveSessions.service'
+import { PageHeader } from '@/components/common/PageHeader'
+import { CopyButton, DetailSkeleton, FactGrid, Section, StatusPill, apiErrorMessage } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAuth } from '@/contexts/AuthContext'
+import { formatCount, formatINR } from '@/lib/format'
+import { liveSessionsService, LiveSession } from '@/services/liveSessions.service'
 import { recordingsService, Recording } from '@/services/recordings.service'
-import { packageTypesService, PackageType } from '@/services/packageTypes.service'
-import { SessionFormModal } from '@/components/sessions/SessionFormModal'
-import { ArchiveModal } from '@/components/modals/ArchiveModal'
 import { CohostLinksPanel } from '@/components/sessions/CohostLinksPanel'
+import { ConvertToPackageDialog } from '@/components/sessions/ConvertToPackageDialog'
+import { NotifyDialog } from '@/components/sessions/NotifyDialog'
+import { ArchiveSessionDock, CancelSessionDock } from '@/components/sessions/SessionDocks'
+import { RecordError, useRecord } from '@/components/forms/editor/EditorPage'
+import { Note } from '@/components/forms/editor/fields'
+import { PublishStatusPill, RunStatus, Tag, fileSize, videoLength } from '@/components/forms/editor/list'
+import { RecordingStatus } from '@/components/recordings/RecordingStatus'
+import { istDateTime, istDay, istSpan, minutesLabel, whenLabel } from '@/components/forms/editor/ist'
+import { ACCESS_MARKER, accessSentence, modeOf, type GatedSession } from '@/components/sessions/sessionAccess'
+import { listClasses, previewText } from '@/components/sessions/weeklySchedule'
+
+const words = (s: string | null | undefined) => (s || 'Not set').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
+const refName = (ref: LiveSession['subject_id'] | LiveSession['faculty_id'], missing: string) =>
+  ref && typeof ref === 'object' ? ref.name : ref ? missing : null
 
 export function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const { record: session, loading, error, reload } = useRecord(sessionId, (id) => liveSessionsService.getById(id))
+
+  if (loading && !session) return <DetailSkeleton />
+  if (!session) return <RecordError status={error?.status ?? null} message={error?.message ?? ''} noun="session" back={{ label: 'Back to live sessions', href: '/sessions' }} onRetry={reload} />
+  return <SessionDetail key={session._id} session={session} refreshError={error?.message ?? null} reload={reload} />
+}
+
+function SessionDetail({ session, refreshError, reload }: { session: LiveSession; refreshError: string | null; reload: () => void }) {
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canUpdate = hasPermission('live_sessions.update')
+  const canDelete = hasPermission('live_sessions.delete')
 
-  const [session, setSession] = useState<LiveSession | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [archiveModalOpen, setArchiveModalOpen] = useState(false)
-  const [archiveBlocked, setArchiveBlocked] = useState(false)
-  const [archiveBlockReason, setArchiveBlockReason] = useState('')
-  const [loadingArchiveImpact, setLoadingArchiveImpact] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [notifying, setNotifying] = useState(false)
+  const [converting, setConverting] = useState(false)
+
+  // Recordings
   const [recordings, setRecordings] = useState<Recording[]>([])
-  const [loadingRecordings, setLoadingRecordings] = useState(true)
-
-  // Convert to package state
-  const [convertModalOpen, setConvertModalOpen] = useState(false)
-  const [convertLoading, setConvertLoading] = useState(false)
-  const [packageTypes, setPackageTypes] = useState<PackageType[]>([])
-  const [selectedPackageTypeId, setSelectedPackageTypeId] = useState('')
-  const [convertPrice, setConvertPrice] = useState('0')
-  const [convertDuration, setConvertDuration] = useState('365')
-
-  // Send notification state
-  const [notifyModalOpen, setNotifyModalOpen] = useState(false)
-  const [notifyLoading, setNotifyLoading] = useState(false)
-  const [notifyPreviewLoading, setNotifyPreviewLoading] = useState(false)
-  const [notifyTitle, setNotifyTitle] = useState('')
-  const [notifyMessage, setNotifyMessage] = useState('')
-  const [notifyAudienceLabel, setNotifyAudienceLabel] = useState('')
-  const [notifyUserCount, setNotifyUserCount] = useState(0)
-
-  // Banner state
-  const [bannerLoading, setBannerLoading] = useState(false)
-  const [hasActiveBanner, setHasActiveBanner] = useState(false)
-
-  const fetchSession = useCallback(async () => {
-    if (!sessionId) return
+  const [recState, setRecState] = useState<{ loading: boolean; error: string | null }>({ loading: true, error: null })
+  const recCall = useRef(0)
+  const loadRecordings = useCallback(async () => {
+    const call = ++recCall.current
+    setRecState({ loading: true, error: null })
     try {
-      setLoading(true)
-      const response = await liveSessionsService.getById(sessionId)
-      if (response.success && response.data) {
-        setSession(response.data)
-      } else {
-        toast.error('Session not found')
-        navigate('/sessions')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load session details')
-      navigate('/sessions')
+      const res = await recordingsService.getAll({ session_id: session._id, limit: 100 })
+      if (call !== recCall.current) return
+      if (!res.success || !res.data) throw new Error(res.message || 'Failed to load recordings')
+      setRecordings(res.data.entities || [])
+      setRecState({ loading: false, error: null })
+    } catch (e) {
+      if (call === recCall.current) setRecState({ loading: false, error: apiErrorMessage(e, 'Failed to load recordings') })
+    }
+  }, [session._id])
+  useEffect(() => { loadRecordings(); return () => { recCall.current += 1 } }, [loadRecordings])
+
+  // Banner
+  const [hasBanner, setHasBanner] = useState(false)
+  const [bannerBusy, setBannerBusy] = useState(false)
+  useEffect(() => {
+    let alive = true
+    liveSessionsService.getBannerStatus(session._id)
+      .then((res) => { if (alive && res.success && res.data) setHasBanner(res.data.has_active_banner) })
+      .catch(() => { /* the button falls back to "Create Banner"; the API refuses a second one */ })
+    return () => { alive = false }
+  }, [session._id])
+
+  const toggleBanner = async () => {
+    if (bannerBusy) return
+    setBannerBusy(true)
+    try {
+      const res = hasBanner ? await liveSessionsService.hideBanner(session._id) : await liveSessionsService.createBanner(session._id)
+      if (!res.success) throw new Error(res.message || 'Failed to update banner')
+      toast.success(hasBanner ? 'Banner hidden successfully' : 'Banner created successfully')
+      setHasBanner(!hasBanner)
+    } catch (e) {
+      toast.error(apiErrorMessage(e, hasBanner ? 'Failed to hide banner' : 'Failed to create banner'))
     } finally {
-      setLoading(false)
-    }
-  }, [sessionId, navigate])
-
-  useEffect(() => { fetchSession() }, [fetchSession])
-
-  const fetchBannerStatus = useCallback(async () => {
-    if (!sessionId) return
-    try {
-      const response = await liveSessionsService.getBannerStatus(sessionId)
-      if (response.success && response.data) {
-        setHasActiveBanner(response.data.has_active_banner)
-      }
-    } catch {
-      // silently ignore
-    }
-  }, [sessionId])
-
-  useEffect(() => { fetchBannerStatus() }, [fetchBannerStatus])
-
-  const fetchRecordings = useCallback(async () => {
-    if (!sessionId) return
-    try {
-      setLoadingRecordings(true)
-      const response = await recordingsService.getAll({ session_id: sessionId, limit: 100 })
-      if (response.success && response.data) {
-        setRecordings(response.data.entities || [])
-      } else {
-        toast.error(response.message || 'Failed to load recordings')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load recordings')
-    } finally {
-      setLoadingRecordings(false)
-    }
-  }, [sessionId])
-
-  useEffect(() => { fetchRecordings() }, [fetchRecordings])
-
-  const handleEdit = () => {
-    setFormModalOpen(true)
-  }
-
-  const handleArchiveClick = async () => {
-    setArchiveModalOpen(true)
-    setLoadingArchiveImpact(true)
-    setArchiveBlocked(false)
-    setArchiveBlockReason('')
-
-    try {
-      const response = await liveSessionsService.getDeleteImpact(session!._id)
-      if (response.success && response.data && response.data.blocked) {
-        setArchiveBlocked(true)
-        const reasons = response.data.dependencies
-          ?.filter((d: any) => d.blocking)
-          .map((d: any) => `${d.count} ${d.label}`)
-          .join(', ')
-        setArchiveBlockReason(`Cannot archive. Remove dependencies first: ${reasons}`)
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check dependencies')
-    } finally {
-      setLoadingArchiveImpact(false)
+      setBannerBusy(false)
     }
   }
 
-  const handleFormSubmit = async (data: LiveSessionFormData) => {
-    if (!session) return
-    try {
-      const response = await liveSessionsService.update(session._id, data)
-      if (response.success) {
-        toast.success('Session updated successfully')
-        fetchSession()
-      } else {
-        toast.error(response.message || 'Failed to update session')
-        throw new Error(response.message || 'Failed to update session')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update session')
-      throw error
-    }
-  }
-
-  const handleArchiveConfirm = async () => {
-    if (!session) return
-    try {
-      const response = await liveSessionsService.archive(session._id)
-      if (response.success) {
-        toast.success('Session archived successfully')
-        navigate('/sessions')
-      } else {
-        toast.error(response.message || 'Failed to archive session')
-        throw new Error(response.message || 'Failed to archive session')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to archive session')
-      throw error
-    }
-  }
-
-  const handleCancel = async () => {
-    if (!session) return
-    try {
-      const response = await liveSessionsService.cancel(session._id)
-      if (response.success) {
-        toast.success('Session cancelled successfully')
-        fetchSession()
-      } else {
-        toast.error(response.message || 'Failed to cancel session')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to cancel session')
-    }
-  }
-
-  const handleOpenConvertModal = async () => {
-    setConvertModalOpen(true)
-    setSelectedPackageTypeId('')
-    setConvertPrice(session?.price?.toString() || '0')
-    setConvertDuration('365')
-    const res = await packageTypesService.getAllPublic()
-    if (res.success && res.data) setPackageTypes(res.data)
-  }
-
-  const handleConvertToPackage = async () => {
-    if (!sessionId || !selectedPackageTypeId) return
-    try {
-      setConvertLoading(true)
-      const response = await liveSessionsService.convertToPackage(sessionId, {
-        package_type_id: selectedPackageTypeId,
-        price: parseFloat(convertPrice) || 0,
-        duration_days: parseInt(convertDuration) || 365,
-      })
-      if (response.success && response.data) {
-        const migrated = response.data.purchases_migrated
-        const migratedMsg = migrated ? ` ${migrated} session buyer(s) granted package access.` : ''
-        toast.success(`Package created with ${response.data.video_count} video(s).${migratedMsg}`)
-        setConvertModalOpen(false)
-        navigate(`/content/packages/${response.data.package_id}`)
-      } else {
-        toast.error(response.message || 'Failed to convert session to package')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to convert session to package')
-    } finally {
-      setConvertLoading(false)
-    }
-  }
-
-  const handleOpenNotifyModal = async () => {
-    if (!sessionId) return
-    setNotifyModalOpen(true)
-    setNotifyPreviewLoading(true)
-    try {
-      const response = await liveSessionsService.getNotificationPreview(sessionId)
-      if (response.success && response.data) {
-        setNotifyTitle(response.data.title)
-        setNotifyMessage(response.data.message)
-        setNotifyAudienceLabel(response.data.audience_label)
-        setNotifyUserCount(response.data.user_count)
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load notification preview')
-    } finally {
-      setNotifyPreviewLoading(false)
-    }
-  }
-
-  const handleSendNotification = async () => {
-    if (!sessionId || !notifyTitle || !notifyMessage) return
-    try {
-      setNotifyLoading(true)
-      const response = await liveSessionsService.sendNotification(sessionId, {
-        title: notifyTitle,
-        message: notifyMessage,
-      })
-      if (response.success) {
-        const data = response.data
-        toast.success(`Notification sent to ${data?.sent || 0} user(s)`)
-        setNotifyModalOpen(false)
-      } else {
-        toast.error(response.message || 'Failed to send notification')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send notification')
-    } finally {
-      setNotifyLoading(false)
-    }
-  }
-
-  const handleCreateBanner = async () => {
-    if (!sessionId) return
-    try {
-      setBannerLoading(true)
-      const response = await liveSessionsService.createBanner(sessionId)
-      if (response.success) {
-        toast.success('Banner created successfully')
-        setHasActiveBanner(true)
-      } else {
-        toast.error(response.message || 'Failed to create banner')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create banner')
-    } finally {
-      setBannerLoading(false)
-    }
-  }
-
-  const handleHideBanner = async () => {
-    if (!sessionId) return
-    try {
-      setBannerLoading(true)
-      const response = await liveSessionsService.hideBanner(sessionId)
-      if (response.success) {
-        toast.success('Banner hidden successfully')
-        setHasActiveBanner(false)
-      } else {
-        toast.error(response.message || 'Failed to hide banner')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to hide banner')
-    } finally {
-      setBannerLoading(false)
-    }
-  }
-
-  const formatDuration = (seconds: number): string => {
-    if (seconds < 60) return `${seconds}s`
-    const mins = Math.floor(seconds / 60)
-    if (mins < 60) return `${mins}m`
-    const hrs = Math.floor(mins / 60)
-    const remainMins = mins % 60
-    return remainMins > 0 ? `${hrs}h ${remainMins}m` : `${hrs}h`
-  }
-
-  // Loading skeleton
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
-    )
-  }
-
-  if (!session) return null
-
-  const formatDateTime = (date: string) => {
-    return new Date(date).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  const getStatusIcon = (status: LiveSession['status']) => {
-    switch (status) {
-      case 'scheduled':
-        return <Clock className="h-4 w-4" />
-      case 'live':
-        return <PlayCircle className="h-4 w-4" />
-      case 'completed':
-        return <CheckCircle className="h-4 w-4" />
-      case 'cancelled':
-        return <XCircle className="h-4 w-4" />
-    }
-  }
-
-  const getStatusColor = (status: LiveSession['status']) => {
-    switch (status) {
-      case 'scheduled':
-        return 'bg-blue-500/10 text-blue-600 border-blue-200'
-      case 'live':
-        return 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-      case 'completed':
-        return 'bg-zinc-500/10 text-zinc-600 border-zinc-200'
-      case 'cancelled':
-        return 'bg-red-500/10 text-red-600 border-red-200'
-    }
-  }
-
-  const getPlatformIcon = (platform: LiveSession['platform']) => {
-    return <Monitor className="h-4 w-4" />
-  }
+  const archivedAt = (session as LiveSession & { archivedAt?: string | null }).archivedAt
+  const full = session.capacity_mode === 'limited' && !!session.max_attendees && (session.enrollment_count || 0) >= session.max_attendees
+  const weekly = !!session.repeat?.weekly
+  // What students see now: a weekly series is live only during a class
+  const shownStatus = session.effective_status ?? session.status
+  const overdue = !weekly && session.status === 'scheduled' && new Date(session.scheduled_end_time).getTime() < Date.now()
+  const seriesDone = weekly && session.class_state === 'over' && session.status === 'scheduled'
 
   return (
     <div className="space-y-6">
@@ -386,688 +113,349 @@ export function SessionDetailPage() {
           { label: session.title },
         ]}
         action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/sessions/${sessionId}/attendees`)}>
-              <Users className="mr-2 h-4 w-4" />
-              View Attendees
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenNotifyModal}>
-              <Bell className="mr-2 h-4 w-4" />
-              Send Notification
-            </Button>
-            {hasActiveBanner ? (
-              <Button variant="outline" size="sm" onClick={handleHideBanner} disabled={bannerLoading}>
-                {bannerLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Eye className="mr-2 h-4 w-4" />
-                )}
-                Hide Banner
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleCreateBanner} disabled={bannerLoading}>
-                {bannerLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Image className="mr-2 h-4 w-4" />
-                )}
-                Create Banner
+          <div className="flex flex-wrap items-center gap-2 sm:max-w-[420px] sm:justify-end lg:max-w-[560px] xl:max-w-[760px]">
+            <Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/sessions/${session._id}/attendees`}><Users aria-hidden="true" />View Attendees</Link></Button>
+            {canUpdate && <Button variant="outline" size="sm" className="bg-card" onClick={() => setNotifying(true)}><Bell aria-hidden="true" />Send Notification</Button>}
+            {canUpdate && (
+              <Button variant="outline" size="sm" className="bg-card" onClick={toggleBanner} disabled={bannerBusy}>
+                {bannerBusy ? <Loader2 aria-hidden="true" className="animate-spin" /> : hasBanner ? <Eye aria-hidden="true" /> : <Image aria-hidden="true" />}
+                {hasBanner ? 'Hide Banner' : 'Create Banner'}
               </Button>
             )}
-            {recordings.length > 0 && (
-              <Button size="sm" onClick={handleOpenConvertModal}>
-                <Package className="mr-2 h-4 w-4" />
-                Convert to Package
-              </Button>
+            {canUpdate && recordings.length > 0 && (
+              <Button size="sm" onClick={() => setConverting(true)}><Package aria-hidden="true" />Convert to Package</Button>
             )}
-            {session.status === 'scheduled' && (
-              <Button variant="outline" size="sm" onClick={handleCancel}>
-                <XCircle className="mr-2 h-4 w-4" />
-                Cancel Session
-              </Button>
+            {canUpdate && session.status === 'scheduled' && (
+              <Button variant="outline" size="sm" className="bg-card" onClick={() => setCancelling(true)}><XCircle aria-hidden="true" />Cancel Session</Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleArchiveClick}>
-              <Archive className="mr-2 h-4 w-4" />
-              Archive
-            </Button>
+            {canUpdate && <Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/sessions/${session._id}/edit`}><Pencil aria-hidden="true" />Edit</Link></Button>}
+            {canDelete && !archivedAt && (
+              <Button variant="outline" size="sm" className="bg-card" onClick={() => setArchiving(true)}><Archive aria-hidden="true" />Archive</Button>
+            )}
           </div>
         }
       />
 
-      {/* Status Badge */}
-      <div>
-        <Badge className={`text-xs ${getStatusColor(session.status)}`}>
-          {getStatusIcon(session.status)}
-          <span className="ml-1.5 capitalize">{session.status}</span>
-        </Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <RunStatus status={shownStatus} />
+        <PublishStatusPill status={session.publish_status} />
+        {weekly && <StatusPill tone="info">Weekly</StatusPill>}
+        {archivedAt && <StatusPill tone="danger">Archived</StatusPill>}
+        {session.status !== 'cancelled' && (
+          weekly ? (
+            session.next_class_start && (
+              <span className="text-[13px] text-muted-foreground">
+                Class {session.class_number} of {session.classes_total}, {session.class_state === 'buffer' && session.join_closes_at
+                  ? `in its overtime, joining open until ${istDateTime(session.join_closes_at).split(', ').pop()}`
+                  : whenLabel(session.next_class_start, session.next_class_end)}
+              </span>
+            )
+          ) : (
+            <span className="text-[13px] text-muted-foreground">{whenLabel(session.scheduled_start_time, session.scheduled_end_time)}</span>
+          )
+        )}
       </div>
 
-      {/* Basic Information */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Video className="h-4 w-4" />
-              Basic Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Title</p>
-              <p className="text-sm font-medium">{session.title}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Description</p>
-              <p className="text-sm">{session.description || '—'}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Subject</p>
-                <p className="text-sm font-medium">
-                  {typeof session.subject_id === 'object' ? session.subject_id.name : session.subject_id}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Faculty</p>
-                <p className="text-sm font-medium">
-                  {session.faculty_id && typeof session.faculty_id === 'object'
-                    ? session.faculty_id.name
-                    : session.faculty_id || '—'}
-                </p>
-              </div>
-            </div>
-            {session.series_id && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Series</p>
-                <p className="text-sm font-medium">
-                  {typeof session.series_id === 'object' ? session.series_id.name : session.series_id}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {refreshError && <Note tone="danger">{refreshError} <button type="button" className="font-medium underline underline-offset-2" onClick={reload}>Try again</button></Note>}
+      {overdue && <Note tone="warning">This session is still marked scheduled, but its end time has passed ({istDateTime(session.scheduled_end_time)} IST).</Note>}
+      {seriesDone && <Note>The last class of this series has ended. Students see it as completed.</Note>}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calendar className="h-4 w-4" />
-              Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Start Time</p>
-              <p className="text-sm font-medium">{formatDateTime(session.scheduled_start_time)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">End Time</p>
-              <p className="text-sm font-medium">{formatDateTime(session.scheduled_end_time)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Duration</p>
-              <p className="text-sm font-medium">{session.duration_minutes} minutes</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Section title="Basic Information">
+          <FactGrid
+            className="xl:grid-cols-2"
+            facts={[
+              { label: 'Title', value: session.title, wide: true },
+              { label: 'Description', value: session.description ? <span className="whitespace-pre-wrap font-normal">{session.description}</span> : null, wide: true },
+              { label: 'Subject', value: refName(session.subject_id, 'Deleted subject') ?? 'Deleted subject' },
+              { label: 'Faculty', value: refName(session.faculty_id, 'Deleted faculty') },
+              session.series_id ? { label: 'Series', value: typeof session.series_id === 'object' ? session.series_id.name : 'Deleted series' } : null,
+            ]}
+          />
+        </Section>
+        {weekly ? (
+          <WeeklySchedule session={session} />
+        ) : (
+          <Section title="Schedule" description={`${istSpan(session.scheduled_start_time, session.scheduled_end_time)} IST`}>
+            <FactGrid
+              className="xl:grid-cols-2"
+              facts={[
+                { label: 'Start Time', value: istDateTime(session.scheduled_start_time) },
+                { label: 'End Time', value: istDateTime(session.scheduled_end_time) },
+                { label: 'Duration', value: minutesLabel(session.duration_minutes) },
+              ]}
+            />
+          </Section>
+        )}
       </div>
 
-      {/* Meeting Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Monitor className="h-4 w-4" />
-            Meeting Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Platform</p>
-              <div className="flex items-center gap-2">
-                {getPlatformIcon(session.platform)}
-                <p className="text-sm font-medium capitalize">{session.platform}</p>
-              </div>
-            </div>
-            {session.zoom_meeting_id && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Zoom Meeting ID</p>
-                <p className="text-sm font-medium font-mono">{session.zoom_meeting_id}</p>
-              </div>
-            )}
-          </div>
+      <Section title="Meeting Details">
+        <div className="space-y-5">
+          <FactGrid
+            facts={[
+              { label: 'Platform', value: words(session.platform) },
+              session.zoom_meeting_id ? { label: 'Zoom Meeting ID', value: session.zoom_meeting_id, mono: true, copy: session.zoom_meeting_id } : null,
+            ]}
+          />
           {session.zoom_join_url && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Zoom Join URL (Participants)</p>
-              <div className="flex items-center gap-2">
-                <a
-                  href={session.zoom_join_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1 flex-1 min-w-0"
-                >
-                  <LinkIcon className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{session.zoom_join_url}</span>
-                </a>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  asChild
-                >
-                  <a href={session.zoom_join_url} target="_blank" rel="noopener noreferrer">
-                    <Users className="mr-2 h-4 w-4" />
-                    Join as Participant
-                  </a>
-                </Button>
-              </div>
-            </div>
+            <MeetingLink label="Zoom Join URL (Participants)" url={session.zoom_join_url} action={<><Users aria-hidden="true" />Join as Participant</>} />
           )}
           {session.zoom_host_url && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Zoom Host URL (Start Meeting)</p>
-              <div className="flex items-center gap-2">
-                <a
-                  href={session.zoom_host_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1 flex-1 min-w-0"
-                >
-                  <LinkIcon className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{session.zoom_host_url}</span>
-                </a>
-                <Button
-                  size="sm"
-                  asChild
-                >
-                  <a href={session.zoom_host_url} target="_blank" rel="noopener noreferrer">
-                    <UserCheck className="mr-2 h-4 w-4" />
-                    Start as Host
-                  </a>
-                </Button>
-              </div>
-            </div>
+            <MeetingLink label="Zoom Host URL (Start Meeting)" url={session.zoom_host_url} primary={session.status === 'scheduled' || session.status === 'live'} action={<><UserCheck aria-hidden="true" />Start as Host</>} />
           )}
           {session.meeting_link && !session.zoom_join_url && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Meeting Link</p>
-              <div className="flex items-center gap-2">
-                <a
-                  href={session.meeting_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1 flex-1 min-w-0"
-                >
-                  <LinkIcon className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{session.meeting_link}</span>
-                </a>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  asChild
-                >
-                  <a href={session.meeting_link} target="_blank" rel="noopener noreferrer">
-                    Join Meeting
-                  </a>
-                </Button>
-              </div>
-            </div>
+            <MeetingLink label="Meeting Link" url={session.meeting_link} action="Join Meeting" />
+          )}
+          {!session.zoom_join_url && !session.zoom_host_url && !session.meeting_link && (
+            <p className="text-sm text-muted-foreground">No meeting link is attached to this session.</p>
           )}
           {session.thumbnail_url && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Thumbnail</p>
-              <img
-                src={session.thumbnail_url}
-                alt={session.title}
-                className="h-32 w-auto rounded-lg border"
-              />
+              <p className="text-[13px] text-muted-foreground">Thumbnail</p>
+              <img src={session.thumbnail_url} alt={`Thumbnail of ${session.title}`} className="mt-1.5 h-32 w-auto max-w-full rounded-md border border-border object-cover" loading="lazy" />
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      {/* Capacity & Enrollment */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4" />
-              Capacity & Enrollment
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Enrollment Mode</p>
-                <Badge variant="outline" className="text-xs capitalize">
-                  {session.enrollment_mode.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Capacity Mode</p>
-                <Badge variant="outline" className="text-xs capitalize">
-                  {session.capacity_mode}
-                </Badge>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Enrolled Users</p>
-                <p className="text-sm font-medium">{session.enrollment_count || 0}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">
-                  Current Attendees{' '}
-                  <span className="text-muted-foreground font-normal">(users who joined the live meeting)</span>
-                </p>
-                <p className="text-sm font-medium">{session.current_attendees || 0}</p>
-              </div>
-            </div>
-            {session.max_attendees && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Max Attendees</p>
-                <p className="text-sm font-medium">{session.max_attendees}</p>
-              </div>
-            )}
-            {/* Waitlist and guaranteed seats are always enabled */}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <DollarSign className="h-4 w-4" />
-              Pricing
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Access</p>
-              <Badge className={session.is_free ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' : ''}>
-                {session.is_free ? 'Free' : 'Paid'}
-              </Badge>
-            </div>
-            {!session.is_free && (
-              <>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Price</p>
-                  <p className="text-lg font-bold">₹{session.price.toLocaleString('en-IN')}</p>
-                </div>
-                {session.compare_at_price && session.compare_at_price > session.price && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Compare at Price</p>
-                    <p className="text-sm line-through text-muted-foreground">
-                      ₹{session.compare_at_price.toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Section title="Capacity & Enrollment">
+          <FactGrid
+            className="xl:grid-cols-2"
+            facts={[
+              { label: 'Enrollment Mode', value: <Tag>{words(session.enrollment_mode)}</Tag> },
+              { label: 'Capacity Mode', value: <Tag>{words(session.capacity_mode)}</Tag> },
+              { label: 'Enrolled Users', value: <span className="tabular-nums">{formatCount(session.enrollment_count || 0)}{full && <StatusPill tone="warning" className="ml-2">Full</StatusPill>}</span> },
+              { label: 'Current Attendees (users who joined the live meeting)', value: <span className="tabular-nums">{formatCount(session.current_attendees || 0)}</span> },
+              session.max_attendees ? { label: 'Max Attendees', value: <span className="tabular-nums">{formatCount(session.max_attendees)}</span> } : null,
+            ]}
+          />
+        </Section>
+        <Section title="Pricing">
+          <FactGrid
+            className="xl:grid-cols-2"
+            facts={[
+              { label: 'Access', value: <StatusPill tone={session.is_free ? 'success' : 'info'}>{session.is_free ? 'Free' : 'Paid'}</StatusPill> },
+              !session.is_free && { label: 'Price', value: <span className="text-base font-semibold tabular-nums">{formatINR(session.price ?? 0)}</span> },
+              !session.is_free && session.compare_at_price && session.compare_at_price > session.price
+                ? { label: 'Compare at Price', value: <span className="tabular-nums text-muted-foreground line-through">{formatINR(session.compare_at_price)}</span> }
+                : null,
+            ]}
+          />
+        </Section>
       </div>
 
-      {/* Session Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Settings className="h-4 w-4" />
-            Session Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center gap-2">
-            {session.auto_admit_users ? (
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <XCircle className="h-4 w-4 text-zinc-400" />
-            )}
-            <span className="text-xs">Auto-admit Users</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {session.allow_join_before_host ? (
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <XCircle className="h-4 w-4 text-zinc-400" />
-            )}
-            <span className="text-xs">Allow Join Before Host</span>
-          </div>
-        </CardContent>
-      </Card>
+      <WhoCanJoin session={session as GatedSession} canUpdate={canUpdate} />
 
-      {/* Metadata */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Eye className="h-4 w-4" />
-            Metadata
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Created At</p>
-              <p className="text-sm">{formatDateTime(session.createdAt)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Last Updated</p>
-              <p className="text-sm">{formatDateTime(session.updatedAt)}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Section title="Session Settings">
+        <ul className="space-y-2 text-sm">
+          <SettingRow on={session.auto_admit_users} label="Auto-admit Users" />
+          <SettingRow on={session.allow_join_before_host} label="Allow Join Before Host" />
+        </ul>
+      </Section>
 
-      {/* Session Recordings */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Film className="h-4 w-4" />
-            Session Recordings
-            <Badge variant="secondary" className="text-[10px] ml-1">
-              {recordings.length}
-            </Badge>
-          </CardTitle>
-          <Link to="/content/recordings">
-            <Button variant="outline" size="sm">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Manage Recordings
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {loadingRecordings ? (
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : recordings.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <Film className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p>No recordings assigned to this session yet</p>
-              <Link to="/content/recordings">
-                <Button variant="link" size="sm" className="mt-2">
-                  Go to Recordings page to upload and assign
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead className="w-24">Duration</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="w-24">Size</TableHead>
-                  <TableHead className="w-32">Added</TableHead>
+      <Section title="Metadata">
+        <FactGrid facts={[{ label: 'Created At', value: istDateTime(session.createdAt) }, { label: 'Last Updated', value: istDateTime(session.updatedAt) }]} />
+      </Section>
+
+      <Section
+        title={<>Session Recordings <span className="ml-1 font-normal tabular-nums text-muted-foreground">{recState.loading ? '' : recordings.length}</span></>}
+        action={<Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/content/recordings?session=${session._id}`}><ExternalLink aria-hidden="true" />Manage Recordings</Link></Button>}
+        flush
+      >
+        {recState.loading ? (
+          <div className="space-y-2 px-5 pb-5"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
+        ) : recState.error ? (
+          <div role="alert" className="flex flex-wrap items-center gap-3 px-5 pb-5 text-sm text-danger">
+            {recState.error}
+            <Button variant="outline" size="sm" onClick={loadRecordings}><RotateCw />Try again</Button>
+          </div>
+        ) : recordings.length === 0 ? (
+          <div className="px-5 pb-8 pt-4 text-center text-sm text-muted-foreground">
+            <Film aria-hidden="true" className="mx-auto mb-2 h-7 w-7 opacity-50" />
+            <p>No recordings assigned to this session yet</p>
+            <Button asChild variant="link" size="sm" className="mt-1"><Link to="/content/recordings">Go to Recordings page to upload and assign</Link></Button>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-5">Title</TableHead>
+                <TableHead className="w-24">Duration</TableHead>
+                <TableHead className="w-28">Status</TableHead>
+                <TableHead className="w-24">Size</TableHead>
+                <TableHead className="w-32 pr-5">Added</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recordings.map((r) => (
+                <TableRow
+                  key={r._id}
+                  tabIndex={0}
+                  className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[hsl(var(--ring))]"
+                  onClick={() => navigate(`/content/recordings/${r._id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/content/recordings/${r._id}`) }}
+                >
+                  <TableCell className="pl-5">
+                    <div className="max-w-md">
+                      <p className="truncate text-sm font-medium">{r.title}</p>
+                      {r.description && <p className="truncate text-xs text-muted-foreground">{r.description}</p>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm tabular-nums">{videoLength(r.duration_seconds)}</TableCell>
+                  <TableCell><RecordingStatus status={r.processing_status} /></TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">{fileSize(r.file_size_mb)}</TableCell>
+                  <TableCell className="whitespace-nowrap pr-5 text-sm text-muted-foreground">{istDay(r.createdAt)}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recordings.map((recording) => (
-                  <TableRow key={recording._id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-sm">{recording.title}</p>
-                        {recording.description && (
-                          <p className="text-xs text-muted-foreground truncate max-w-md">
-                            {recording.description}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {recording.duration_seconds > 0
-                        ? formatDuration(recording.duration_seconds)
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs capitalize ${
-                          recording.processing_status === 'ready'
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                            : recording.processing_status === 'failed'
-                              ? 'bg-red-500/10 text-red-600 border-red-200'
-                              : 'bg-amber-500/10 text-amber-600 border-amber-200'
-                        }`}
-                      >
-                        {recording.processing_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {recording.file_size_mb > 0
-                        ? `${recording.file_size_mb.toFixed(1)} MB`
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {new Date(recording.createdAt).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Section>
 
-      {/* Cohost Links */}
-      {session.platform === 'zoom' ? (
-        <CohostLinksPanel
-          sessionId={session._id}
-          sessionStatus={session.status}
-          hasZoomMeeting={!!session.zoom_meeting_id}
-        />
-      ) : null}
+      {session.platform === 'zoom' && (
+        <CohostLinksPanel sessionId={session._id} sessionStatus={session.status} hasZoomMeeting={!!session.zoom_meeting_id} canUpdate={canUpdate} />
+      )}
 
-      {/* Edit Modal */}
-      <SessionFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        session={session}
-        mode="edit"
+      <ArchiveSessionDock session={archiving ? session : null} onClose={() => setArchiving(false)} onDone={() => navigate('/sessions')} />
+      <CancelSessionDock session={cancelling ? session : null} onClose={() => setCancelling(false)} onDone={() => { toast.success('Session cancelled successfully'); reload() }} />
+      <ConvertToPackageDialog open={converting} onClose={() => setConverting(false)} session={session} recordingCount={recordings.length} />
+      <NotifyDialog
+        open={notifying}
+        onClose={() => setNotifying(false)}
+        title="Send Session Notification"
+        description="Send a push notification to the target audience for this session."
+        loadPreview={() => liveSessionsService.getNotificationPreview(session._id)}
+        send={(data) => liveSessionsService.sendNotification(session._id, data)}
       />
-
-      {/* Archive Modal */}
-      <ArchiveModal
-        open={archiveModalOpen}
-        onClose={() => { setArchiveModalOpen(false); setArchiveBlocked(false); setArchiveBlockReason(''); }}
-        onConfirm={handleArchiveConfirm}
-        title="Archive Session"
-        itemName={session.title}
-        isLoadingImpact={loadingArchiveImpact}
-        blocked={archiveBlocked}
-        blockReason={archiveBlockReason}
-      />
-
-      {/* Convert to Package Modal */}
-      <Dialog open={convertModalOpen} onOpenChange={(open) => !convertLoading && setConvertModalOpen(open)}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>Convert Session to Package</DialogTitle>
-            <DialogDescription>
-              This will create a new package with the session recordings as videos.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Summary */}
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-              <p><span className="font-medium">Package:</span> {session.title}</p>
-              <p><span className="font-medium">Subject:</span> {typeof session.subject_id === 'object' ? session.subject_id.name : '—'}</p>
-              <p>
-                <span className="font-medium">Will create:</span>{' '}
-                1 series, 1 module, {recordings.length} video{recordings.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-
-            {/* Package Type */}
-            <div className="space-y-2">
-              <Label>
-                Package Type <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={selectedPackageTypeId}
-                onValueChange={setSelectedPackageTypeId}
-                disabled={convertLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select package type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {packageTypes.map((pt) => (
-                    <SelectItem key={pt._id} value={pt._id}>
-                      {pt.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Price & Duration */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="convert-price">Price (INR)</Label>
-                <Input
-                  id="convert-price"
-                  type="number"
-                  min={0}
-                  value={convertPrice}
-                  onChange={(e) => setConvertPrice(e.target.value)}
-                  disabled={convertLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="convert-duration">Duration (days)</Label>
-                <Input
-                  id="convert-duration"
-                  type="number"
-                  min={1}
-                  value={convertDuration}
-                  onChange={(e) => setConvertDuration(e.target.value)}
-                  disabled={convertLoading}
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConvertModalOpen(false)}
-              disabled={convertLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConvertToPackage}
-              disabled={convertLoading || !selectedPackageTypeId}
-            >
-              {convertLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Converting...
-                </>
-              ) : (
-                <>
-                  <Package className="mr-2 h-4 w-4" />
-                  Create Package
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Send Notification Modal */}
-      <Dialog open={notifyModalOpen} onOpenChange={(open) => !notifyLoading && setNotifyModalOpen(open)}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Send Session Notification</DialogTitle>
-            <DialogDescription>
-              Send a push notification to the target audience for this session.
-            </DialogDescription>
-          </DialogHeader>
-
-          {notifyPreviewLoading ? (
-            <div className="space-y-3 py-4">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Audience Info */}
-              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-                <p>
-                  <span className="font-medium">Target Audience:</span>{' '}
-                  {notifyAudienceLabel || 'Unknown'}
-                </p>
-                <p>
-                  <span className="font-medium">Users:</span>{' '}
-                  {notifyUserCount} user{notifyUserCount !== 1 ? 's' : ''} will receive this notification
-                </p>
-              </div>
-
-              {/* Editable Title */}
-              <div className="space-y-2">
-                <Label htmlFor="notify-title">Title</Label>
-                <Input
-                  id="notify-title"
-                  value={notifyTitle}
-                  onChange={(e) => setNotifyTitle(e.target.value)}
-                  disabled={notifyLoading}
-                  placeholder="Notification title"
-                />
-              </div>
-
-              {/* Editable Message */}
-              <div className="space-y-2">
-                <Label htmlFor="notify-message">Message</Label>
-                <Textarea
-                  id="notify-message"
-                  value={notifyMessage}
-                  onChange={(e) => setNotifyMessage(e.target.value)}
-                  disabled={notifyLoading}
-                  placeholder="Notification message"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setNotifyModalOpen(false)}
-              disabled={notifyLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSendNotification}
-              disabled={notifyLoading || notifyPreviewLoading || !notifyTitle || !notifyMessage || notifyUserCount === 0}
-            >
-              {notifyLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Bell className="mr-2 h-4 w-4" />
-                  Send to {notifyUserCount} User{notifyUserCount !== 1 ? 's' : ''}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
+  )
+}
+
+/** A weekly series: the schedule in words, the class now or next, and the series span. */
+function WeeklySchedule({ session }: { session: LiveSession }) {
+  const repeat = session.repeat!
+  const classes = listClasses(repeat)
+  const state = session.class_state
+  const live = !!session.class_live
+  const inBuffer = state === 'buffer'
+  const nextLabel = session.next_class_start
+    ? `${istSpan(session.next_class_start, session.next_class_end)} IST`
+    : session.status === 'cancelled' ? 'Cancelled' : 'Series over'
+  return (
+    <Section
+      title="Schedule"
+      description={`${session.schedule_label ?? 'Weekly'} IST`}
+      action={live ? <StatusPill tone="success">Live now</StatusPill> : undefined}
+    >
+      <div className="space-y-4">
+        <FactGrid
+          className="xl:grid-cols-2"
+          facts={[
+            { label: 'Repeats', value: session.schedule_label ?? 'Weekly', wide: true },
+            {
+              label: state === 'running' || inBuffer ? 'This class' : 'Next class',
+              value: nextLabel,
+              wide: true,
+            },
+            session.class_number ? { label: 'Class', value: <span className="tabular-nums">Class {session.class_number} of {session.classes_total}</span> } : null,
+            { label: 'Classes', value: previewText(repeat) ?? `${classes.length} classes` },
+            { label: 'Start Time (first class)', value: istDateTime(session.scheduled_start_time) },
+            { label: 'End Time (last class)', value: istDateTime(session.scheduled_end_time) },
+            { label: 'Duration (each class)', value: minutesLabel(session.duration_minutes) },
+            { label: 'Overtime', value: repeat.overtime_minutes ? `${minutesLabel(repeat.overtime_minutes)}. ${session.overtime_label ?? ''}` : 'None' },
+          ]}
+        />
+        {inBuffer && !live && session.join_closes_at && (
+          <Note>The class time is over. It may be running over time, so students can still join until {istDateTime(session.join_closes_at)} IST. It shows as live only while Zoom reports the meeting running.</Note>
+        )}
+        {inBuffer && live && <Note>Running over time: Zoom reports the meeting is still on. Students can join until {istDateTime(session.join_closes_at)} IST.</Note>}
+        <p className="text-[13px] text-muted-foreground">Students join from 10 minutes before each class{repeat.overtime_minutes ? ' until its end plus the overtime' : ' until it ends'}. One registration and one Zoom meeting cover every class.</p>
+      </div>
+    </Section>
+  )
+}
+
+function MeetingLink({ label, url, action, primary }: { label: string; url: string; action: React.ReactNode; primary?: boolean }) {
+  return (
+    <div>
+      <p className="text-[13px] text-muted-foreground">{label}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 flex-1 basis-60 items-center gap-1.5 text-sm text-primary hover:underline">
+          <LinkIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{url}</span>
+        </a>
+        <CopyButton value={url} label={label} />
+        <Button size="sm" variant={primary ? 'default' : 'outline'} className={primary ? undefined : 'bg-card'} asChild>
+          <a href={url} target="_blank" rel="noopener noreferrer">{action}</a>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** The access rule in words, its packages, and registrations it would refuse. */
+function WhoCanJoin({ session, canUpdate }: { session: GatedSession; canUpdate: boolean }) {
+  const mode = modeOf(session)
+  const packages = session.access_packages || []
+  const sentence = session.access_rule_text
+    || accessSentence(mode, packages.map((p) => p.name || 'Deleted package'), session.price, session.is_free)
+  const summary = session.access_summary
+  const marker = ACCESS_MARKER[mode]
+  return (
+    <Section
+      title="Who can join"
+      action={canUpdate && !session.workshop_id ? (
+        <Button asChild variant="outline" size="sm" className="bg-card"><Link to={`/sessions/${session._id}/edit#who-can-join`}><Pencil aria-hidden="true" />Change</Link></Button>
+      ) : undefined}
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-start gap-2.5">
+          <ShieldCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <p className="min-w-0 flex-1 text-sm font-medium">{sentence}</p>
+          {marker && <StatusPill tone="info">{marker}</StatusPill>}
+        </div>
+        {mode !== 'everyone' && (
+          packages.length > 0 ? (
+            <ul className="flex flex-wrap gap-1.5" aria-label="Packages whose subscribers can join">
+              {packages.map((p) => (
+                <li key={p._id} className={p.deleted ? 'max-w-full rounded-full border border-warning bg-warning-soft px-2.5 py-0.5 text-[13px] text-warning' : 'max-w-full rounded-full border border-border bg-muted px-2.5 py-0.5 text-[13px]'}>
+                  <span className="block truncate">
+                    {p.name ?? 'Deleted package'}
+                    {(p.package_type || p.subject) && <span className="text-muted-foreground"> · {[p.package_type, p.subject].filter(Boolean).join(' · ')}</span>}
+                    {!p.deleted && p.is_active === false && <span className="text-muted-foreground"> · inactive</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Note tone="warning">No package is chosen, so nobody can be included. Edit the session and choose the packages.</Note>
+          )
+        )}
+        {mode !== 'everyone' && packages.some((p) => p.deleted) && (
+          <Note tone="warning">A chosen package was deleted. Its subscribers are no longer included. Edit the session to remove it.</Note>
+        )}
+        {mode !== 'everyone' && <p className="text-[13px] text-muted-foreground">A combo that contains a chosen package counts too. Students who already paid for this session keep their seat.</p>}
+        {summary && summary.not_eligible > 0 && (
+          <Note tone="warning">
+            {summary.not_eligible === 1
+              ? '1 registered student is not a subscriber and has not paid for this session.'
+              : `${formatCount(summary.not_eligible)} registered students are not subscribers and have not paid for this session.`}
+            {' '}They registered before this rule and are refused when they try to join.
+          </Note>
+        )}
+      </div>
+    </Section>
+  )
+}
+
+function SettingRow({ on, label }: { on: boolean; label: string }) {
+  const Icon = on ? CheckCircle : XCircle
+  return (
+    <li className="flex items-center gap-2">
+      <Icon aria-hidden="true" className={on ? 'h-4 w-4 text-success' : 'h-4 w-4 text-muted-foreground'} />
+      <span>{label}</span>
+      <span className="text-muted-foreground">{on ? 'On' : 'Off'}</span>
+    </li>
   )
 }

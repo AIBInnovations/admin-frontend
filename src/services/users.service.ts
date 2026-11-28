@@ -10,13 +10,23 @@ export interface SubjectSelection {
 
 export interface UserPurchase {
   _id: string
-  package_id: { _id: string; name: string; price: number; duration_days: number }
+  /** null when the package has been deleted since. */
+  package_id: { _id: string; name: string; price: number; duration_days: number } | string | null
+  tier_name?: string | null
+  tier_duration_days?: number | null
+  /** Set on a row that came with a combo purchase. */
+  bundled_from_purchase_id?: string | null
+  zoho_payment_session_id?: string | null
+  gateway_amount?: number | null
+  coupon_code?: string | null
+  coupon_discount?: number | null
+  admin_grant_notes?: string | null
   payment_gateway: 'zoho_payments' | 'razorpay'
   zoho_payment_id: string | null
   zoho_invoice_id?: string | null
   amount_paid: number
   currency: string
-  payment_status: 'pending' | 'completed' | 'failed' | 'refunded'
+  payment_status: 'pending' | 'completed' | 'failed' | 'refunded' | 'revoked'
   purchased_at: string
   expires_at: string
   is_active: boolean
@@ -144,7 +154,8 @@ export interface UsersListParams extends BaseListParams {
 
 export interface SessionPurchase {
   _id: string
-  session_id: { _id: string; title: string; scheduled_start_time: string; price: number } | string
+  session_id: { _id: string; title: string; scheduled_start_time: string; price: number } | string | null
+  gateway_amount?: number | null
   payment_gateway: 'zoho_payments' | 'razorpay'
   zoho_payment_id: string | null
   zoho_invoice_id?: string | null
@@ -163,7 +174,8 @@ export interface SessionPurchase {
 
 export interface EbookPurchase {
   _id: string
-  book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string } | string
+  book_id: { _id: string; title: string; author?: string; price: number; ebook: boolean; thumbnail_url?: string } | string | null
+  gateway_amount?: number | null
   payment_gateway: 'zoho_payments'
   zoho_payment_id: string | null
   zoho_invoice_id?: string | null
@@ -238,7 +250,7 @@ class UsersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.user }
     }
-    return response as ApiResponse<UserDetail>
+    return response as unknown as ApiResponse<UserDetail>
   }
 
   /**

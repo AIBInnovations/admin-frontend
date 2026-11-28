@@ -1,12 +1,7 @@
 /**
- * Shared types for the Explorer detail panel (the docked, in-flight editor).
- *
- * The panel is driven by a "target": which entity is being edited (or created)
- * and the parent context needed to save it. Entity objects are carried by
- * reference so the panel can render immediately without a refetch; after a save
- * the panel commits its own baseline and triggers a branch refetch.
+ * What the docked editor shows. It is named in the URL (?item=package:ID or
+ * ?new=package), so a reload, a shared link and the browser's Back all work.
  */
-
 export type PanelEntityKind =
   | 'subject'
   | 'package'
@@ -16,32 +11,22 @@ export type PanelEntityKind =
   | 'document'
   | 'book'
 
-/** Parent ids a create/save needs, plus drill context. */
+/** Things that can be created; an upcoming video is a placeholder without a file. */
+export type CreateKind = Exclude<PanelEntityKind, 'video' | 'document'> | 'upcoming'
+
+/** Parent ids a create needs. */
 export interface PanelContext {
   subjectId?: string
   packageId?: string
   seriesId?: string
   moduleId?: string
-  /** For documents created/edited at subject level (no series). */
-  documentSubjectId?: string
 }
 
-export interface PanelTarget {
-  kind: PanelEntityKind
-  /** The entity being edited. `null` => create mode. */
-  entity: unknown | null
-  ctx?: PanelContext
-}
+export type PanelTarget =
+  | { kind: PanelEntityKind; id: string; entity: unknown; ctx?: PanelContext }
+  | { kind: CreateKind; id: null; entity: null; ctx?: PanelContext }
 
-/** Narrow helper — true when the target is a create (blank) form. */
-export function isCreate(target: PanelTarget | null): boolean {
-  return !!target && target.entity === null
-}
-
-/** Pull a stable id out of any loaded entity object (for selection highlight). */
-export function entityId(entity: unknown): string | null {
-  if (entity && typeof entity === 'object' && '_id' in entity) {
-    return String((entity as { _id: unknown })._id)
-  }
-  return null
+export function targetKey(target: PanelTarget | null): string | null {
+  if (!target) return null
+  return target.id === null ? `new:${target.kind}` : `${target.kind}:${target.id}`
 }

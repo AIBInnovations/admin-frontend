@@ -27,11 +27,7 @@ interface ImageCropFieldProps {
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB, matches legacy thumbnail limit
 
-/**
- * Notion/light-styled image field with fixed-ratio cropping. Built on
- * react-easy-crop; intentionally independent of the old `components/common`
- * cropper so the Explorer keeps its own styling.
- */
+/** Image with fixed-ratio cropping before the upload. */
 export function ImageCropField({
   label,
   value,
@@ -50,19 +46,22 @@ export function ImageCropField({
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [pixels, setPixels] = useState<PixelCrop | null>(null)
   const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const [broken, setBroken] = useState<string | null>(null)
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-picking the same file
     if (!file) return
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-      window.alert('Use a JPEG, PNG or WebP image.')
+      setProblem('Use a JPEG, PNG or WebP image.')
       return
     }
     if (file.size > MAX_BYTES) {
-      window.alert('Image must be 5MB or smaller.')
+      setProblem('The image must be 5 MB or smaller.')
       return
     }
+    setProblem(null)
     const reader = new FileReader()
     reader.onload = () => {
       setRawSrc(reader.result as string)
@@ -90,93 +89,51 @@ export function ImageCropField({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-600">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium text-foreground">{label}</span>
         {value && onRemove && !disabled && (
-          <button
-            type="button"
-            onClick={() => void onRemove()}
-            className="text-xs text-slate-400 hover:text-red-500 inline-flex items-center gap-1 transition-colors"
-          >
-            <Trash2 className="w-3 h-3" /> Remove
+          <button type="button" onClick={() => void onRemove()} disabled={uploading} className="inline-flex items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-danger disabled:opacity-50">
+            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" /> Remove
           </button>
         )}
       </div>
 
-      <div className={`relative w-full ${previewClassName} rounded-xl overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center`}>
-        {value ? (
-          <img src={value} alt={label} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center gap-1 text-slate-300">
-            <ImageIcon className="w-6 h-6" />
-            <span className="text-xs">No image</span>
-          </div>
-        )}
-
+      <div className={`relative flex w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-muted ${previewClassName}`}>
+        {value && broken !== value
+          ? <img src={value} alt="" onError={() => setBroken(value)} className="h-full w-full object-cover" />
+          : <span className="flex flex-col items-center gap-1 text-xs text-muted-foreground"><ImageIcon aria-hidden="true" className="h-5 w-5" />{value ? 'The image could not be loaded' : 'No image'}</span>}
         {uploading && (
-          <div className="absolute inset-0 bg-white/70 flex flex-col items-center justify-center gap-1">
-            <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
-            <span className="text-xs text-slate-500">{uploadProgress ?? 0}%</span>
+          <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-card/80 text-xs text-foreground">
+            <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />{uploadProgress ? `${uploadProgress}%` : 'Uploading'}
           </div>
         )}
       </div>
 
-      {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
+      {problem ? <p role="alert" className="text-xs text-danger">{problem}</p> : hint && <p className="text-xs text-muted-foreground">{hint}</p>}
 
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="gap-1.5 h-8 border-slate-200 text-slate-600 hover:bg-slate-50"
-        disabled={disabled || uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        <Upload className="w-3.5 h-3.5" />
-        {value ? 'Replace image' : 'Upload image'}
-      </Button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={onPick}
-      />
+      {!disabled && (
+        <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          <Upload className="h-3.5 w-3.5" /> {value ? 'Replace image' : 'Upload image'}
+        </Button>
+      )}
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" tabIndex={-1} aria-hidden="true" onChange={onPick} />
 
-      <Dialog open={!!rawSrc} onOpenChange={(v) => !v && !saving && setRawSrc(null)}>
+      <Dialog variant="modal" open={!!rawSrc} onOpenChange={(v) => !v && !saving && setRawSrc(null)}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Crop image</DialogTitle>
           </DialogHeader>
-          <div className="relative w-full h-72 bg-slate-900 rounded-xl overflow-hidden">
-            {rawSrc && (
-              <Cropper
-                image={rawSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={aspect}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={onCropComplete}
-              />
-            )}
+          <div className="relative h-72 w-full overflow-hidden rounded-lg bg-ink">
+            {rawSrc && <Cropper image={rawSrc} crop={crop} zoom={zoom} aspect={aspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={onCropComplete} />}
           </div>
           <div className="px-1 pt-2">
-            <span className="text-xs text-slate-500">Zoom</span>
-            <Slider
-              value={[zoom]}
-              min={1}
-              max={3}
-              step={0.01}
-              onValueChange={(v) => setZoom(v[0])}
-              className="mt-1.5"
-            />
+            <span className="text-xs text-muted-foreground">Zoom</span>
+            <Slider aria-label="Zoom" value={[zoom]} min={1} max={3} step={0.01} onValueChange={(v) => setZoom(v[0])} className="mt-1.5" />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRawSrc(null)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={confirmCrop} disabled={saving || !pixels}>
-              {saving ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</> : 'Apply & upload'}
+            <Button variant="outline" onClick={() => setRawSrc(null)} disabled={saving}>Cancel</Button>
+            <Button onClick={() => void confirmCrop()} disabled={saving || !pixels}>
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : 'Apply and upload'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,1175 +1,527 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
-  UserCircle, ShieldBan, ShieldCheck, Loader2,
-  Phone, Mail, MailX, MapPin, Calendar, GraduationCap, Globe, Smartphone,
-  Monitor, Tablet, CreditCard, Package, Settings, BookOpen,
-  Video, ShoppingBag, Truck, Edit, Gift, Ban, CalendarClock,
-} from 'lucide-react'
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  usersService,
-  UserDetail,
-  UserPurchase,
-  SessionPurchase,
-  EbookPurchase,
-  BookOrder,
-  DeviceSession,
-  UpdateUserData,
-  GrantPackageData,
-  GrantEbookData,
-  GrantSessionData,
-} from '@/services/users.service'
-import { UserFormModal } from '@/components/users/UserFormModal'
-import { GrantPackageModal } from '@/components/users/GrantPackageModal'
-import { GrantEbookModal } from '@/components/users/GrantEbookModal'
-import { GrantSessionModal } from '@/components/users/GrantSessionModal'
+  Ban, BellRing, BookOpen, Calendar, CalendarClock, CreditCard, Edit, Gift, Globe, GraduationCap, History, Loader2, Mail, MailX, MapPin,
+  Package, Phone, Settings, ShieldBan, ShieldCheck, ShoppingBag, Smartphone, Truck, Video,
+} from 'lucide-react'
+import { PageHeader } from '@/components/common/PageHeader'
+import { CopyButton, DetailSkeleton, ErrorState, Section, StatusPill, type Tone } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ConfirmDock, PersonAvatar, StaleNotice, personName } from '@/components/users/kit'
+import { DeviceSessionsSection } from '@/components/devices/DeviceSessionsSection'
+import { SignInLogSection } from '@/components/devices/SignInLogSection'
+import { TesterSection } from '@/components/users/tester/TesterSection'
+import type { TesterSummary } from '@/components/users/tester/api'
+import { dayIST, dayTimeIST, ensureOk, errText, plural, unwrap, useResource } from '@/components/users/lib'
+import { StudentPageBack } from '@/components/students/StudentLink'
+import { RevokeAccess } from '@/pages/commerce/components/RevokeAccess'
 import { ExtendValidityDrawer } from '@/pages/subscriptions/components/ExtendValidityDrawer'
-import type { SubscriptionRecord } from '@/services/subscriptions.service'
+import { ReminderDrawer } from '@/pages/subscriptions/components/ReminderDrawer'
+import { formatINR, subscriptionLabel } from '@/lib/format'
+import { formatExpiry } from '@/lib/relativeTime'
 import { useAuth } from '@/contexts/AuthContext'
+import {
+  usersService, type BookOrder, type EbookPurchase, type SessionPurchase, type UserDetail, type UserPurchase,
+} from '@/services/users.service'
+import type { ReminderItem, SubscriptionRecord } from '@/services/subscriptions.service'
+
+// ── Reading a record ─────────────────────────────────────────────────────
+
+const isObj = <T extends object>(v: T | string | null | undefined): v is T => !!v && typeof v === 'object'
+const packageTitle = (p: UserPurchase) => subscriptionLabel(isObj(p.package_id) ? p.package_id.name : 'Deleted package', p)
+const bookTitle = (p: EbookPurchase) => (isObj(p.book_id) ? p.book_id.title : 'Deleted e-book')
+const sessionTitle = (p: SessionPurchase) => (isObj(p.session_id) ? p.session_id.title : 'Deleted session')
+const isBundled = (p: UserPurchase) => !!p.bundled_from_purchase_id || !!p.zoho_payment_session_id?.startsWith('BUNDLE_')
+const paid = (p: { gateway_amount?: number | null; amount_paid?: number | null }) => Number(p.gateway_amount ?? p.amount_paid ?? 0) || 0
+// A tester's INR 1 order (27 Nov 2026): labelled Test, never a paid purchase
+const isTest = (p: object) => (p as { is_test?: boolean }).is_test === true
+const TestPill = ({ row }: { row: object }) => (isTest(row) ? <StatusPill tone="warning" className="ml-1.5 align-middle">Test</StatusPill> : null)
+
+const PAYMENT: Record<string, { label: string; tone: Tone }> = {
+  completed: { label: 'Completed', tone: 'success' }, paid: { label: 'Paid', tone: 'success' }, pending: { label: 'Pending', tone: 'warning' },
+  failed: { label: 'Failed', tone: 'danger' }, refunded: { label: 'Refunded', tone: 'info' }, revoked: { label: 'Revoked', tone: 'danger' },
+}
+const ORDER: Record<string, { label: string; tone: Tone }> = {
+  pending: { label: 'Pending', tone: 'neutral' }, confirmed: { label: 'Confirmed', tone: 'warning' }, processing: { label: 'Processing', tone: 'warning' },
+  shipped: { label: 'Shipped', tone: 'info' }, delivered: { label: 'Delivered', tone: 'success' }, cancelled: { label: 'Cancelled', tone: 'danger' },
+}
+
+const payment = (status: string) => PAYMENT[status] ?? { label: status || 'Unknown', tone: 'neutral' as Tone }
+// "Send reminder now" (28 Nov 2026): paid, switched on, not revoked, not ended yet
+const live = (p: { payment_status: string; is_active: boolean; is_revoked?: boolean }) => p.payment_status === 'completed' && p.is_active && !p.is_revoked
+const remindablePackage = (p: UserPurchase) => live(p) && !!p.expires_at && new Date(p.expires_at).getTime() > Date.now()
+const remindableSession = (p: SessionPurchase) => live(p) && isObj(p.session_id) && !!p.session_id.scheduled_start_time && new Date(p.session_id.scheduled_start_time).getTime() > Date.now()
+
+type RevokeTarget = { type: 'package' | 'ebook' | 'session'; id: string; name: string }
 
 export function UserDetailPage() {
-  const { userId } = useParams<{ userId: string }>()
-  const navigate = useNavigate()
+  const { userId = '' } = useParams<{ userId: string }>()
   const { hasPermission } = useAuth()
-  const canExtend = hasPermission('users.update')
+  const canUpdate = hasPermission('users.update')
+  const isSuperAdmin = hasPermission('*')
 
-  const [user, setUser] = useState<UserDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [blocking, setBlocking] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showGrantModal, setShowGrantModal] = useState(false)
-  const [showGrantEbookModal, setShowGrantEbookModal] = useState(false)
-  const [showGrantSessionModal, setShowGrantSessionModal] = useState(false)
-  const [revokeTarget, setRevokeTarget] = useState<UserPurchase | null>(null)
+  const { data: user, loading, error, status, reload } = useResource<UserDetail>(
+    async () => unwrap(await usersService.getById(userId), 'User not found'), [userId],
+  )
+
+  const [revoke, setRevoke] = useState<RevokeTarget | null>(null)
   const [extendTarget, setExtendTarget] = useState<UserPurchase | null>(null)
-  const [revokeReason, setRevokeReason] = useState('')
-  const [revoking, setRevoking] = useState(false)
-  const [revokeEbookTarget, setRevokeEbookTarget] = useState<EbookPurchase | null>(null)
-  const [revokeEbookReason, setRevokeEbookReason] = useState('')
-  const [revokingEbook, setRevokingEbook] = useState(false)
-  const [revokeSessionTarget, setRevokeSessionTarget] = useState<SessionPurchase | null>(null)
-  const [revokeSessionReason, setRevokeSessionReason] = useState('')
-  const [revokingSession, setRevokingSession] = useState(false)
-  const [togglingEmailExclude, setTogglingEmailExclude] = useState(false)
+  const [remindTarget, setRemindTarget] = useState<ReminderItem[] | null>(null)
+  const [blockOpen, setBlockOpen] = useState(false)
+  const [unblocking, setUnblocking] = useState(false)
+  const [togglingEmail, setTogglingEmail] = useState(false)
 
-  const fetchUser = useCallback(async () => {
-    if (!userId) return
-    try {
-      setLoading(true)
-      const response = await usersService.getById(userId)
-      if (response.success && response.data) {
-        setUser(response.data)
-      } else {
-        toast.error(response.message || 'User not found')
-        navigate('/users')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load user details')
-      navigate('/users')
-    } finally {
-      setLoading(false)
-    }
-  }, [userId, navigate])
+  // The panel opens under its section's title; bring it to the admin
+  useEffect(() => {
+    if (!revoke) return
+    const panel = document.getElementById('revoke-panel')
+    panel?.focus({ preventScroll: true })
+    panel?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [revoke])
 
-  useEffect(() => { fetchUser() }, [fetchUser])
+  const numbers = useMemo(() => {
+    if (!user) return null
+    const now = Date.now()
+    // A combo's included packages come with it: one subscription, not three
+    const active = (user.purchases || []).filter((p) => p.payment_status === 'completed' && p.is_active && !p.is_revoked && !isBundled(p) && new Date(p.expires_at).getTime() > now).length
+    const sales = [
+      ...(user.purchases || []).filter((p) => p.payment_status === 'completed' && !p.is_revoked && !isTest(p) && !isBundled(p) && Number(p.amount_paid) > 0).map(paid),
+      ...(user.ebook_purchases || []).filter((p) => p.payment_status === 'completed' && !p.is_revoked && !isTest(p) && Number(p.amount_paid) > 0).map(paid),
+      ...(user.session_purchases || []).filter((p) => p.payment_status === 'completed' && !p.is_revoked && !isTest(p) && Number(p.amount_paid) > 0).map(paid),
+      ...(user.book_orders || []).filter((o) => o.payment_status === 'completed' && !isTest(o) && Number(o.total_amount) > 0).map((o) => Number(o.total_amount)),
+    ]
+    return { active, sales: sales.length, collected: sales.reduce((a, b) => a + b, 0) }
+  }, [user])
 
-  const handleBlockToggle = async () => {
-    if (!user) return
-    try {
-      setBlocking(true)
-      const response = user.is_active
-        ? await usersService.blockUser(user._id)
-        : await usersService.unblockUser(user._id)
-      if (response.success) {
-        toast.success(user.is_active ? 'User blocked' : 'User unblocked')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to update user status')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update user status')
-    } finally {
-      setBlocking(false)
-    }
-  }
-
-  const handleUpdateUser = async (data: UpdateUserData) => {
-    if (!user) return
-    try {
-      const response = await usersService.updateUser(user._id, data)
-      if (response.success) {
-        toast.success('User updated successfully')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to update user')
-        throw new Error(response.message || 'Failed to update user')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update user')
-      throw error
-    }
-  }
-
-  const handleGrantPackage = async (data: GrantPackageData) => {
-    if (!user) return
-    try {
-      const response = await usersService.grantPackageAccess(user._id, data)
-      if (response.success) {
-        toast.success('Package access granted successfully')
-        fetchUser()
-        return
-      }
-      toast.error(response.message || 'Failed to grant package access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant package access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const handleRevokePurchase = async () => {
-    if (!user || !revokeTarget) return
-    try {
-      setRevoking(true)
-      const response = await usersService.revokePackageAccess(user._id, revokeTarget._id, revokeReason)
-      if (response.success) {
-        toast.success('Package access revoked successfully')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to revoke package access')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to revoke package access')
-    } finally {
-      setRevoking(false)
-      setRevokeTarget(null)
-      setRevokeReason('')
-    }
-  }
-
-  const handleGrantEbook = async (data: GrantEbookData) => {
-    if (!user) return
-    try {
-      const response = await usersService.grantEbookAccess(user._id, data)
-      if (response.success) {
-        toast.success('Ebook access granted successfully')
-        fetchUser()
-        return
-      }
-      toast.error(response.message || 'Failed to grant ebook access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant ebook access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const handleRevokeEbook = async () => {
-    if (!user || !revokeEbookTarget) return
-    try {
-      setRevokingEbook(true)
-      const response = await usersService.revokeEbookAccess(user._id, revokeEbookTarget._id, revokeEbookReason)
-      if (response.success) {
-        toast.success('Ebook access revoked successfully')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to revoke ebook access')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to revoke ebook access')
-    } finally {
-      setRevokingEbook(false)
-      setRevokeEbookTarget(null)
-      setRevokeEbookReason('')
-    }
-  }
-
-  const handleGrantSession = async (data: GrantSessionData) => {
-    if (!user) return
-    try {
-      const response = await usersService.grantSessionAccess(user._id, data)
-      if (response.success) {
-        toast.success('Session access granted successfully')
-        fetchUser()
-        return
-      }
-      toast.error(response.message || 'Failed to grant session access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant session access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const handleEmailExcludeToggle = async () => {
-    if (!user) return
-    try {
-      setTogglingEmailExclude(true)
-      const response = user.email_excluded
-        ? await usersService.includeInEmails(user._id)
-        : await usersService.excludeFromEmails(user._id)
-      if (response.success) {
-        toast.success(user.email_excluded ? 'User re-included in emails' : 'User excluded from emails')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to update email exclusion')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update email exclusion')
-    } finally {
-      setTogglingEmailExclude(false)
-    }
-  }
-
-  const handleRevokeSession = async () => {
-    if (!user || !revokeSessionTarget) return
-    try {
-      setRevokingSession(true)
-      const response = await usersService.revokeSessionAccess(user._id, revokeSessionTarget._id, revokeSessionReason)
-      if (response.success) {
-        toast.success('Session access revoked successfully')
-        fetchUser()
-      } else {
-        toast.error(response.message || 'Failed to revoke session access')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to revoke session access')
-    } finally {
-      setRevokingSession(false)
-      setRevokeSessionTarget(null)
-      setRevokeSessionReason('')
-    }
-  }
-
-  // Loading skeleton
-  if (loading) {
+  if (loading && !user) return <DetailSkeleton />
+  if (!user) {
+    const gone = status === 404 || status === 400
     return (
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
+      <ErrorState
+        title={gone ? 'User not found' : status === 403 ? 'You do not have access to this user' : 'This user could not be loaded'}
+        message={gone ? 'The account may have been deleted, or the link is wrong.' : error ?? undefined}
+        onRetry={gone || status === 403 ? undefined : () => reload()}
+        back={{ label: 'Back to Users', href: '/users' }}
+      />
     )
   }
 
-  if (!user) return null
-
-  const formatDate = (date: string | null) => {
-    if (!date) return '—'
-    return new Date(date).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    })
+  const name = user.name?.trim() || 'Unnamed User'
+  const toggleBlock = async () => {
+    const res = user.is_active ? await usersService.blockUser(user._id) : await usersService.unblockUser(user._id)
+    ensureOk(res, 'Failed to update user status')
+    toast.success(user.is_active ? 'User blocked' : 'User unblocked')
+    await reload({ silent: true })
   }
-
-  const formatDateTime = (date: string | null) => {
-    if (!date) return '—'
-    return new Date(date).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
+  const unblock = async () => {
+    if (unblocking) return
+    setUnblocking(true)
+    try { await toggleBlock() } catch (err) { toast.error(errText(err, 'Failed to update user status')) } finally { setUnblocking(false) }
   }
-
-  const getDeviceIcon = (type: DeviceSession['device_type']) => {
-    switch (type) {
-      case 'iOS':
-      case 'Android':
-        return <Smartphone className="h-4 w-4" />
-      case 'Tablet':
-        return <Tablet className="h-4 w-4" />
-      case 'Web':
-        return <Monitor className="h-4 w-4" />
-      default:
-        return <Monitor className="h-4 w-4" />
+  const toggleEmail = async () => {
+    if (togglingEmail) return
+    setTogglingEmail(true)
+    try {
+      ensureOk(user.email_excluded ? await usersService.includeInEmails(user._id) : await usersService.excludeFromEmails(user._id))
+      toast.success(user.email_excluded ? 'User re-included in emails' : 'User excluded from emails')
+      await reload({ silent: true })
+    } catch (err) {
+      toast.error(errText(err, 'Failed to update email exclusion'))
+    } finally {
+      setTogglingEmail(false)
     }
   }
 
-  const getPaymentStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'paid':
-        return 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-      case 'pending':
-        return 'bg-amber-500/10 text-amber-600 border-amber-200'
-      case 'failed':
-        return 'bg-red-500/10 text-red-600 border-red-200'
-      case 'refunded':
-        return 'bg-blue-500/10 text-blue-600 border-blue-200'
-      default:
-        return ''
-    }
-  }
-
-  const getOrderStatusColor = (status: BookOrder['order_status']) => {
-    switch (status) {
-      case 'delivered':
-        return 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-      case 'shipped':
-        return 'bg-blue-500/10 text-blue-600 border-blue-200'
-      case 'confirmed':
-      case 'processing':
-        return 'bg-amber-500/10 text-amber-600 border-amber-200'
-      case 'pending':
-        return 'bg-zinc-500/10 text-zinc-500 border-zinc-200'
-      case 'cancelled':
-        return 'bg-red-500/10 text-red-600 border-red-200'
-      default:
-        return ''
-    }
-  }
+  const revokePanel = (type: RevokeTarget['type']) => revoke?.type === type && (
+    <div id="revoke-panel" tabIndex={-1} className="scroll-mt-4 border-t border-border bg-muted/30 p-4 outline-none">
+      <RevokeAccess
+        key={revoke.id}
+        userId={user._id} purchaseId={revoke.id} itemName={revoke.name} type={revoke.type}
+        onDone={() => { setRevoke(null); void reload({ silent: true }) }}
+        onCancel={() => setRevoke(null)}
+      />
+    </div>
+  )
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="relative space-y-6">
+      <div className="mb-1!"><StudentPageBack userId={user._id} /></div>
       <PageHeader
-        title={user.name || 'Unnamed User'}
+        title={name}
         description={user.phone_number}
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Users', href: '/users' },
-          { label: user.name || user.phone_number },
-        ]}
-        action={
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Users', href: '/users' }, { label: user.name || user.phone_number }]}
+        action={canUpdate ? (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowGrantModal(true)}>
-              <Gift className="mr-1.5 h-4 w-4" />
-              <span className="hidden sm:inline">Grant </span>Package
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowGrantEbookModal(true)}>
-              <Gift className="mr-1.5 h-4 w-4" />
-              <span className="hidden sm:inline">Grant </span>Ebook
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowGrantSessionModal(true)}>
-              <Gift className="mr-1.5 h-4 w-4" />
-              <span className="hidden sm:inline">Grant </span>Session
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
-              <Edit className="mr-1.5 h-4 w-4" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleEmailExcludeToggle}
-              disabled={togglingEmailExclude}
-              title={user.email_excluded ? 'Re-include in marketing emails' : 'Exclude from marketing emails'}
-            >
-              {togglingEmailExclude ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : user.email_excluded ? (
-                <Mail className="mr-1.5 h-4 w-4" />
-              ) : (
-                <MailX className="mr-1.5 h-4 w-4" />
-              )}
+            <Button asChild variant="outline" size="sm"><Link to={`/users/${user._id}/grant?type=package`}><Gift aria-hidden="true" /><span><span className="hidden sm:inline">Grant </span>Package</span></Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to={`/users/${user._id}/grant?type=ebook`}><Gift aria-hidden="true" /><span><span className="hidden sm:inline">Grant </span>Ebook</span></Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to={`/users/${user._id}/grant?type=session`}><Gift aria-hidden="true" /><span><span className="hidden sm:inline">Grant </span>Session</span></Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to={`/users/${user._id}/edit`}><Edit aria-hidden="true" />Edit</Link></Button>
+            <Button variant="outline" size="sm" onClick={toggleEmail} disabled={togglingEmail} title={user.email_excluded ? 'Re-include in marketing emails' : 'Exclude from marketing emails'}>
+              {togglingEmail ? <Loader2 aria-hidden="true" className="animate-spin" /> : user.email_excluded ? <Mail aria-hidden="true" /> : <MailX aria-hidden="true" />}
               {user.email_excluded ? 'Re-include Emails' : 'Exclude Emails'}
             </Button>
-            <Button
-              variant={user.is_active ? 'destructive' : 'default'}
-              size="sm"
-              onClick={handleBlockToggle}
-              disabled={blocking}
-            >
-              {blocking ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : user.is_active ? (
-                <ShieldBan className="mr-1.5 h-4 w-4" />
-              ) : (
-                <ShieldCheck className="mr-1.5 h-4 w-4" />
-              )}
+            <Button variant={user.is_active ? 'destructive' : 'default'} size="sm" disabled={unblocking} onClick={() => (user.is_active ? setBlockOpen(true) : unblock())}>
+              {unblocking ? <Loader2 aria-hidden="true" className="animate-spin" /> : user.is_active ? <ShieldBan aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
               {user.is_active ? 'Block' : 'Unblock'}
             </Button>
           </div>
-        }
+        ) : undefined}
       />
 
-      {/* Profile + Personal Info Row */}
+      {error && <StaleNotice message={error} onRetry={() => reload({ silent: true })} />}
+
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Profile Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Profile</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted overflow-hidden shrink-0">
-                {user.photo_url ? (
-                  <img src={user.photo_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <UserCircle className="h-8 w-8 text-muted-foreground" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 space-y-3">
-                <div>
-                  <p className="text-lg font-medium">{user.name || '—'}</p>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <Badge className={`text-[10px] ${user.is_active
-                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                      : 'bg-red-500/10 text-red-600 border-red-200'
-                    }`}>
-                      {user.is_active ? 'Active' : 'Blocked'}
-                    </Badge>
-                    <Badge variant={user.onboarding_completed ? 'secondary' : 'outline'} className="text-[10px]">
-                      {user.onboarding_completed ? 'Done' : 'Pending'}
-                    </Badge>
-                    {user.email_excluded && (
-                      <Badge
-                        className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200"
-                        title={
-                          user.email_excluded_reason === 'user_unsubscribed'
-                            ? `Self-unsubscribed${user.email_excluded_at ? ' on ' + formatDate(user.email_excluded_at) : ''}`
-                            : `Excluded by admin${user.email_excluded_at ? ' on ' + formatDate(user.email_excluded_at) : ''}`
-                        }
-                      >
-                        <MailX className="mr-1 h-2.5 w-2.5" />
-                        Email Excluded
-                        {user.email_excluded_reason === 'user_unsubscribed' && (
-                          <span className="ml-1 opacity-75">(self)</span>
-                        )}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    <span>{user.phone_number}</span>
-                  </div>
-                  {user.email && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Mail className="h-3.5 w-3.5" />
-                      <span>{user.email}</span>
-                    </div>
+        <Section title="Profile">
+          <div className="flex items-start gap-4">
+            <PersonAvatar name={user.name} photo={user.photo_url} size="lg" />
+            <div className="min-w-0 flex-1 space-y-3.5">
+              <div>
+                <p className="break-words text-lg font-medium">{user.name || 'Unnamed User'}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <StatusPill tone={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Blocked'}</StatusPill>
+                  <StatusPill tone={user.onboarding_completed ? 'neutral' : 'warning'}>{user.onboarding_completed ? 'Onboarding done' : 'Onboarding pending'}</StatusPill>
+                  {user.email_excluded && (
+                    <span title={`${user.email_excluded_reason === 'user_unsubscribed' ? 'Self-unsubscribed' : 'Excluded by admin'}${user.email_excluded_at ? ` on ${dayIST(user.email_excluded_at)}` : ''}`}>
+                      <StatusPill tone="warning">Email Excluded{user.email_excluded_reason === 'user_unsubscribed' ? ' (self)' : ''}</StatusPill>
+                    </span>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Profile completion</span>
-                    <span>{user.profile_completion_percentage}%</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${user.profile_completion_percentage}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-1 sm:gap-4 text-xs text-muted-foreground">
-                  <span>Joined {formatDate(user.createdAt)}</span>
-                  <span>Last login {formatDate(user.last_login)}</span>
+              </div>
+              <ul className="space-y-1 text-sm">
+                <li className="flex items-center gap-2"><Phone aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><span className="sr-only">Phone</span><span className="font-mono text-[13px]">{user.phone_number || 'No phone'}</span>{user.phone_number && <CopyButton value={user.phone_number} label="Phone" />}</li>
+                {user.email && <li className="flex min-w-0 items-center gap-2"><Mail aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><span className="sr-only">Email</span><span className="min-w-0 break-all">{user.email}</span><CopyButton value={user.email} label="Email" /></li>}
+              </ul>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground"><span id="profile-completion">Profile completion</span><span className="tabular-nums">{Math.round(user.profile_completion_percentage || 0)}%</span></div>
+                <div role="progressbar" aria-labelledby="profile-completion" aria-valuenow={Math.round(user.profile_completion_percentage || 0)} aria-valuemin={0} aria-valuemax={100} className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, user.profile_completion_percentage || 0))}%` }} />
                 </div>
               </div>
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:gap-4">
+                <span>Joined {dayIST(user.createdAt)}</span>
+                <span>Last login {user.last_login ? dayIST(user.last_login) : 'not recorded'}</span>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          {numbers && (
+            <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-4">
+              {[
+                ['Active subscriptions', numbers.active.toLocaleString('en-IN')],
+                ['Paid purchases', numbers.sales.toLocaleString('en-IN')],
+                ['Collected', formatINR(numbers.collected)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="mt-0.5 break-words font-display text-lg font-semibold tabular-nums tracking-[-0.01em]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </Section>
 
-        {/* Personal Info Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Personal Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
-              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Date of Birth" value={formatDate(user.date_of_birth)} />
-              <InfoRow label="Gender" value={user.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : '—'} />
-              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Address" value={user.address || '—'} />
-              <InfoRow label="Student ID" value={user.student_id || '—'} />
-              <InfoRow icon={<GraduationCap className="h-3.5 w-3.5" />} label="UG College" value={user.ug_college || '—'} />
-              <InfoRow icon={<GraduationCap className="h-3.5 w-3.5" />} label="PG College" value={user.pg_college || '—'} />
-              <InfoRow icon={<Globe className="h-3.5 w-3.5" />} label="Timezone" value={user.timezone} />
-            </div>
-          </CardContent>
-        </Card>
+        <Section title="Personal Information">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+            <Info icon={Calendar} label="Date of Birth" value={user.date_of_birth ? dayIST(user.date_of_birth) : null} />
+            <Info label="Gender" value={user.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : null} />
+            <Info icon={MapPin} label="Address" value={user.address} />
+            <Info label="Student ID" value={user.student_id} mono copy />
+            <Info icon={GraduationCap} label="UG College" value={user.ug_college} />
+            <Info icon={GraduationCap} label="PG College" value={user.pg_college} />
+            <Info label="Organisation" value={user.affiliated_organisation} />
+            <Info label="Designation" value={user.current_designation} />
+            <Info icon={Globe} label="Timezone" value={user.timezone} />
+          </dl>
+        </Section>
       </div>
 
-      {/* Subject Selections */}
-      {user.subject_selections && user.subject_selections.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <BookOpen className="h-4 w-4" />
-              Subject Selections
-              <Badge variant="secondary" className="text-[10px] ml-1">{user.subject_selections.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {user.subject_selections.map((s, i) => {
-                if (!s.subject_id) return null
-                return (
-                  <Badge
-                    key={i}
-                    variant={s.is_primary ? 'default' : 'secondary'}
-                    className="text-xs py-1 px-3"
-                  >
-                    {typeof s.subject_id === 'object' && s.subject_id ? s.subject_id.name : String(s.subject_id)}
-                    {s.is_primary && (
-                      <span className="ml-1.5 text-[10px] opacity-75">Primary</span>
-                    )}
-                  </Badge>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Package Purchases */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />
-            Package Purchases
-            <Badge variant="secondary" className="text-[10px] ml-1">{user.purchases?.length || 0}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!user.purchases || user.purchases.length === 0) ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No package purchases
-            </div>
-          ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Package</TableHead>
-                    <TableHead className="w-28">Amount</TableHead>
-                    <TableHead className="w-24">Status</TableHead>
-                    <TableHead className="w-28">Purchased</TableHead>
-                    <TableHead className="w-28">Expires</TableHead>
-                    <TableHead className="w-20">Active</TableHead>
-                    <TableHead className="w-44"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.purchases.map((purchase) => (
-                    <TableRow key={purchase._id}>
-                      <TableCell className="font-medium text-sm">
-                        {typeof purchase.package_id === 'object' && purchase.package_id
-                          ? purchase.package_id.name
-                          : String(purchase.package_id || 'Unknown')}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {purchase.currency} {purchase.amount_paid}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${getPaymentStatusColor(purchase.payment_status)}`}>
-                          {purchase.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(purchase.purchased_at)}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(purchase.expires_at)}
-                      </TableCell>
-                      <TableCell>
-                        {purchase.is_revoked ? (
-                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
-                            Revoked
-                          </Badge>
-                        ) : (
-                          <Badge variant={purchase.is_active ? 'default' : 'outline'} className="text-[10px]">
-                            {purchase.is_active ? 'Yes' : 'No'}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                          {!purchase.is_revoked && purchase.payment_status === 'completed' && canExtend && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setExtendTarget(purchase)}
-                            >
-                              <CalendarClock className="mr-1 h-3 w-3" />
-                              Extend
-                            </Button>
-                          )}
-                          {purchase.is_active && purchase.payment_status === 'completed' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs text-destructive hover:text-destructive"
-                              onClick={() => setRevokeTarget(purchase)}
-                            >
-                              <Ban className="mr-1 h-3 w-3" />
-                              Revoke
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Ebook Purchases */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Ebook Purchases
-            <Badge variant="secondary" className="text-[10px] ml-1">{user.ebook_purchases?.length || 0}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!user.ebook_purchases || user.ebook_purchases.length === 0) ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No ebook purchases
-            </div>
-          ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Book</TableHead>
-                    <TableHead className="w-28">Amount</TableHead>
-                    <TableHead className="w-24">Status</TableHead>
-                    <TableHead className="w-28">Purchased</TableHead>
-                    <TableHead className="w-20">Active</TableHead>
-                    <TableHead className="w-20"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.ebook_purchases.map((ep) => (
-                    <TableRow key={ep._id}>
-                      <TableCell className="font-medium text-sm">
-                        {typeof ep.book_id === 'object' && ep.book_id ? ep.book_id.title : String(ep.book_id || 'Unknown')}
-                        {ep.is_admin_granted && (
-                          <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {ep.currency} {ep.amount_paid}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${getPaymentStatusColor(ep.payment_status)}`}>
-                          {ep.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(ep.purchased_at)}
-                      </TableCell>
-                      <TableCell>
-                        {ep.is_revoked ? (
-                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
-                            Revoked
-                          </Badge>
-                        ) : (
-                          <Badge variant={ep.is_active ? 'default' : 'outline'} className="text-[10px]">
-                            {ep.is_active ? 'Yes' : 'No'}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {ep.is_active && ep.payment_status === 'completed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => setRevokeEbookTarget(ep)}
-                          >
-                            <Ban className="mr-1 h-3 w-3" />
-                            Revoke
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Session Purchases */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Video className="h-4 w-4" />
-            Session Purchases
-            <Badge variant="secondary" className="text-[10px] ml-1">{user.session_purchases?.length || 0}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!user.session_purchases || user.session_purchases.length === 0) ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <Video className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No session purchases
-            </div>
-          ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Session</TableHead>
-                    <TableHead className="w-28">Amount</TableHead>
-                    <TableHead className="w-24">Status</TableHead>
-                    <TableHead className="w-28">Purchased</TableHead>
-                    <TableHead className="w-20">Active</TableHead>
-                    <TableHead className="w-20"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.session_purchases.map((sp) => (
-                    <TableRow key={sp._id}>
-                      <TableCell className="font-medium text-sm">
-                        {typeof sp.session_id === 'object' && sp.session_id ? sp.session_id.title : String(sp.session_id || 'Unknown')}
-                        {sp.is_admin_granted && (
-                          <Badge variant="outline" className="text-[9px] ml-2 text-violet-600 border-violet-200">Admin Granted</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {sp.currency} {sp.amount_paid}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${getPaymentStatusColor(sp.payment_status)}`}>
-                          {sp.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(sp.purchased_at)}
-                      </TableCell>
-                      <TableCell>
-                        {sp.is_revoked ? (
-                          <Badge className="text-[10px] bg-red-500/10 text-red-600 border-red-200">
-                            Revoked
-                          </Badge>
-                        ) : (
-                          <Badge variant={sp.is_active ? 'default' : 'outline'} className="text-[10px]">
-                            {sp.is_active ? 'Yes' : 'No'}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {sp.is_active && sp.payment_status === 'completed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => setRevokeSessionTarget(sp)}
-                          >
-                            <Ban className="mr-1 h-3 w-3" />
-                            Revoke
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Book Orders */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShoppingBag className="h-4 w-4" />
-            Book Orders
-            <Badge variant="secondary" className="text-[10px] ml-1">{user.book_orders?.length || 0}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!user.book_orders || user.book_orders.length === 0) ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <ShoppingBag className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No book orders
-            </div>
-          ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Order</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead className="w-24">Amount</TableHead>
-                    <TableHead className="w-24">Payment</TableHead>
-                    <TableHead className="w-24">Status</TableHead>
-                    <TableHead className="w-28">Tracking</TableHead>
-                    <TableHead className="w-28">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.book_orders.map((order) => (
-                    <TableRow key={order._id}>
-                      <TableCell className="font-medium text-sm font-mono">
-                        {order.order_number}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {(order.items || []).filter(Boolean).map((item, idx) => (
-                          <div key={item.book_id || idx} className="truncate">
-                            {item.title || 'Unknown'} x{item.quantity}
-                          </div>
-                        ))}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        INR {order.total_amount}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${getPaymentStatusColor(order.payment_status)}`}>
-                          {order.payment_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${getOrderStatusColor(order.order_status)}`}>
-                          {order.order_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {order.tracking_number ? (
-                          <div className="flex items-center gap-1">
-                            <Truck className="h-3 w-3" />
-                            {order.tracking_number}
-                          </div>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(order.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Device Sessions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Smartphone className="h-4 w-4" />
-            Device Sessions
-            <Badge variant="secondary" className="text-[10px] ml-1">{user.device_sessions?.length || 0}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!user.device_sessions || user.device_sessions.length === 0) ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              <Monitor className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No device sessions
-            </div>
-          ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Device</TableHead>
-                    <TableHead className="w-24">Type</TableHead>
-                    <TableHead className="w-36">Last Active</TableHead>
-                    <TableHead className="w-20">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.device_sessions.map((session) => (
-                    <TableRow key={session._id}>
-                      <TableCell className="text-sm font-medium">{session.device_name}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          {getDeviceIcon(session.device_type)}
-                          {session.device_type}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDateTime(session.last_active)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] ${session.is_active
-                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                          : 'bg-zinc-500/10 text-zinc-500 border-zinc-200'
-                        }`}>
-                          {session.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Preferences */}
-      {user.preferences && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Preferences
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Dark Mode</p>
-                <Badge variant={user.preferences.dark_mode_enabled ? 'default' : 'outline'} className="mt-1 text-[10px]">
-                  {user.preferences.dark_mode_enabled ? 'Enabled' : 'Disabled'}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Push Notifications</p>
-                <Badge variant={user.preferences.push_notifications_enabled ? 'default' : 'outline'} className="mt-1 text-[10px]">
-                  {user.preferences.push_notifications_enabled ? 'Enabled' : 'Disabled'}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Video Quality</p>
-                <p className="mt-1 font-medium">{user.preferences.video_quality_preference}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Playback Speed</p>
-                <p className="mt-1 font-medium">{user.preferences.playback_speed_default}x</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Language</p>
-                <p className="mt-1 font-medium">{user.preferences.language === 'en' ? 'English' : 'Hindi'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Edit User Modal */}
-      {user && (
-        <UserFormModal
-          open={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          onSubmit={handleUpdateUser}
-          user={user}
-          mode="edit"
-        />
-      )}
-
-      {/* Grant Package Modal */}
-      {user && (
-        <GrantPackageModal
-          open={showGrantModal}
-          onClose={() => setShowGrantModal(false)}
-          onSubmit={handleGrantPackage}
-          userName={user.name || user.phone_number}
-        />
-      )}
-
-      {/* Grant Ebook Modal */}
-      {user && (
-        <GrantEbookModal
-          open={showGrantEbookModal}
-          onClose={() => setShowGrantEbookModal(false)}
-          onSubmit={handleGrantEbook}
-          userName={user.name || user.phone_number}
-        />
-      )}
-
-      {/* Grant Session Modal */}
-      {user && (
-        <GrantSessionModal
-          open={showGrantSessionModal}
-          onClose={() => setShowGrantSessionModal(false)}
-          onSubmit={handleGrantSession}
-          userName={user.name || user.phone_number}
-        />
-      )}
-
-      {/* Extend Validity Drawer (slides from left) */}
-      <ExtendValidityDrawer
-        record={
-          extendTarget && user
-            ? {
-                purchase_id: extendTarget._id,
-                type: 'package',
-                expires_at: extendTarget.expires_at,
-                purchased_at: extendTarget.purchased_at,
-                is_active: extendTarget.is_active,
-                is_admin_granted: !!extendTarget.is_admin_granted,
-                tier_name: (extendTarget as { tier_name?: string | null }).tier_name ?? null,
-                amount_paid: extendTarget.amount_paid,
-                currency: extendTarget.currency,
-                extendable: true,
-                item_name:
-                  typeof extendTarget.package_id === 'object' && extendTarget.package_id
-                    ? extendTarget.package_id.name
-                    : 'Package',
-                user: {
-                  _id: user._id,
-                  name: user.name || user.phone_number || 'User',
-                  email: user.email || '',
-                  phone_number: user.phone_number || '',
-                  photo_url: (user as { photo_url?: string | null }).photo_url ?? null,
-                },
-              } satisfies SubscriptionRecord
-            : null
-        }
-        canExtend={canExtend}
-        onClose={() => setExtendTarget(null)}
-        onExtended={() => { setExtendTarget(null); fetchUser() }}
+      <TesterSection
+        userId={user._id}
+        name={personName(user)}
+        tester={(user as UserDetail & { tester?: TesterSummary }).tester}
+        canUpdate={canUpdate}
+        canReset={isSuperAdmin}
+        onChanged={() => { void reload({ silent: true }) }}
       />
 
-      {/* Revoke Package Confirmation */}
-      <AlertDialog open={!!revokeTarget} onOpenChange={(open) => { if (!open && !revoking) { setRevokeTarget(null); setRevokeReason('') } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Package Access</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will revoke access to{' '}
-              <span className="font-medium text-foreground">
-                {typeof revokeTarget?.package_id === 'object' && revokeTarget?.package_id ? revokeTarget.package_id.name : 'this package'}
-              </span>{' '}
-              for {user?.name || user?.phone_number}. The user will see an "access revoked" message.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="revoke-reason">Reason (optional)</Label>
-            <Input
-              id="revoke-reason"
-              placeholder="e.g., Refund issued, Policy violation, etc."
-              value={revokeReason}
-              onChange={(e) => setRevokeReason(e.target.value)}
-              disabled={revoking}
-              maxLength={500}
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRevokePurchase}
-              disabled={revoking}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {revoking ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
-              ) : (
-                'Revoke Access'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {(user.subject_selections || []).some((s) => s.subject_id) && (
+        <Section title={<Title icon={BookOpen} count={user.subject_selections.filter((s) => s.subject_id).length}>Subject Selections</Title>}>
+          <ul className="flex flex-wrap gap-2">
+            {user.subject_selections.filter((s) => s.subject_id).map((s, i) => (
+              <li key={i} className={s.is_primary ? 'inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground' : 'inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium'}>
+                {isObj(s.subject_id) ? s.subject_id.name || 'Deleted subject' : 'Deleted subject'}
+                {s.is_primary && <span className="font-normal opacity-80">Primary</span>}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
-      {/* Revoke Ebook Confirmation */}
-      <AlertDialog open={!!revokeEbookTarget} onOpenChange={(open) => { if (!open && !revokingEbook) { setRevokeEbookTarget(null); setRevokeEbookReason('') } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Ebook Access</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will revoke access to{' '}
-              <span className="font-medium text-foreground">
-                {typeof revokeEbookTarget?.book_id === 'object' && revokeEbookTarget?.book_id ? revokeEbookTarget.book_id.title : 'this ebook'}
-              </span>{' '}
-              for {user?.name || user?.phone_number}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="revoke-ebook-reason">Reason (optional)</Label>
-            <Input
-              id="revoke-ebook-reason"
-              placeholder="e.g., Refund issued, Policy violation, etc."
-              value={revokeEbookReason}
-              onChange={(e) => setRevokeEbookReason(e.target.value)}
-              disabled={revokingEbook}
-              maxLength={500}
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={revokingEbook}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRevokeEbook}
-              disabled={revokingEbook}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {revokingEbook ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
-              ) : (
-                'Revoke Access'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Section flush title={<Title icon={CreditCard} count={user.purchases?.length || 0}>Package Purchases</Title>}>
+        {revokePanel('package')}
+        <RecordTable<UserPurchase>
+          rows={user.purchases || []} empty={{ icon: Package, text: 'No package purchases' }} minWidth="min-w-[860px]" itemWord="purchase"
+          hrefOf={(p) => `/commerce/purchases/package/${p._id}`} keyOf={(p) => p._id} labelOf={packageTitle}
+          head={['Package', 'Amount', 'Status', 'Purchased', 'Expires', 'Active', '']}
+          cells={(p) => {
+            const expiry = formatExpiry(p.expires_at)
+            const expired = expiry.status === 'expired'
+            const note = isBundled(p) ? 'Came with a combo package'
+              : p.is_admin_granted ? `Admin granted${p.admin_grant_reason ? `: ${p.admin_grant_reason}` : ''}`
+                : p.coupon_code ? `Coupon ${p.coupon_code}` : null
+            return [
+              <div key="n" className="max-w-[360px]"><p className="break-words text-sm font-medium">{packageTitle(p)}<TestPill row={p} /></p>{note && <p className="truncate text-xs text-muted-foreground" title={note}>{note}</p>}</div>,
+              <Amount key="a" value={paid(p)} />,
+              <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
+              <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
+              <div key="e"><Muted>{p.expires_at ? dayIST(p.expires_at) : 'Not set'}</Muted>{p.is_active && !p.is_revoked && p.payment_status === 'completed' && p.expires_at && <p className={expiry.status === 'soon' ? 'text-xs font-medium text-warning' : 'text-xs text-muted-foreground'}>{expiry.relative}</p>}</div>,
+              p.is_revoked || p.payment_status === 'revoked'
+                ? <div key="x"><StatusPill tone="danger">Revoked</StatusPill>{p.revoked_at && <p className="mt-0.5 max-w-[160px] truncate text-xs text-muted-foreground" title={p.revoked_reason || undefined}>{dayIST(p.revoked_at)}{p.revoked_reason ? ` · ${p.revoked_reason}` : ''}</p>}</div>
+                : <StatusPill key="x" tone={p.is_active && !expired && p.payment_status === 'completed' ? 'success' : 'neutral'}>{p.payment_status === 'completed' && expired ? 'Expired' : p.is_active && p.payment_status === 'completed' ? 'Yes' : 'No'}</StatusPill>,
+              canUpdate ? (
+                <div key="b" className="flex items-center justify-end gap-1 whitespace-nowrap">
+                  {remindablePackage(p) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setRemindTarget([{ type: 'package', purchase_id: p._id }])} aria-label={`Send reminder now for ${packageTitle(p)}`}><BellRing aria-hidden="true" className="!size-3" />Remind</Button>}
+                  {!p.is_revoked && p.payment_status === 'completed' && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExtendTarget(p)}><CalendarClock aria-hidden="true" className="!size-3" />Extend</Button>}
+                  {p.is_active && p.payment_status === 'completed' && <RevokeButton onClick={() => setRevoke({ type: 'package', id: p._id, name: packageTitle(p) })} />}
+                </div>
+              ) : null,
+            ]
+          }}
+        />
+      </Section>
 
-      {/* Revoke Session Confirmation */}
-      <AlertDialog open={!!revokeSessionTarget} onOpenChange={(open) => { if (!open && !revokingSession) { setRevokeSessionTarget(null); setRevokeSessionReason('') } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Session Access</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will revoke access to{' '}
-              <span className="font-medium text-foreground">
-                {typeof revokeSessionTarget?.session_id === 'object' && revokeSessionTarget?.session_id ? revokeSessionTarget.session_id.title : 'this session'}
-              </span>{' '}
-              for {user?.name || user?.phone_number}. The enrollment will also be cancelled.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="revoke-session-reason">Reason (optional)</Label>
-            <Input
-              id="revoke-session-reason"
-              placeholder="e.g., Refund issued, Policy violation, etc."
-              value={revokeSessionReason}
-              onChange={(e) => setRevokeSessionReason(e.target.value)}
-              disabled={revokingSession}
-              maxLength={500}
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={revokingSession}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRevokeSession}
-              disabled={revokingSession}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {revokingSession ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Revoking...</>
-              ) : (
-                'Revoke Access'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Section flush title={<Title icon={BookOpen} count={user.ebook_purchases?.length || 0}>Ebook Purchases</Title>}>
+        {revokePanel('ebook')}
+        <RecordTable<EbookPurchase>
+          rows={user.ebook_purchases || []} empty={{ icon: BookOpen, text: 'No ebook purchases' }} minWidth="min-w-[700px]" itemWord="purchase"
+          hrefOf={(p) => `/commerce/purchases/ebook/${p._id}`} keyOf={(p) => p._id} labelOf={bookTitle}
+          head={['Book', 'Amount', 'Status', 'Purchased', 'Active', '']}
+          cells={(p) => [
+            <ItemName key="n" title={bookTitle(p)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />,
+            <Amount key="a" value={paid(p)} />,
+            <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
+            <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
+            <ActiveCell key="x" row={p} />,
+            canUpdate && p.is_active && p.payment_status === 'completed' ? <div key="b" className="text-right"><RevokeButton onClick={() => setRevoke({ type: 'ebook', id: p._id, name: bookTitle(p) })} /></div> : null,
+          ]}
+        />
+      </Section>
+
+      <Section flush title={<Title icon={Video} count={user.session_purchases?.length || 0}>Session Purchases</Title>}>
+        {revokePanel('session')}
+        <RecordTable<SessionPurchase>
+          rows={user.session_purchases || []} empty={{ icon: Video, text: 'No session purchases' }} minWidth="min-w-[700px]" itemWord="purchase"
+          hrefOf={(p) => `/commerce/purchases/session/${p._id}`} keyOf={(p) => p._id} labelOf={sessionTitle}
+          head={['Session', 'Amount', 'Status', 'Purchased', 'Active', '']}
+          cells={(p) => [
+            <div key="n"><ItemName title={sessionTitle(p)} granted={p.is_admin_granted} reason={p.admin_grant_reason} test={isTest(p)} />{isObj(p.session_id) && p.session_id.scheduled_start_time && <p className="text-xs text-muted-foreground">{dayTimeIST(p.session_id.scheduled_start_time)}</p>}</div>,
+            <Amount key="a" value={paid(p)} />,
+            <StatusPill key="s" tone={payment(p.payment_status).tone}>{payment(p.payment_status).label}</StatusPill>,
+            <Muted key="p">{dayIST(p.purchased_at || p.createdAt)}</Muted>,
+            <ActiveCell key="x" row={p} />,
+            canUpdate && p.is_active && p.payment_status === 'completed' ? (
+              <div key="b" className="flex items-center justify-end gap-1 whitespace-nowrap">
+                {remindableSession(p) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setRemindTarget([{ type: 'session', purchase_id: p._id }])} aria-label={`Send reminder now for ${sessionTitle(p)}`}><BellRing aria-hidden="true" className="!size-3" />Remind</Button>}
+                <RevokeButton onClick={() => setRevoke({ type: 'session', id: p._id, name: sessionTitle(p) })} />
+              </div>
+            ) : null,
+          ]}
+        />
+      </Section>
+
+      <Section flush title={<Title icon={ShoppingBag} count={user.book_orders?.length || 0}>Book Orders</Title>}>
+        <RecordTable<BookOrder>
+          rows={user.book_orders || []} empty={{ icon: ShoppingBag, text: 'No book orders' }} minWidth="min-w-[860px]" itemWord="order"
+          hrefOf={(o) => `/commerce/purchases/book/${o._id}`} keyOf={(o) => o._id} labelOf={(o) => `order ${o.order_number}`}
+          head={['Order', 'Items', 'Amount', 'Payment', 'Status', 'Tracking', 'Date']}
+          cells={(o) => {
+            const order = ORDER[o.order_status] ?? { label: o.order_status, tone: 'neutral' as Tone }
+            return [
+              <span key="o" className="whitespace-nowrap font-mono text-[13px] font-medium">{o.order_number}<TestPill row={o} /></span>,
+              <ul key="i" className="max-w-[320px] text-sm">{(o.items || []).filter(Boolean).map((item, i) => <li key={item.book_id || i} className="truncate">{item.title || 'Unknown'} x{item.quantity}</li>)}</ul>,
+              <Amount key="a" value={Number(o.total_amount) || 0} />,
+              <StatusPill key="s" tone={payment(o.payment_status).tone}>{payment(o.payment_status).label}</StatusPill>,
+              <StatusPill key="os" tone={order.tone}>{order.label}</StatusPill>,
+              o.tracking_number ? <span key="t" className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-xs text-muted-foreground"><Truck aria-hidden="true" className="h-3 w-3" />{o.tracking_number}<CopyButton value={o.tracking_number} label="Tracking number" /></span> : <Muted key="t">None</Muted>,
+              <Muted key="d">{dayIST(o.createdAt)}</Muted>,
+            ]
+          }}
+        />
+      </Section>
+
+      {/* Keyed on the block state: blocking signs every device out, so both sections reload after it */}
+      <DeviceSessionsSection
+        key={`devices-${user.is_active}`}
+        userId={user._id}
+        fallback={user.device_sessions || []}
+        canUpdate={canUpdate}
+        title={(count) => <Title icon={Smartphone} count={count}>Device Sessions</Title>}
+      />
+
+      <SignInLogSection key={`log-${user.is_active}`} userId={user._id} title={(count) => <Title icon={History} count={count}>Sign-in log</Title>} />
+
+      {user.preferences && (
+        <Section title={<Title icon={Settings}>Preferences</Title>}>
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2 md:grid-cols-3">
+            <Info label="Dark Mode" value={user.preferences.dark_mode_enabled ? 'Enabled' : 'Disabled'} />
+            <Info label="Push Notifications" value={user.preferences.push_notifications_enabled ? 'Enabled' : 'Disabled'} />
+            <Info label="Video Quality" value={user.preferences.video_quality_preference} />
+            <Info label="Playback Speed" value={user.preferences.playback_speed_default ? `${user.preferences.playback_speed_default}x` : null} />
+            <Info label="Language" value={user.preferences.language === 'en' ? 'English' : user.preferences.language === 'hi' ? 'Hindi' : user.preferences.language} />
+          </dl>
+        </Section>
+      )}
+
+      <ConfirmDock
+        open={blockOpen} onClose={() => setBlockOpen(false)} onConfirm={toggleBlock}
+        title={`Block ${personName(user)}?`}
+        description="They are signed out of every device and cannot sign in until you unblock them. Their purchases are kept."
+        confirmLabel="Block user" workingLabel="Blocking…"
+      />
+
+      <ExtendValidityDrawer
+        record={extendTarget ? ({
+          purchase_id: extendTarget._id,
+          type: 'package',
+          expires_at: extendTarget.expires_at,
+          purchased_at: extendTarget.purchased_at,
+          is_active: extendTarget.is_active,
+          is_admin_granted: !!extendTarget.is_admin_granted,
+          tier_name: extendTarget.tier_name ?? null,
+          tier_duration_days: extendTarget.tier_duration_days ?? null,
+          amount_paid: extendTarget.amount_paid,
+          currency: extendTarget.currency,
+          extendable: true,
+          item_name: isObj(extendTarget.package_id) ? extendTarget.package_id.name : 'Package',
+          user: { _id: user._id, name: personName(user), email: user.email || '', phone_number: user.phone_number || '', photo_url: user.photo_url ?? null },
+        } satisfies SubscriptionRecord) : null}
+        canExtend={canUpdate}
+        onClose={() => setExtendTarget(null)}
+        onExtended={() => { setExtendTarget(null); void reload({ silent: true }) }}
+      />
+
+      <ReminderDrawer items={remindTarget} canSend={canUpdate} onClose={() => setRemindTarget(null)} />
     </div>
   )
 }
 
-// Helper component for key-value info rows
-function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+// ── Pieces ───────────────────────────────────────────────────────────────
+
+function Title({ icon: Icon, count, children }: { icon: ComponentType<{ className?: string }>; count?: number; children: ReactNode }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground flex items-center gap-1">
-        {icon}
-        {label}
-      </p>
-      <p className="mt-0.5 font-medium truncate">{value}</p>
+    <span className="flex items-center gap-2">
+      <Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
+      {children}
+      {count !== undefined && <span className="rounded-full bg-muted px-2 py-px text-xs font-semibold tabular-nums text-muted-foreground">{count.toLocaleString('en-IN')}</span>}
+    </span>
+  )
+}
+
+function Info({ icon: Icon, label, value, mono, copy }: { icon?: ComponentType<{ className?: string }>; label: string; value?: string | null; mono?: boolean; copy?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1 text-xs text-muted-foreground">{Icon && <Icon aria-hidden="true" className="h-3.5 w-3.5" />}{label}</dt>
+      <dd className={mono ? 'mt-0.5 flex items-center gap-1.5 font-mono text-[13px] font-medium' : 'mt-0.5 flex items-center gap-1.5 font-medium'}>
+        {value ? <span className="min-w-0 break-words">{value}</span> : <span className="font-normal text-muted-foreground">Not set</span>}
+        {copy && value && <CopyButton value={value} label={label} />}
+      </dd>
+    </div>
+  )
+}
+
+const Muted = ({ children }: { children: ReactNode }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{children}</span>
+const Amount = ({ value }: { value: number }) => <span className="whitespace-nowrap text-sm tabular-nums">{value > 0 ? formatINR(value) : <span className="text-muted-foreground">Free</span>}</span>
+
+function ItemName({ title, granted, reason, test }: { title: string; granted?: boolean; reason?: string | null; test?: boolean }) {
+  return (
+    <div className="max-w-[360px]">
+      <p className="break-words text-sm font-medium">{title}{test && <StatusPill tone="warning" className="ml-1.5 align-middle">Test</StatusPill>}</p>
+      {granted && <p className="truncate text-xs text-muted-foreground" title={reason || undefined}>Admin Granted{reason ? `: ${reason}` : ''}</p>}
+    </div>
+  )
+}
+
+function ActiveCell({ row }: { row: { is_active: boolean; is_revoked?: boolean; payment_status: string; revoked_at?: string | null; revoked_reason?: string | null } }) {
+  if (row.is_revoked || row.payment_status === 'revoked') {
+    return (
+      <div>
+        <StatusPill tone="danger">Revoked</StatusPill>
+        {row.revoked_at && <p className="mt-0.5 max-w-[160px] truncate text-xs text-muted-foreground" title={row.revoked_reason || undefined}>{dayIST(row.revoked_at)}{row.revoked_reason ? ` · ${row.revoked_reason}` : ''}</p>}
+      </div>
+    )
+  }
+  return <StatusPill tone={row.is_active ? 'success' : 'neutral'}>{row.is_active ? 'Yes' : 'No'}</StatusPill>
+}
+
+function RevokeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-danger hover:bg-danger-soft hover:text-danger" onClick={onClick}>
+      <Ban aria-hidden="true" className="!size-3" />Revoke
+    </Button>
+  )
+}
+
+const CHUNK = 20
+
+/** A section's table. Rows with a page open it; long lists load 20 at a time. */
+function RecordTable<T>({ rows, head, cells, keyOf, labelOf, hrefOf, empty, minWidth, itemWord }: {
+  rows: T[]
+  head: string[]
+  cells: (row: T) => ReactNode[]
+  keyOf: (row: T) => string
+  labelOf: (row: T) => string
+  hrefOf?: (row: T) => string
+  empty: { icon: ComponentType<{ className?: string }>; text: string }
+  minWidth: string
+  itemWord: string
+}) {
+  const navigate = useNavigate()
+  const [shown, setShown] = useState(CHUNK)
+  if (rows.length === 0) {
+    const Icon = empty.icon
+    return (
+      <div className="border-t border-border px-5 py-9 text-center text-sm text-muted-foreground">
+        <Icon aria-hidden="true" className="mx-auto mb-2 h-7 w-7 opacity-40" />
+        {empty.text}
+      </div>
+    )
+  }
+  return (
+    <div className="border-t border-border">
+      <Table className={minWidth}>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            {head.map((h, i) => <TableHead key={i} scope="col" className={i === 0 ? 'pl-5' : i === head.length - 1 ? 'pr-5' : ''}>{h || <span className="sr-only">Actions</span>}</TableHead>)}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.slice(0, shown).map((row) => {
+            const href = hrefOf?.(row)
+            return (
+              <TableRow
+                key={keyOf(row)}
+                tabIndex={href ? 0 : undefined}
+                aria-label={href ? `Open ${labelOf(row)}` : undefined}
+                onClick={href ? (e) => {
+                  if ((e.target as HTMLElement).closest('button, a, [data-no-row-click]')) return
+                  navigate(href)
+                } : undefined}
+                onKeyDown={href ? (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) navigate(href) } : undefined}
+                className={href ? 'cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2' : 'hover:bg-transparent'}
+              >
+                {cells(row).map((c, i, all) => <TableCell key={i} className={i === 0 ? 'py-2.5 pl-5' : i === all.length - 1 ? 'py-2.5 pr-5' : 'py-2.5'}>{c}</TableCell>)}
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+      {rows.length > shown && (
+        <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-sm">
+          <span className="text-muted-foreground">Showing {shown} of {plural(rows.length, itemWord)}</span>
+          <Button size="sm" variant="outline" className="bg-card" onClick={() => setShown((n) => n + CHUNK)}>Show {Math.min(CHUNK, rows.length - shown)} more</Button>
+        </div>
+      )}
     </div>
   )
 }

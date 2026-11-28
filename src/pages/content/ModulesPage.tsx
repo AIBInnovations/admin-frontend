@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useServerSearch } from '@/hooks/useServerSearch'
 import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
 import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/common/DataTable'
@@ -14,20 +15,25 @@ import { modulesService, Module, ModuleFormData } from '@/services/modules.servi
 import { seriesService, Series } from '@/services/series.service'
 import { PublishConfirmModal } from '@/components/common/PublishConfirmModal'
 import { useModulesColumns } from './ModulesPage.columns'
+import { ContentMovePicker, type PickItem } from '@/components/modules/ContentMovePicker'
 
 export function ModulesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('modules.create')
+  const canEdit = hasPermission('modules.update')
 
   // State
   const [modules, setModules] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
+  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
   const [seriesFilter, setSeriesFilter] = useState(searchParams.get('series') || 'all')
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') || 'all')
   const [publishFilter, setPublishFilter] = useState(searchParams.get('publish_status') || 'all')
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Dropdown data
   const [seriesList, setSeriesList] = useState<Series[]>([])
@@ -36,6 +42,8 @@ export function ModulesPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
   const [selectedModule, setSelectedModule] = useState<Module | null>(null)
+  // "Move to series..." picker (full page)
+  const [moving, setMoving] = useState<PickItem[] | null>(null)
   const [publishModal, setPublishModal] = useState<{
     entityId: string;
     action: 'publish' | 'unpublish';
@@ -54,6 +62,7 @@ export function ModulesPage() {
   const fetchModules = useCallback(async () => {
     const fetchId = nextFetchId()
     setLoading(true)
+    setLoadError(null)
     try {
       const response = await modulesService.getAll({
         page: currentPage,
@@ -69,12 +78,17 @@ export function ModulesPage() {
         setModules(response.data.entities || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
         setTotalCount(response.data.pagination?.total || 0)
+        // The last row of the last page is gone: show the page before it
+        const pages = response.data.pagination?.totalPages || 1
+        if (currentPage > pages) setCurrentPage(pages)
       } else {
-        toast.error(response.message || 'Failed to load modules')
+        setLoadError(response.message || 'The modules could not be loaded.')
       }
     } catch (error: any) {
       if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load modules')
+      const message = error.status === 403 ? 'You do not have access to modules.' : error.message || 'The modules could not be loaded.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
@@ -85,12 +99,13 @@ export function ModulesPage() {
   // URL params sync
   useEffect(() => {
     const params: Record<string, string> = {}
+    if (debouncedSearch) params.search = debouncedSearch
     if (seriesFilter !== 'all') params.series = seriesFilter
     if (activeFilter !== 'all') params.status = activeFilter
     if (publishFilter !== 'all') params.publish_status = publishFilter
     if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [seriesFilter, activeFilter, publishFilter, currentPage, setSearchParams])
+    setSearchParams(params, { replace: true })
+  }, [debouncedSearch, seriesFilter, activeFilter, publishFilter, currentPage, setSearchParams])
 
   useResetPageOnChange(setCurrentPage, [debouncedSearch, seriesFilter, activeFilter, publishFilter])
 
@@ -207,10 +222,12 @@ export function ModulesPage() {
   ]
 
   const columns = useModulesColumns({
+    canEdit,
     onEdit: handleEdit,
     onToggleActive: handleToggleActive,
     onRecalculate: handleRecalculate,
     onPublishAction: handlePublishAction,
+    onMove: canEdit ? (mod) => setMoving([{ id: mod._id, name: mod.name, parentId: mod.series_id && typeof mod.series_id === 'object' ? mod.series_id._id : (mod.series_id as unknown as string) ?? null }]) : undefined,
   })
 
   return (
@@ -219,11 +236,11 @@ export function ModulesPage() {
         title="Modules"
         description="Manage learning modules within series"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Content' }, { label: 'Modules' }]}
-        action={
+        action={canCreate && (
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />Add Module
           </Button>
-        }
+        )}
       />
 
       <SearchWithFilters
@@ -243,6 +260,8 @@ export function ModulesPage() {
         data={modules}
         columns={columns}
         isLoading={loading}
+        error={loadError}
+        onRetry={fetchModules}
         pagination={{
           currentPage,
           totalPages,
@@ -257,13 +276,14 @@ export function ModulesPage() {
           description: !debouncedSearch && seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all'
             ? 'Get started by creating your first module'
             : undefined,
-          action: !debouncedSearch && seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
+          action: canCreate && !debouncedSearch && seriesFilter === 'all' && activeFilter === 'all' && publishFilter === 'all' ? (
             <Button onClick={handleCreate} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />Create your first module
             </Button>
           ) : undefined,
         }}
         getRowKey={(mod) => mod._id}
+        onRowClick={canEdit ? handleEdit : undefined}
       />
 
       <ModuleFormModal
@@ -273,6 +293,15 @@ export function ModulesPage() {
         module={selectedModule}
         mode={modalMode}
       />
+
+      {moving && (
+        <ContentMovePicker
+          kind="module-move"
+          items={moving}
+          onClose={() => setMoving(null)}
+          onDone={() => { setMoving(null); fetchModules() }}
+        />
+      )}
 
       {publishModal && (
         <PublishConfirmModal

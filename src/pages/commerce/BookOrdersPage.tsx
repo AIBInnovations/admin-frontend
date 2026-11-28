@@ -1,169 +1,106 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
-import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/common/DataTable'
+import { DateRangeFilter, rangeFromParams, rangeToParams } from '@/components/common/DateRangeFilter'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import { apiErrorMessage } from '@/components/common/detail'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { BookCopy, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { bookOrdersService, BookOrder } from '@/services/bookOrders.service'
+import { BookCopy } from 'lucide-react'
+import { formatINR } from '@/lib/format'
+import { bookOrdersService, BookOrder, BookOrderListResult } from '@/services/bookOrders.service'
 import { useBookOrdersColumns } from './BookOrdersPage.columns'
+import { ClearFilters, Totals } from './components/filters'
+import { useListUrl } from './components/useListUrl'
 
-const orderStatusColors: Record<string, string> = {
-  pending: 'bg-amber-500/10 text-amber-600 border-amber-200',
-  confirmed: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  processing: 'bg-violet-500/10 text-violet-600 border-violet-200',
-  shipped: 'bg-cyan-500/10 text-cyan-600 border-cyan-200',
-  delivered: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
-}
+const filters: FilterConfig[] = [
+  {
+    key: 'status',
+    label: 'Order Status',
+    type: 'select',
+    options: [
+      { label: 'All Status', value: 'all' },
+      { label: 'Pending', value: 'pending' },
+      { label: 'Confirmed', value: 'confirmed' },
+      { label: 'Processing', value: 'processing' },
+      { label: 'Shipped', value: 'shipped' },
+      { label: 'Delivered', value: 'delivered' },
+      { label: 'Cancelled', value: 'cancelled' },
+    ],
+    placeholder: 'Filter by order status',
+    defaultValue: 'all',
+  },
+  {
+    key: 'payment',
+    label: 'Payment',
+    type: 'select',
+    options: [
+      { label: 'All', value: 'all' },
+      { label: 'Completed', value: 'completed' },
+      { label: 'Pending', value: 'pending' },
+      { label: 'Failed', value: 'failed' },
+      { label: 'Refunded', value: 'refunded' },
+    ],
+    placeholder: 'Filter by payment',
+    defaultValue: 'all',
+  },
+]
 
 export function BookOrdersPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const url = useListUrl()
+  const { params, page, setPage, update, search } = url
+  const status = params.get('status') || 'all'
+  const payment = params.get('payment') || 'all'
+  const range = rangeFromParams(params, 'all')
 
-  // State
-  const [orders, setOrders] = useState<BookOrder[]>([])
+  const [data, setData] = useState<BookOrderListResult | null>(null)
   const [loading, setLoading] = useState(true)
-  const { inputValue: searchQuery, setInputValue: setSearchQuery, debouncedSearch } = useServerSearch(searchParams.get('search') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
-
-  // Dialogs
-  const [detailOrder, setDetailOrder] = useState<BookOrder | null>(null)
-  const [shippingOrder, setShippingOrder] = useState<BookOrder | null>(null)
-  const [trackingNumber, setTrackingNumber] = useState('')
-  const [courierName, setCourierName] = useState('')
-  const [shippingSubmitting, setShippingSubmitting] = useState(false)
-
+  const [error, setError] = useState<string | null>(null)
   const { nextFetchId, isStale } = useLatestFetch()
 
-  // Fetch orders
-  const fetchOrders = useCallback(async () => {
+  const load = useCallback(async () => {
     const fetchId = nextFetchId()
     setLoading(true)
     try {
       const response = await bookOrdersService.getAll({
-        page: currentPage,
+        page,
         limit: 20,
-        search: debouncedSearch || undefined,
-        order_status: statusFilter !== 'all' ? statusFilter : undefined,
-        payment_status: paymentFilter !== 'all' ? paymentFilter : undefined,
+        search: search || undefined,
+        order_status: status !== 'all' ? status : undefined,
+        payment_status: payment !== 'all' ? payment : undefined,
+        from: range.from || undefined,
+        to: range.to || undefined,
       })
       if (isStale(fetchId)) return
-
-      if (response.success && response.data) {
-        setOrders(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load book orders')
-      }
-    } catch (error: any) {
-      if (isStale(fetchId)) return
-      toast.error(error.message || 'Failed to load book orders')
+      const result = response.data ?? null
+      const last = result?.pagination.totalPages || 0
+      if (page > 1 && last > 0 && page > last) { setPage(last); return }
+      setData(result)
+      setError(null)
+    } catch (e) {
+      if (!isStale(fetchId)) setError(apiErrorMessage(e, 'The book orders could not be loaded.'))
     } finally {
       if (!isStale(fetchId)) setLoading(false)
     }
-  }, [currentPage, debouncedSearch, statusFilter, paymentFilter, nextFetchId, isStale])
+  }, [page, search, status, payment, range.from, range.to, setPage, nextFetchId, isStale])
 
-  useEffect(() => { fetchOrders() }, [fetchOrders])
+  useEffect(() => { load() }, [load])
 
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (searchQuery.trim()) params.search = searchQuery
-    if (statusFilter !== 'all') params.status = statusFilter
-    if (paymentFilter !== 'all') params.payment = paymentFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [searchQuery, statusFilter, paymentFilter, currentPage, setSearchParams])
-
-  useResetPageOnChange(setCurrentPage, [debouncedSearch, statusFilter, paymentFilter])
-
-  // Handlers
-  const handleViewDetails = (order: BookOrder) => {
-    setDetailOrder(order)
-  }
-
-  const handleUpdateShipping = (order: BookOrder) => {
-    setShippingOrder(order)
-    setTrackingNumber(order.tracking_number || '')
-    setCourierName(order.courier_name || '')
-  }
-
-  const handleShippingSubmit = async () => {
-    if (!shippingOrder || !trackingNumber.trim() || !courierName.trim()) return
-    try {
-      setShippingSubmitting(true)
-      const response = await bookOrdersService.updateShipping(
-        shippingOrder._id, trackingNumber.trim(), courierName.trim(),
-      )
-      if (response.success) {
-        toast.success('Shipping info updated successfully')
-        setShippingOrder(null)
-        fetchOrders()
-      } else {
-        toast.error(response.message || 'Failed to update shipping')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update shipping')
-    } finally {
-      setShippingSubmitting(false)
-    }
-  }
-
-  // Filters
-  const filters: FilterConfig[] = [
-    {
-      key: 'status',
-      label: 'Order Status',
-      type: 'select',
-      options: [
-        { label: 'All Status', value: 'all' },
-        { label: 'Pending', value: 'pending' },
-        { label: 'Confirmed', value: 'confirmed' },
-        { label: 'Processing', value: 'processing' },
-        { label: 'Shipped', value: 'shipped' },
-        { label: 'Delivered', value: 'delivered' },
-        { label: 'Cancelled', value: 'cancelled' },
-      ],
-      placeholder: 'Filter by order status',
-      defaultValue: 'all',
-    },
-    {
-      key: 'payment',
-      label: 'Payment',
-      type: 'select',
-      options: [
-        { label: 'All', value: 'all' },
-        { label: 'Completed', value: 'completed' },
-        { label: 'Pending', value: 'pending' },
-        { label: 'Failed', value: 'failed' },
-      ],
-      placeholder: 'Filter by payment',
-      defaultValue: 'all',
-    },
-  ]
-
-  const columns = useBookOrdersColumns({
-    onViewDetails: handleViewDetails,
-    onUpdateShipping: handleUpdateShipping,
+  const open = (order: BookOrder, hash = '') => navigate(`/commerce/book-orders/${order._id}${hash}`, {
+    state: { back: { label: 'Book Orders', href: `/commerce/book-orders${params.toString() ? `?${params}` : ''}` } },
   })
+  const columns = useBookOrdersColumns({
+    onViewDetails: (o) => open(o),
+    onUpdateShipping: hasPermission('book_orders.update') ? (o) => open(o, '#shipping') : undefined,
+  })
+
+  const filtered = !!search || status !== 'all' || payment !== 'all' || range.preset !== 'all'
+  const clear = () => { url.setSearchInput(''); url.replaceAll(new URLSearchParams()) }
+  const t = data?.totals
 
   return (
     <div className="space-y-6">
@@ -178,194 +115,58 @@ export function BookOrdersPage() {
       />
 
       <SearchWithFilters
-        value={searchQuery}
-        onChange={setSearchQuery}
+        value={url.searchInput}
+        onChange={url.setSearchInput}
         placeholder="Search by book title, recipient name, phone, or email..."
         filters={filters}
-        activeFilters={{ status: statusFilter, payment: paymentFilter }}
-        onFiltersChange={(f) => {
-          if (f.status !== undefined) setStatusFilter(f.status)
-          if (f.payment !== undefined) setPaymentFilter(f.payment)
-        }}
+        activeFilters={{ status, payment }}
+        onFiltersChange={(f) => update({ status: f.status === 'all' ? null : f.status, payment: f.payment === 'all' ? null : f.payment })}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangeFilter value={range} onChange={(r) => { const next = rangeToParams(r, params); if (r.preset === 'all') next.delete('range'); next.delete('page'); url.replaceAll(next) }} />
+            {filtered && <ClearFilters onClick={clear} />}
+          </div>
+        }
       />
 
+      <Totals
+        loading={loading && !!t}
+        items={[
+          { label: 'Orders', value: t ? t.count.toLocaleString('en-IN') : '—' },
+          { label: 'Paid orders', value: t ? t.paid_orders.toLocaleString('en-IN') : '—' },
+          { label: 'Revenue', value: t ? formatINR(t.revenue) : '—', hint: 'Paid orders only' },
+          { label: 'Average paid order', value: t ? (t.paid_orders ? formatINR(Math.round(t.revenue / t.paid_orders)) : '—') : '—' },
+        ]}
+      />
+
+      {error && data && (
+        <p role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger">
+          {error} Showing what was loaded before.
+          <Button size="sm" variant="outline" onClick={load}>Try again</Button>
+        </p>
+      )}
+
       <DataTable
-        data={orders}
+        data={data?.entities ?? []}
         columns={columns}
-        isLoading={loading}
+        isLoading={loading && !data}
+        error={error}
+        onRetry={load}
+        onRowClick={(o) => open(o)}
         pagination={{
-          currentPage,
-          totalPages,
-          totalCount,
-          onPageChange: setCurrentPage,
+          currentPage: page,
+          totalPages: data?.pagination.totalPages || 1,
+          totalCount: data?.pagination.total || 0,
+          onPageChange: setPage,
         }}
         emptyState={{
           icon: BookCopy,
-          title: debouncedSearch || statusFilter !== 'all' || paymentFilter !== 'all'
-            ? 'No orders found matching your filters'
-            : 'No book orders yet',
-          description: !debouncedSearch && statusFilter === 'all' && paymentFilter === 'all'
-            ? 'Book orders will appear here when users purchase physical books'
-            : undefined,
+          title: filtered ? 'No orders found matching your filters' : 'No book orders yet',
+          description: filtered ? undefined : 'Book orders will appear here when users purchase physical books',
+          action: filtered ? <Button variant="outline" size="sm" onClick={clear}>Clear filters</Button> : undefined,
         }}
         getRowKey={(order) => order._id}
       />
-
-      {/* Order Detail Dialog */}
-      <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Order Details</DialogTitle>
-            <DialogDescription>
-              Order #{detailOrder?.order_number}
-            </DialogDescription>
-          </DialogHeader>
-          {detailOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Recipient</p>
-                  <p className="font-medium">{detailOrder.recipient_name}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Phone</p>
-                  <p className="font-medium">{detailOrder.shipping_phone}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-muted-foreground">Address</p>
-                  <p className="font-medium">{detailOrder.shipping_address}</p>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <p className="text-sm font-medium mb-2">Items</p>
-                <div className="space-y-2">
-                  {detailOrder.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span>{item.title} x{item.quantity}</span>
-                      <span className="font-medium">₹{item.price_at_purchase.toLocaleString('en-IN')}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-t pt-4 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>₹{detailOrder.subtotal.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Shipping</span>
-                  <span>{detailOrder.shipping_cost === 0 ? 'Free' : `₹${detailOrder.shipping_cost.toLocaleString('en-IN')}`}</span>
-                </div>
-                <div className="flex justify-between font-bold text-base pt-1 border-t">
-                  <span>Total</span>
-                  <span>₹{detailOrder.total_amount.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-
-              <div className="border-t pt-4 flex gap-2">
-                <Badge className={`text-[10px] capitalize ${orderStatusColors[detailOrder.order_status] || ''}`}>
-                  {detailOrder.order_status}
-                </Badge>
-                {detailOrder.tracking_number && (
-                  <span className="text-xs text-muted-foreground">
-                    Tracking: {detailOrder.tracking_number} ({detailOrder.courier_name})
-                  </span>
-                )}
-              </div>
-
-              {/* Status Update */}
-              {detailOrder.order_status !== 'delivered' && detailOrder.order_status !== 'cancelled' && (
-                <div className="border-t pt-4">
-                  <Label className="text-sm">Update Status</Label>
-                  <Select
-                    value={detailOrder.order_status}
-                    onValueChange={async (newStatus) => {
-                      try {
-                        const response = await bookOrdersService.updateStatus(detailOrder._id, newStatus)
-                        if (response.success) {
-                          toast.success(`Order status updated to ${newStatus}`)
-                          setDetailOrder(null)
-                          fetchOrders()
-                        } else {
-                          toast.error(response.message || 'Failed to update status')
-                        }
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to update status')
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="processing">Processing</SelectItem>
-                      <SelectItem value="shipped">Shipped</SelectItem>
-                      <SelectItem value="delivered">Delivered</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailOrder(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Update Shipping Dialog */}
-      <Dialog open={!!shippingOrder} onOpenChange={() => setShippingOrder(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Update Shipping</DialogTitle>
-            <DialogDescription>
-              Add tracking info for order #{shippingOrder?.order_number}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="tracking_number">Tracking Number</Label>
-              <Input
-                id="tracking_number"
-                value={trackingNumber}
-                onChange={(e) => setTrackingNumber(e.target.value)}
-                placeholder="Enter tracking number"
-                disabled={shippingSubmitting}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="courier_name">Courier Name</Label>
-              <Input
-                id="courier_name"
-                value={courierName}
-                onChange={(e) => setCourierName(e.target.value)}
-                placeholder="e.g. Delhivery, BlueDart"
-                disabled={shippingSubmitting}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShippingOrder(null)} disabled={shippingSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleShippingSubmit}
-              disabled={shippingSubmitting || !trackingNumber.trim() || !courierName.trim()}
-            >
-              {shippingSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating...</>
-              ) : (
-                'Update Shipping'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -65,7 +65,7 @@ class AdminRolesService {
     if (response.success && response.data) {
       return { ...response, data: this.parsePermissions(response.data.role) }
     }
-    return response as ApiResponse<AdminRole>
+    return response as unknown as ApiResponse<AdminRole>
   }
 
   /**
@@ -76,7 +76,7 @@ class AdminRolesService {
     if (response.success && response.data) {
       return { ...response, data: this.parsePermissions(response.data.role) }
     }
-    return response as ApiResponse<AdminRole>
+    return response as unknown as ApiResponse<AdminRole>
   }
 
   /**
@@ -87,7 +87,7 @@ class AdminRolesService {
     if (response.success && response.data) {
       return { ...response, data: this.parsePermissions(response.data.role) }
     }
-    return response as ApiResponse<AdminRole>
+    return response as unknown as ApiResponse<AdminRole>
   }
 
   /**

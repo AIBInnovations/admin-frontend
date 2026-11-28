@@ -22,8 +22,15 @@ function getInitials(name?: string | null) {
 export function TeacherReviewCard({ summary, onClick }: TeacherReviewCardProps) {
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-shadow duration-200 hover:border-primary/30"
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer transition-colors duration-200 hover:border-primary/40"
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick()
+      }}
     >
       <CardContent className="p-4 flex gap-4">
         {/* Avatar */}
@@ -50,12 +57,12 @@ export function TeacherReviewCard({ summary, onClick }: TeacherReviewCardProps) 
 
           {/* Count summary */}
           <p className="mt-1 text-xs text-muted-foreground">
-            {summary.review_count} reviews across {summary.video_count}{' '}
+            {summary.review_count} {summary.review_count === 1 ? 'review' : 'reviews'} across {summary.video_count}{' '}
             {summary.video_count === 1 ? 'video' : 'videos'}
           </p>
 
           {/* Sub-stats */}
-          <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground/70">
+          <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-0.5">
               <Star className="h-3 w-3" />
               {summary.rating_count} ratings

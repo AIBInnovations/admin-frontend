@@ -1,20 +1,22 @@
-import { useState } from 'react'
 import { Archive, FileText, FolderInput } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { PanelShell } from './PanelShell'
-import { PanelField, PanelSectionTitle, PanelSwitchRow, PanelText, PanelTextarea } from './fields'
-import { EntityHeaderActions } from './EntityHeaderActions'
-import { FormatBadge, FreeBadge, LinkedBadge, PublishBadge } from '../ui/StatusBadge'
-import { FileUploadField } from '../media/FileUploadField'
-import { MoveDocumentDialog } from '../dialogs/MoveDocumentDialog'
-import { ArchiveWithImpactDialog } from '../dialogs/ArchiveWithImpactDialog'
-import { usePanelForm } from '../hooks/usePanelForm'
-import { useExplorerMutation } from '../hooks/useExplorerMutation'
-import { useMediaUpload } from '../hooks/useMediaUpload'
-import { documentsService } from '@/services/documents.service'
+import { documentsService, type DocumentFormData } from '@/services/documents.service'
 import type { PublishStatus } from '@/types/api.types'
+import { useActions } from '../actions/ActionsContext'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
+import { useExplorerAccess } from '../access'
+import { useEntityForm } from '../hooks/useEntityForm'
+import { useMediaUpload } from '../hooks/useMediaUpload'
+import { FileUploadField } from '../media/FileUploadField'
+import { FormatBadge, FreeBadge, LinkedBadge, PublishBadge } from '../ui/StatusBadge'
+import { Thumb } from '../ui/Thumb'
+import { fileSize, plural } from '../ui/text'
+import { EntityHeaderActions } from './EntityHeaderActions'
+import { PanelShell } from './PanelShell'
+import { AreaField, PanelSectionTitle, SwitchField, TextField } from './fields'
+import { isWhole, ORDER_ERROR, payload } from './helpers'
 
-/** Structural shape covering Document, PackageDetailDocument and DocRowData. */
+/** Shape shared by a subject's documents and the ones in a package tree. */
 export interface DocPanelEntity {
   _id: string
   title: string
@@ -27,149 +29,101 @@ export interface DocPanelEntity {
   download_count?: number
   publish_status?: PublishStatus
   source_book_id?: unknown
+  thumbnail_url?: string | null
 }
 
-interface DocumentPanelProps {
-  entity: DocPanelEntity
-  onRefresh?: () => void
-  onClose?: () => void
-}
+interface Props { entity: DocPanelEntity; onRefresh: () => Promise<void> }
 
-export function DocumentPanel({ entity, onRefresh, onClose }: DocumentPanelProps) {
-  const isLinked = !!entity.source_book_id
+export function DocumentPanel({ entity, onRefresh }: Props) {
+  const { can } = useExplorerAccess()
+  const { open } = useActions()
   const media = useMediaUpload()
-  const [moveOpen, setMoveOpen] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
+  const canEdit = can('document', 'update')
+  // Title, description and file of a linked document live on the book
+  const isLinked = !!entity.source_book_id
 
-  const form = usePanelForm(
-    () => ({
+  // The upload goes on when another row is opened; closing the tab would stop it.
+  useUnsavedChanges(media.uploading)
+
+  const form = useEntityForm({
+    id: 'document',
+    what: 'document',
+    label: (v) => v.title || 'Document',
+    readOnly: !canEdit,
+    initial: () => ({
       title: entity.title ?? '',
       description: entity.description ?? '',
       is_free: entity.is_free ?? false,
       display_order: (entity.display_order ?? 1).toString(),
     }),
-    entity._id,
-  )
+    validate: (v) => ({
+      ...(!isLinked && v.title.trim().length < 2 ? { title: 'Use at least 2 characters.' } : v.title.trim().length > 300 ? { title: 'Use at most 300 characters.' } : {}),
+      ...(v.description.length > 2000 ? { description: 'Use at most 2,000 characters.' } : {}),
+      ...(!isWhole(v.display_order) ? { display_order: ORDER_ERROR } : {}),
+    }),
+    submit: (v, changed) => {
+      const data = payload<typeof v>(changed, { title: (x) => x.trim(), description: (x) => x.trim(), display_order: (x) => Number(x) || 1 })
+      if (isLinked) { delete data.title; delete data.description }
+      return documentsService.update(entity._id, data as unknown as DocumentFormData)
+    },
+    onSaved: () => onRefresh(),
+    savedMessage: (v) => `"${v.title}" saved`,
+  })
   const v = form.values
-
-  const save = useExplorerMutation({
-    name: 'Update document',
-    fn: () =>
-      documentsService.update(entity._id, {
-        // Linked documents mirror title/description from their Book — never send those.
-        ...(isLinked ? {} : { title: v.title.trim(), description: v.description.trim() }),
-        is_free: v.is_free,
-        display_order: Number(v.display_order) || 1,
-      }),
-    onSuccess: () => { form.commit(v); onRefresh?.() },
-    successMessage: `"${v.title}" updated`,
-  })
-
-  const archive = useExplorerMutation({
-    name: 'Archive document',
-    fn: () => documentsService.archive(entity._id),
-    onSuccess: () => { setArchiveOpen(false); onClose?.(); onRefresh?.() },
-    successMessage: `"${entity.title}" archived`,
-  })
-
-  const sizeLabel = entity.file_size_mb < 1
-    ? `${Math.round(entity.file_size_mb * 1024)} KB`
-    : `${entity.file_size_mb.toFixed(1)} MB`
 
   return (
     <PanelShell
-      icon={<div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center"><FileText className="w-4 h-4 text-orange-500" /></div>}
+      icon={<Thumb src={entity.thumbnail_url} fallback={<FileText className="h-4 w-4" />} />}
       title={v.title || 'Document'}
-      subtitle={`${sizeLabel}${entity.page_count != null ? ` · ${entity.page_count} pages` : ''}${entity.download_count != null ? ` · ${entity.download_count} downloads` : ''}`}
-      badges={<>
-        <FormatBadge format={entity.file_format} />
-        {entity.is_free && <FreeBadge />}
-        {isLinked && <LinkedBadge />}
-        {entity.publish_status && <PublishBadge status={entity.publish_status} />}
-      </>}
-      headerActions={
-        <EntityHeaderActions
-          entityType="document"
-          entityId={entity._id}
-          entityName={entity.title}
-          publishStatus={entity.publish_status}
-          rawData={entity}
-          onRefresh={onRefresh}
-          idLabel="Document ID"
-          extraItems={<>
-            <DropdownMenuItem onClick={() => setMoveOpen(true)}>
-              <FolderInput className="w-3.5 h-3.5 mr-2" /> Move
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-amber-600 focus:text-amber-600" onClick={() => setArchiveOpen(true)}>
-              <Archive className="w-3.5 h-3.5 mr-2" /> Archive
-            </DropdownMenuItem>
-          </>}
-        />
-      }
-      onClose={onClose}
-      dirty={form.dirty}
-      saving={save.loading}
-      canSave={isLinked || v.title.trim().length > 0}
-      saveLabel="Save changes"
-      onSave={save.execute}
-      onCancel={form.reset}
-    >
-      {isLinked && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-          Linked to a Book's eBook. Title, description and file are managed on the source Book and sync automatically.
-        </div>
+      subtitle={[fileSize(entity.file_size_mb), entity.page_count != null ? plural(entity.page_count, 'page') : null, entity.download_count != null ? plural(entity.download_count, 'download') : null].filter(Boolean).join(' · ')}
+      badges={(
+        <>
+          <FormatBadge format={entity.file_format} />
+          {entity.is_free && <FreeBadge />}
+          {isLinked && <LinkedBadge />}
+          {entity.publish_status && <PublishBadge status={entity.publish_status} />}
+        </>
       )}
+      headerActions={(
+        <EntityHeaderActions
+          kind="document"
+          entityType="document"
+          id={entity._id}
+          name={entity.title}
+          publishStatus={entity.publish_status}
+          data={entity}
+          idLabel="Document ID"
+          extra={canEdit || can('document', 'delete') ? (
+            <>
+              {canEdit && <DropdownMenuItem onSelect={() => open({ type: 'move', id: entity._id, name: entity.title })}><FolderInput className="mr-2 h-3.5 w-3.5" /> Move</DropdownMenuItem>}
+              {can('document', 'delete') && <DropdownMenuItem className="text-danger focus:text-danger" onSelect={() => open({ type: 'archive', kind: 'document', id: entity._id, name: entity.title })}><Archive className="mr-2 h-3.5 w-3.5" /> Archive</DropdownMenuItem>}
+            </>
+          ) : undefined}
+        />
+      )}
+      form={form}
+    >
+      {isLinked && <p className="rounded-lg bg-accent px-3 py-2 text-[13px] text-accent-foreground">Linked to a book&apos;s eBook. Title, description and file are managed on the book and stay in sync.</p>}
+      <TextField form={form} name="title" label="Title" required={!isLinked} disabled={isLinked} />
+      <AreaField form={form} name="description" label="Description" disabled={isLinked} />
+      <TextField form={form} name="display_order" label="Display order" type="number" min={0} className="w-32" />
+      <SwitchField form={form} name="is_free" label="Free access" hint="No purchase needed" />
 
-      <PanelField label="Title" required={!isLinked} htmlFor="dp-title">
-        <PanelText id="dp-title" value={v.title} onChange={(x) => form.set('title', x)} disabled={isLinked} />
-      </PanelField>
-
-      <PanelField label="Description" htmlFor="dp-desc">
-        <PanelTextarea id="dp-desc" value={v.description} onChange={(x) => form.set('description', x)} disabled={isLinked} />
-      </PanelField>
-
-      <div className="grid grid-cols-2 gap-3 items-start">
-        <PanelSwitchRow label="Free access" checked={v.is_free} onChange={(x) => form.set('is_free', x)} />
-        <PanelField label="Display order" htmlFor="dp-order">
-          <PanelText id="dp-order" type="number" value={v.display_order} onChange={(x) => form.set('display_order', x)} />
-        </PanelField>
-      </div>
-
-      {!isLinked && (
-        <div className="space-y-2 pt-1">
+      {!isLinked && canEdit && (
+        <>
           <PanelSectionTitle>File</PanelSectionTitle>
           <FileUploadField
             label="Replace file"
             accept=".pdf,.epub,.doc,.docx,.ppt,.pptx"
             maxMb={100}
             buttonLabel="Replace document file"
-            hint="PDF, EPUB, DOC(X), PPT(X) · max 100MB"
+            hint="PDF, EPUB, DOC(X) or PPT(X), up to 100 MB."
             uploading={media.uploading}
             uploadProgress={media.progress}
-            onPick={async (file) => {
-              await media.run('Replacing file', (onProgress) => documentsService.replaceFile(entity._id, file, onProgress))
-              onRefresh?.()
-            }}
+            onPick={async (file) => { await media.run('Replace file', (onProgress) => documentsService.replaceFile(entity._id, file, onProgress)); await onRefresh() }}
           />
-        </div>
+        </>
       )}
-
-      <MoveDocumentDialog
-        open={moveOpen}
-        onClose={() => setMoveOpen(false)}
-        onSuccess={() => { setMoveOpen(false); onRefresh?.() }}
-        documentId={entity._id}
-        documentTitle={entity.title}
-      />
-      <ArchiveWithImpactDialog
-        open={archiveOpen}
-        onClose={() => setArchiveOpen(false)}
-        onConfirm={archive.execute}
-        fetchImpact={() => documentsService.getDeleteImpact(entity._id)}
-        entityName={entity.title}
-        entityType="document"
-        loading={archive.loading}
-      />
     </PanelShell>
   )
 }

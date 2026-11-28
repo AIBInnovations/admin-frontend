@@ -10,7 +10,11 @@ import { StatusToggle } from '@/components/common/StatusToggle'
 import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Module } from '@/services/modules.service'
-import { GripVertical, MoreVertical, Pencil, BookOpen, Clock, RefreshCw } from 'lucide-react'
+import { GripVertical, MoreVertical, Pencil, BookOpen, Clock, RefreshCw, FolderInput } from 'lucide-react'
+import type { PopulatedRef, PublishStatus } from '@/types/api.types'
+
+/** The parent as the list endpoint returns it; null once it was deleted. */
+type Parent = (PopulatedRef & { publish_status?: PublishStatus; is_active?: boolean }) | null
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -19,17 +23,22 @@ function formatDuration(minutes: number): string {
 }
 
 interface ModulesColumnsProps {
+  canEdit: boolean
   onEdit: (mod: Module) => void
   onToggleActive: (mod: Module) => void
   onRecalculate: (mod: Module) => void
   onPublishAction: (mod: Module, action: 'publish' | 'unpublish') => void
+  /** "Move to series...": the full-page picker. */
+  onMove?: (mod: Module) => void
 }
 
 export function useModulesColumns({
+  canEdit,
   onEdit,
   onToggleActive,
   onRecalculate,
   onPublishAction,
+  onMove,
 }: ModulesColumnsProps): ColumnDef<Module>[] {
   return [
     {
@@ -49,7 +58,7 @@ export function useModulesColumns({
       cell: (mod) => (
         <div>
           <p className="text-sm font-medium">{mod.name}</p>
-          <p className="max-w-[220px] truncate text-xs text-muted-foreground">
+          <p className="max-w-[220px] truncate text-xs text-muted-foreground" title={mod.description || undefined}>
             {mod.description || '—'}
           </p>
         </div>
@@ -59,8 +68,8 @@ export function useModulesColumns({
       id: 'series',
       header: 'Series',
       cell: (mod) => (
-        <Badge variant="secondary" className="text-[10px]">
-          {typeof mod.series_id === 'object' ? mod.series_id.name : '—'}
+        <Badge variant="outline" className="text-[11px] font-medium">
+          {mod.series_id && typeof mod.series_id === 'object' ? mod.series_id.name : 'Deleted series'}
         </Badge>
       ),
     },
@@ -91,12 +100,12 @@ export function useModulesColumns({
       header: 'Publish',
       width: 'w-28',
       cell: (mod) => {
-        const series = typeof mod.series_id === 'object' ? mod.series_id : null
+        const series: Parent = mod.series_id && typeof mod.series_id === 'object' ? mod.series_id : null
         return (
           <div className="flex items-center gap-1.5">
             <Badge
               variant={mod.publish_status === 'published' ? 'default' : 'secondary'}
-              className={mod.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+              className={mod.publish_status === 'draft' ? 'bg-warning-soft text-warning border-transparent' : 'bg-success-soft text-success border-transparent'}
             >
               {mod.publish_status === 'draft' ? 'Draft' : 'Published'}
             </Badge>
@@ -118,8 +127,10 @@ export function useModulesColumns({
       cell: (mod) => (
         <StatusToggle
           checked={mod.is_active}
+          label={mod.name}
           onCheckedChange={() => onToggleActive(mod)}
           size="sm"
+          disabled={!canEdit}
         />
       ),
     },
@@ -141,10 +152,10 @@ export function useModulesColumns({
       id: 'actions',
       header: '',
       width: 'w-10',
-      cell: (mod) => (
+      cell: (mod) => canEdit && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${mod.name}`}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -153,6 +164,12 @@ export function useModulesColumns({
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
+            {onMove && (
+              <DropdownMenuItem onClick={() => onMove(mod)}>
+                <FolderInput className="mr-2 h-4 w-4" />
+                Move to series…
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => onRecalculate(mod)}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Recalculate Stats

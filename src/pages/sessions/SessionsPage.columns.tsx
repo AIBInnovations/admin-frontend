@@ -1,28 +1,17 @@
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Archive, Globe, GlobeLock, Pencil, ShieldCheck, Users, XCircle } from 'lucide-react'
 import { ColumnDef } from '@/components/common/DataTable'
+import { StatusPill } from '@/components/common/detail'
 import { LiveSession } from '@/services/liveSessions.service'
-import { MoreVertical, Pencil, Archive, XCircle, Globe, GlobeLock, Users } from 'lucide-react'
+import { formatCount, formatINR } from '@/lib/format'
+import { PublishStatusPill, RowMenu, RunStatus, Tag } from '@/components/forms/editor/list'
+import { istDay, istTime, minutesLabel } from '@/components/forms/editor/ist'
+import { ACCESS_MARKER, modeOf, type GatedSession } from '@/components/sessions/sessionAccess'
 
-const statusColors: Record<string, string> = {
-  scheduled: 'bg-blue-500/10 text-blue-600 border-blue-200',
-  live: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-  completed: 'bg-gray-500/10 text-gray-600 border-gray-200',
-  cancelled: 'bg-red-500/10 text-red-600 border-red-200',
-}
-
-const platformLabels: Record<string, string> = {
-  zoom: 'Zoom',
-  agora: 'Agora',
-  teams: 'Teams',
-  other: 'Other',
-}
+const platformLabels: Record<string, string> = { zoom: 'Zoom', agora: 'Agora', teams: 'Teams', other: 'Other' }
 
 interface SessionsColumnsProps {
+  canUpdate: boolean
+  canDelete: boolean
   onEdit: (session: LiveSession) => void
   onCancel: (session: LiveSession) => void
   onArchive: (session: LiveSession) => void
@@ -30,154 +19,116 @@ interface SessionsColumnsProps {
   onViewAttendees: (session: LiveSession) => void
 }
 
-export function useSessionsColumns({
-  onEdit,
-  onCancel,
-  onArchive,
-  onPublishAction,
-  onViewAttendees,
-}: SessionsColumnsProps): ColumnDef<LiveSession>[] {
+/** "28 Nov" this year, "28 Nov 2025" otherwise. */
+function shortDay(iso: string): string {
+  const full = istDay(iso)
+  const year = String(new Date().getFullYear())
+  return full.endsWith(` ${year}`) ? full.slice(0, -5) : full
+}
+
+export function getSessionsColumns({ canUpdate, canDelete, onEdit, onCancel, onArchive, onPublishAction, onViewAttendees }: SessionsColumnsProps): ColumnDef<LiveSession>[] {
   return [
     {
       id: 'session',
       header: 'Session',
       cell: (session) => (
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate max-w-[240px]">{session.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {typeof session.faculty_id === 'object' && session.faculty_id
-              ? session.faculty_id.name
-              : '—'}
+        <div className="min-w-[180px] max-w-[320px]">
+          <p className="truncate text-sm font-medium" title={session.title}>{session.title}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {typeof session.faculty_id === 'object' && session.faculty_id ? session.faculty_id.name : 'No faculty'}
           </p>
+          <AccessMarker session={session as GatedSession} />
         </div>
       ),
     },
     {
       id: 'subject',
       header: 'Subject',
-      width: 'w-28',
+      width: 'w-36',
       cell: (session) => (
-        <Badge variant="secondary" className="text-[10px]">
-          {typeof session.subject_id === 'object' ? session.subject_id.name : '—'}
-        </Badge>
+        <Tag>{session.subject_id && typeof session.subject_id === 'object' ? session.subject_id.name : 'Deleted subject'}</Tag>
       ),
     },
     {
       id: 'schedule',
       header: 'Schedule',
-      width: 'w-36',
-      cell: (session) => {
-        const date = new Date(session.scheduled_start_time)
-        return (
-          <div>
-            <p className="text-sm">
-              {date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-              {' · '}{session.duration_minutes}min
-            </p>
-          </div>
-        )
-      },
+      width: 'w-40',
+      cell: (session) => session.repeat?.weekly ? (
+        // A weekly series: its next class, which class it is, and the pattern
+        <div className="max-w-[200px]">
+          <p className="whitespace-nowrap text-sm">
+            {session.next_class_start ? `${session.class_live ? 'Now' : 'Next'} ${shortDay(session.next_class_start)}` : session.status === 'cancelled' ? 'Cancelled' : 'Series over'}
+          </p>
+          <p className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+            {session.next_class_start ? `${istTime(session.next_class_start)} · ` : ''}Class {session.class_number ?? 0} of {session.classes_total ?? 0}
+          </p>
+          <p className="truncate text-xs text-muted-foreground" title={session.schedule_label ?? undefined}>{session.schedule_label}</p>
+        </div>
+      ) : (
+        <div className="whitespace-nowrap">
+          <p className="text-sm">{shortDay(session.scheduled_start_time)}</p>
+          <p className="text-xs text-muted-foreground">{istTime(session.scheduled_start_time)} · {minutesLabel(session.duration_minutes)}</p>
+        </div>
+      ),
     },
     {
       id: 'platform',
       header: 'Platform',
       width: 'w-20',
-      cell: (session) => (
-        <span className="text-xs text-muted-foreground">{platformLabels[session.platform] || session.platform}</span>
-      ),
+      cell: (session) => <span className="text-sm text-muted-foreground">{platformLabels[session.platform] || session.platform}</span>,
     },
     {
       id: 'capacity',
       header: 'Capacity',
       width: 'w-24',
-      cell: (session) => (
+      cell: (session) =>
         session.capacity_mode === 'unlimited' ? (
-          <span className="text-xs text-muted-foreground">Unlimited</span>
+          <span className="text-sm text-muted-foreground">Unlimited</span>
         ) : (
-          <span className="text-xs">
-            {session.current_attendees}/{session.max_attendees || '—'}
-          </span>
-        )
-      ),
+          <span className="text-sm tabular-nums">{formatCount(session.current_attendees ?? 0)}/{session.max_attendees ? formatCount(session.max_attendees) : '—'}</span>
+        ),
     },
     {
       id: 'price',
       header: 'Price',
-      width: 'w-20',
-      cell: (session) => (
-        session.is_free ? (
-          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 text-[10px]">FREE</Badge>
-        ) : (
-          <span className="text-sm font-medium">₹{session.price.toLocaleString('en-IN')}</span>
-        )
-      ),
-    },
-    {
-      id: 'status',
-      header: 'Status',
       width: 'w-24',
-      cell: (session) => (
-        <Badge className={`text-[10px] capitalize ${statusColors[session.status] || ''}`}>
-          {session.status}
-        </Badge>
-      ),
+      cell: (session) =>
+        session.is_free ? <StatusPill tone="success">Free</StatusPill> : <span className="whitespace-nowrap text-sm font-medium tabular-nums">{formatINR(session.price ?? 0)}</span>,
     },
-    {
-      id: 'publish_status',
-      header: 'Publish',
-      width: 'w-24',
-      cell: (session) => (
-        <Badge className={`text-[10px] ${
-          session.publish_status === 'published'
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-            : 'bg-amber-500/10 text-amber-600 border-amber-200'
-        }`}>
-          {session.publish_status === 'published' ? 'Published' : 'Draft'}
-        </Badge>
-      ),
-    },
+    // What students see now: a weekly series shows Live only during a class
+    { id: 'status', header: 'Status', width: 'w-28', cell: (session) => <RunStatus status={session.effective_status ?? session.status} /> },
+    { id: 'publish_status', header: 'Publish', width: 'w-28', cell: (session) => <PublishStatusPill status={session.publish_status} /> },
     {
       id: 'actions',
       header: '',
       width: 'w-10',
       cell: (session) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(session)}>
-              <Pencil className="mr-2 h-4 w-4" />Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onViewAttendees(session)}>
-              <Users className="mr-2 h-4 w-4" />View Attendees
-            </DropdownMenuItem>
-            {session.publish_status === 'published' ? (
-              <DropdownMenuItem onClick={() => onPublishAction(session._id, 'unpublish')}>
-                <GlobeLock className="mr-2 h-4 w-4" />Unpublish
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onClick={() => onPublishAction(session._id, 'publish')}>
-                <Globe className="mr-2 h-4 w-4" />Publish
-              </DropdownMenuItem>
-            )}
-            {session.status === 'scheduled' && (
-              <DropdownMenuItem onClick={() => onCancel(session)} className="text-amber-600">
-                <XCircle className="mr-2 h-4 w-4" />Cancel Session
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onArchive(session)} className="text-amber-600">
-              <Archive className="mr-2 h-4 w-4" />Archive
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowMenu
+          label={`Actions for ${session.title}`}
+          actions={[
+            { label: 'Edit', icon: Pencil, onSelect: () => onEdit(session), hidden: !canUpdate },
+            { label: 'View Attendees', icon: Users, onSelect: () => onViewAttendees(session) },
+            session.publish_status === 'published'
+              ? { label: 'Unpublish', icon: GlobeLock, onSelect: () => onPublishAction(session._id, 'unpublish'), hidden: !canUpdate }
+              : { label: 'Publish', icon: Globe, onSelect: () => onPublishAction(session._id, 'publish'), hidden: !canUpdate },
+            { label: 'Cancel Session', icon: XCircle, onSelect: () => onCancel(session), tone: 'warning', hidden: !canUpdate || session.status !== 'scheduled' },
+            { label: 'Archive', icon: Archive, onSelect: () => onArchive(session), tone: 'warning', separated: true, hidden: !canDelete },
+          ]}
+        />
       ),
     },
   ]
+}
+
+/** "Subscribers only" / "Free for subscribers"; nothing for Everyone. */
+function AccessMarker({ session }: { session: GatedSession }) {
+  const label = ACCESS_MARKER[modeOf(session)]
+  if (!label) return null
+  const names = (session.access_packages || []).map((p) => p.name || 'Deleted package').join(', ')
+  return (
+    <p className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground" title={names ? `${label}: ${names}` : label}>
+      <ShieldCheck aria-hidden="true" className="h-3 w-3 shrink-0" />
+      <span className="truncate">{label}</span>
+    </p>
+  )
 }

@@ -1,16 +1,12 @@
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
+import { Link } from 'react-router-dom'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
-import { PanelShell } from '@/pages/explorer/panel/PanelShell'
-import { PanelField, PanelTextarea, PanelSectionTitle } from '@/pages/explorer/panel/fields'
-import { formatExpiry, formatDate, EXPIRY_BADGE_CLASS } from '@/lib/relativeTime'
-import { subscriptionsService, type SubscriptionRecord } from '@/services/subscriptions.service'
-import { TYPE_META } from './subscriptionType'
-
-const QUICK_DAYS = [7, 30, 90]
+import { StatusPill } from '@/components/common/detail'
+import { formatINR, subscriptionLabel } from '@/lib/format'
+import { formatExpiry } from '@/lib/relativeTime'
+import type { SubscriptionRecord } from '@/services/subscriptions.service'
+import { ExtendValidityForm } from './ExtendValidityForm'
+import { EXPIRY_TONE, TYPE_META } from './subscriptionType'
 
 interface ExtendValidityPanelProps {
   record: SubscriptionRecord
@@ -20,206 +16,72 @@ interface ExtendValidityPanelProps {
   onExtended: (newExpiry: string) => void
 }
 
-const toDateInput = (d: Date): string => {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+const ist = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })
+const istDay = (iso: string | null | undefined) => (iso && !Number.isNaN(Date.parse(iso)) ? ist.format(new Date(iso)) : '—')
+
+const NOT_EXTENDABLE: Record<string, string> = {
+  session: 'Live session access is tied to the session date and cannot be extended.',
+  workshop: 'Workshop access is tied to its dates and cannot be extended.',
+  ebook: 'eBook purchases are lifetime, so there is no validity to extend.',
+  form: 'A form has no validity to extend.',
 }
 
-export function ExtendValidityPanel({
-  record,
-  canExtend,
-  onClose,
-  onExtended,
-}: ExtendValidityPanelProps) {
-  const [quickDays, setQuickDays] = useState<number | null>(null)
-  const [dateValue, setDateValue] = useState('')
-  const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  // Reset the form whenever a different record is opened.
-  useEffect(() => {
-    setQuickDays(null)
-    setDateValue('')
-    setReason('')
-  }, [record.purchase_id])
-
+/** The side panel on Subscriptions (and the drawer on a student's page). */
+export function ExtendValidityPanel({ record, canExtend, onClose, onExtended }: ExtendValidityPanelProps) {
   const expiry = formatExpiry(record.expires_at)
-  const isExpired = expiry.status === 'expired'
   const meta = TYPE_META[record.type]
-  const TypeIcon = meta.icon
-  const now = new Date()
-
-  // Preview the resulting expiry date for the current choice.
-  let previewDate: Date | null = null
-  if (quickDays != null && record.expires_at != null) {
-    // Day-based: from today when expired, else from current expiry (mirrors backend).
-    const base = isExpired ? new Date(now) : new Date(record.expires_at)
-    base.setDate(base.getDate() + quickDays)
-    previewDate = base
-  } else if (quickDays != null) {
-    const base = new Date(now)
-    base.setDate(base.getDate() + quickDays)
-    previewDate = base
-  } else if (dateValue) {
-    previewDate = new Date(`${dateValue}T23:59:59`)
-  }
-
-  const editable = canExtend && record.extendable
-  const canSave = editable && (quickDays != null || dateValue !== '')
-
-  const resetForm = () => {
-    setQuickDays(null)
-    setDateValue('')
-    setReason('')
-  }
-
-  const handleSave = async () => {
-    if (!canSave) return
-    setSaving(true)
-    try {
-      const body =
-        quickDays != null
-          ? { days: quickDays, reason: reason || undefined }
-          : { new_expiry: new Date(`${dateValue}T23:59:59`).toISOString(), reason: reason || undefined }
-
-      const res = await subscriptionsService.extend(record.purchase_id, body)
-      if (res.success && res.data) {
-        toast.success(res.message || 'Validity extended')
-        onExtended(res.data.new_expiry)
-        resetForm()
-      } else {
-        toast.error(res.message || 'Failed to extend validity')
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to extend validity')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const title = record.type === 'package' ? subscriptionLabel(record.item_name, record) : record.item_name || 'Deleted item'
 
   return (
-    <PanelShell
-      icon={<TypeIcon className="w-5 h-5 text-blue-500" />}
-      title={record.user?.name || 'Unknown user'}
-      subtitle={record.item_name || 'Unknown item'}
-      badges={
-        <>
-          <Badge className={cn('text-xs font-medium border-0', meta.badge)}>{meta.label}</Badge>
-          <Badge className={cn('text-xs font-medium border-0', EXPIRY_BADGE_CLASS[expiry.status])}>
-            {expiry.relative}
-          </Badge>
-        </>
-      }
-      onClose={onClose}
-      saving={saving}
-      dirty={canSave}
-      canSave={canSave}
-      saveLabel="Extend validity"
-      onSave={editable ? handleSave : undefined}
-      onCancel={resetForm}
-    >
-      {/* Summary */}
-      <div className="space-y-3">
-        <PanelSectionTitle>{meta.label}</PanelSectionTitle>
-        <dl className="rounded-lg bg-slate-50/60 ring-1 ring-slate-200 divide-y divide-slate-100 text-sm">
-          <Row label={record.type === 'session' ? 'Session date' : 'Current expiry'}>
-            <span className="text-slate-700">{expiry.absolute}</span>
-            {record.expires_at && <span className="text-slate-400"> · {expiry.relative}</span>}
-          </Row>
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="truncate text-[15px] font-semibold">{record.user?.name || 'Deleted account'}</h2>
+          <p className="mt-0.5 break-words text-[13px] text-muted-foreground">{title}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <StatusPill>{meta.label}</StatusPill>
+            <StatusPill tone={EXPIRY_TONE[expiry.status]}>{expiry.relative}</StatusPill>
+          </div>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="-mr-2 h-8 w-8 shrink-0" onClick={onClose} aria-label="Close"><X aria-hidden="true" /></Button>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
+        <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+          <Row label={record.type === 'session' || record.type === 'workshop' ? 'Date' : 'Current end date'}>{record.expires_at ? istDay(record.expires_at) : 'Lifetime'}</Row>
           <Row label="Email">{record.user?.email || '—'}</Row>
           <Row label="Phone">{record.user?.phone_number || '—'}</Row>
-          <Row label="Purchased">{formatDate(record.purchased_at)}</Row>
-          <Row label="Source">{record.is_admin_granted ? 'Admin granted' : 'Paid'}</Row>
+          <Row label="Purchased">{istDay(record.purchased_at)}</Row>
+          <Row label="Source">{record.from_combo ? 'Included with a combo' : record.is_admin_granted ? 'Admin granted' : 'Paid'}</Row>
           {record.tier_name && <Row label="Tier">{record.tier_name}</Row>}
-          {!record.is_admin_granted && (
-            <Row label="Amount">
-              {record.amount_paid?.toLocaleString('en-IN')} {record.currency}
-            </Row>
-          )}
+          {!record.is_admin_granted && <Row label="Amount">{record.currency === 'INR' || !record.currency ? formatINR(record.amount_paid) : `${record.amount_paid} ${record.currency}`}</Row>}
         </dl>
+
+        <Link to={`/commerce/purchases/${record.type}/${record.purchase_id}`} className="inline-block text-sm font-medium text-primary hover:underline">Open full details</Link>
+
+        <div>
+          <h3 className="text-sm font-semibold">Extend validity</h3>
+          {!record.extendable ? (
+            <p className="mt-2 rounded-lg bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">{NOT_EXTENDABLE[record.type] || 'This cannot be extended.'}</p>
+          ) : !canExtend ? (
+            <p className="mt-2 rounded-lg bg-warning-soft px-3.5 py-2.5 text-[13px] text-warning">You do not have permission to extend subscriptions (users.update).</p>
+          ) : (
+            <>
+            {record.from_combo && <p className="mt-2 rounded-lg bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">This came with a combo. Extending it here changes this package only; extend the combo to move all of them.</p>}
+            <ExtendValidityForm className="mt-3" purchaseId={record.purchase_id} expiresAt={record.expires_at} onExtended={onExtended} onCancel={onClose} />
+            </>
+          )}
+        </div>
       </div>
-
-      {/* Extend */}
-      <div className="space-y-3">
-        <PanelSectionTitle>Extend validity</PanelSectionTitle>
-
-        {!record.extendable ? (
-          <p className="text-xs text-slate-500 bg-slate-50 ring-1 ring-slate-200 rounded-lg px-3 py-2">
-            {record.type === 'session'
-              ? 'Live session access is tied to the session date and cannot be extended.'
-              : 'eBook purchases are lifetime — there is no validity to extend.'}
-          </p>
-        ) : !canExtend ? (
-          <p className="text-xs text-amber-600 bg-amber-50 ring-1 ring-amber-200 rounded-lg px-3 py-2">
-            You don't have permission to extend subscriptions (requires users.update).
-          </p>
-        ) : (
-          <>
-            <PanelField
-              label="Quick extend"
-              hint={isExpired ? 'Expired — counted from today.' : 'Added to the current expiry date.'}
-            >
-              <div className="flex flex-wrap gap-2">
-                {QUICK_DAYS.map((d) => (
-                  <Button
-                    key={d}
-                    type="button"
-                    size="sm"
-                    variant={quickDays === d ? 'default' : 'outline'}
-                    className={quickDays === d ? '' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}
-                    onClick={() => {
-                      setQuickDays(quickDays === d ? null : d)
-                      setDateValue('')
-                    }}
-                  >
-                    +{d} days
-                  </Button>
-                ))}
-              </div>
-            </PanelField>
-
-            <PanelField label="Or set exact expiry date" htmlFor="new_expiry">
-              <Input
-                id="new_expiry"
-                type="date"
-                value={dateValue}
-                min={toDateInput(new Date())}
-                onChange={(e) => {
-                  setDateValue(e.target.value)
-                  setQuickDays(null)
-                }}
-                className="h-9 text-sm bg-slate-50/60 border-slate-200 focus-visible:bg-white [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
-            </PanelField>
-
-            <PanelField label="Reason" hint="Optional — logged with the change.">
-              <PanelTextarea
-                value={reason}
-                onChange={setReason}
-                placeholder="e.g. Payment delay, goodwill extension…"
-              />
-            </PanelField>
-
-            {previewDate && (
-              <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 px-3 py-2 text-sm text-blue-700">
-                New expiry: <span className="font-medium">{formatDate(previewDate)}</span>
-                <span className="text-blue-500"> · {formatExpiry(previewDate).relative}</span>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </PanelShell>
+    </div>
   )
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <dt className="text-xs text-slate-400 shrink-0">{label}</dt>
-      <dd className="text-sm text-slate-700 text-right min-w-0 truncate">{children}</dd>
+    <div className="flex items-start justify-between gap-3 px-3.5 py-2">
+      <dt className="shrink-0 text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-sm">{children}</dd>
     </div>
   )
 }

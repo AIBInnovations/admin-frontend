@@ -33,8 +33,15 @@ function formatWatch(seconds: number): string {
 export function VideoReviewCard({ summary, onClick }: VideoReviewCardProps) {
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-shadow duration-200 hover:border-primary/30"
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer transition-colors duration-200 hover:border-primary/40"
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onClick()
+      }}
     >
       <CardContent className="p-4">
         {/* Thumbnail */}
@@ -69,7 +76,7 @@ export function VideoReviewCard({ summary, onClick }: VideoReviewCardProps) {
         )}
 
         {/* Package context */}
-        <p className="mt-0.5 text-xs text-muted-foreground/70 truncate">{summary.package.name}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground truncate" title={summary.package.name}>{summary.package.name}</p>
 
         {/* Stats */}
         <div className="mt-3 flex items-center justify-between">
@@ -79,11 +86,11 @@ export function VideoReviewCard({ summary, onClick }: VideoReviewCardProps) {
               <span className="text-xs font-medium">{summary.avg_rating.toFixed(1)}</span>
             )}
           </div>
-          <span className="text-xs text-muted-foreground">{summary.review_count} reviews</span>
+          <span className="text-xs text-muted-foreground">{summary.review_count} {summary.review_count === 1 ? 'review' : 'reviews'}</span>
         </div>
 
         {/* Sub-stats */}
-        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
+        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-0.5">
             <Star className="h-3 w-3" />
             {summary.rating_count}

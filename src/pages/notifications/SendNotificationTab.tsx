@@ -1,1021 +1,271 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Send, Users, BookOpen, UserCheck, X, Search, Loader2, ImagePlus, Trash2, Package, Layers, MousePointerClick, Video, Clock, CalendarClock } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bell, ImagePlus, Loader2, MousePointerClick, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { notificationsService } from '@/services/notifications.service'
-import { subjectsService, type Subject } from '@/services/subjects.service'
+import { Section } from '@/components/common/detail'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { Field, SearchSelect, type SelectOption } from '@/components/users/kit'
+import { dayTimeIST, errText, istInputToISO, isoToIstInput, unwrap, useResource } from '@/components/users/lib'
+import { booksService } from '@/services/books.service'
+import { liveSessionsService } from '@/services/liveSessions.service'
+import { notificationsService, type PushPayload } from '@/services/notifications.service'
 import { packagesService, type Package as PackageType } from '@/services/packages.service'
-import { packageTypesService, type PackageType as PkgType } from '@/services/packageTypes.service'
-import { booksService, type Book } from '@/services/books.service'
-import { seriesService, type Series } from '@/services/series.service'
-import { liveSessionsService, type LiveSession } from '@/services/liveSessions.service'
-import { usersService, type User } from '@/services/users.service'
+import { packageTypesService } from '@/services/packageTypes.service'
+import { AudiencePicker, audienceProblem, describeAudience, EMPTY_AUDIENCE, scheduleTarget, useAudienceCount, useScheduledDraft, countText, type Audience } from './compose/audience'
+import { ComposeFrame, NO_SCHEDULE, ReviewDock, ScheduleSection, scheduleProblem, type Schedule } from './compose/frame'
 
-type TargetAudience = 'all' | 'subject' | 'specific' | 'session'
-type SubjectScope = 'subscribers' | 'package' | 'series'
 type ClickAction = 'none' | 'external_url' | 'theory_package' | 'practical_package' | 'ebook' | 'live_session'
 
-export function SendNotificationTab() {
-  // Form state
-  const [target, setTarget] = useState<TargetAudience>('all')
-  const [subjectId, setSubjectId] = useState('')
-  const [title, setTitle] = useState('')
-  const [message, setMessage] = useState('')
-  const [sending, setSending] = useState(false)
+const ACTION_HINT: Record<ClickAction, string> = {
+  none: 'No navigation when the notification is tapped.',
+  external_url: 'Opens an external URL in the browser.',
+  theory_package: 'Navigates to the selected theory package screen in the app.',
+  practical_package: 'Navigates to the selected practical package screen in the app.',
+  ebook: 'Opens the ebook store in the app.',
+  live_session: 'Opens the selected live session details in the app.',
+}
 
-  // Click action state (internal screen redirection)
-  const [clickAction, setClickAction] = useState<ClickAction>('none')
-  const [externalUrl, setExternalUrl] = useState('')
-  const [selectedNavPackageId, setSelectedNavPackageId] = useState('')
-  const [selectedBookId, setSelectedBookId] = useState('')
-  const [selectedSessionId, setSelectedSessionId] = useState('')
+interface PushDraft { title: string; message: string; action: ClickAction; externalUrl: string; targetId: string; targetName: string }
+const EMPTY: PushDraft = { title: '', message: '', action: 'none', externalUrl: '', targetId: '', targetName: '' }
 
-  // Scheduling state
-  const [scheduleEnabled, setScheduleEnabled] = useState(false)
-  const [scheduledAt, setScheduledAt] = useState('')  // datetime-local string
+const typeName = (pkg: PackageType) => (pkg.package_type_id && typeof pkg.package_type_id === 'object' ? (pkg.package_type_id.name || '').toLowerCase() : '')
+const typeId = (pkg: PackageType) => (pkg.package_type_id && typeof pkg.package_type_id === 'object' ? pkg.package_type_id._id : String(pkg.package_type_id ?? ''))
 
-  // Click action data
-  const [navPackages, setNavPackages] = useState<PackageType[]>([])
-  const [navPackageTypes, setNavPackageTypes] = useState<PkgType[]>([])
-  const [navBooks, setNavBooks] = useState<Book[]>([])
-  const [navSessions, setNavSessions] = useState<LiveSession[]>([])
-  const [navPackagesLoading, setNavPackagesLoading] = useState(false)
-  const [navBooksLoading, setNavBooksLoading] = useState(false)
-  const [navSessionsLoading, setNavSessionsLoading] = useState(false)
-
-  // Image upload state
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Subjects
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loadingSubjects, setLoadingSubjects] = useState(false)
-
-  // Subject scope (depth targeting)
-  const [subjectScope, setSubjectScope] = useState<SubjectScope>('subscribers')
-  const [packageId, setPackageId] = useState('')
-  const [seriesId, setSeriesId] = useState('')
-  const [packages, setPackages] = useState<PackageType[]>([])
-  const [series, setSeries] = useState<Series[]>([])
-  const [loadingPackages, setLoadingPackages] = useState(false)
-  const [loadingSeries, setLoadingSeries] = useState(false)
-
-  // User search & selection
-  const [userSearch, setUserSearch] = useState('')
-  const [userResults, setUserResults] = useState<User[]>([])
-  const [searchingUsers, setSearchingUsers] = useState(false)
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([])
-
-  // Session selection
-  const [sessions, setSessions] = useState<LiveSession[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [sessionId, setSessionId] = useState('')
-
-  // Load sessions when target changes to 'session'
-  useEffect(() => {
-    if (target === 'session' && sessions.length === 0) {
-      setLoadingSessions(true)
-      liveSessionsService
-        .getAll({ limit: 100, publish_status: 'published' })
-        .then((res) => {
-          if (res.success && res.data) {
-            setSessions(res.data.entities || [])
-          }
-        })
-        .catch(() => toast.error('Failed to load sessions'))
-        .finally(() => setLoadingSessions(false))
-    }
-  }, [target, sessions.length])
-
-  // Load subjects when target changes to 'subject'
-  useEffect(() => {
-    if (target === 'subject' && subjects.length === 0) {
-      setLoadingSubjects(true)
-      subjectsService
-        .getSubjects({ limit: 100, is_active: true, sort_by: 'display_order', sort_order: 'asc' })
-        .then((res) => {
-          if (res.success && res.data) {
-            setSubjects(res.data.entities || [])
-          }
-        })
-        .catch(() => toast.error('Failed to load subjects'))
-        .finally(() => setLoadingSubjects(false))
-    }
-  }, [target, subjects.length])
-
-  // Load packages when subject is selected and scope is package or series
-  useEffect(() => {
-    if (subjectId && (subjectScope === 'package' || subjectScope === 'series')) {
-      setLoadingPackages(true)
-      setPackageId('')
-      setSeriesId('')
-      setSeries([])
-      packagesService
-        .getAll({ subject_id: subjectId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setPackages(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load packages'))
-        .finally(() => setLoadingPackages(false))
-    }
-  }, [subjectId, subjectScope])
-
-  // Load series when package is selected and scope is series
-  useEffect(() => {
-    if (packageId && subjectScope === 'series') {
-      setLoadingSeries(true)
-      setSeriesId('')
-      seriesService
-        .getAll({ package_id: packageId, is_active: true, limit: 100 })
-        .then((res) => {
-          if (res.success && res.data) setSeries(res.data.entities || [])
-        })
-        .catch(() => toast.error('Failed to load series'))
-        .finally(() => setLoadingSeries(false))
-    }
-  }, [packageId, subjectScope])
-
-  // Load packages & books for click action when needed
-  useEffect(() => {
-    if (clickAction === 'theory_package' || clickAction === 'practical_package') {
-      if (navPackages.length === 0) {
-        setNavPackagesLoading(true)
-        Promise.all([
-          packagesService.getAll({ is_active: true, limit: 100 } as any),
-          packageTypesService.getAllPublic(),
-        ]).then(([pkgRes, typesRes]) => {
-          if (pkgRes.success && pkgRes.data) setNavPackages(pkgRes.data.entities || [])
-          if (typesRes.success && typesRes.data) setNavPackageTypes(typesRes.data)
-        }).catch(() => toast.error('Failed to load packages'))
-          .finally(() => setNavPackagesLoading(false))
-      }
-    }
-    if (clickAction === 'ebook') {
-      if (navBooks.length === 0) {
-        setNavBooksLoading(true)
-        booksService.getAll({ limit: 100, is_available: true } as any)
-          .then((res) => {
-            if (res.success && res.data) setNavBooks((res.data.entities || []).filter((b: Book) => b.ebook))
-          })
-          .catch(() => toast.error('Failed to load books'))
-          .finally(() => setNavBooksLoading(false))
-      }
-    }
-    if (clickAction === 'live_session') {
-      if (navSessions.length === 0) {
-        setNavSessionsLoading(true)
-        liveSessionsService.getAll({ limit: 100, publish_status: 'published' })
-          .then((res) => {
-            if (res.success && res.data) {
-              setNavSessions((res.data.entities || []).filter((s) => s.status === 'scheduled' || s.status === 'live'))
-            }
-          })
-          .catch(() => toast.error('Failed to load sessions'))
-          .finally(() => setNavSessionsLoading(false))
-      }
-    }
-  }, [clickAction])
-
-  // Package filtering helpers for click action
-  const getNavTypeName = (pkg: PackageType): string => {
-    const ref = pkg.package_type_id as any
-    if (typeof ref === 'object' && ref !== null && 'name' in ref) return ref.name.toLowerCase()
-    return ''
+async function loadTargets(action: ClickAction): Promise<SelectOption[]> {
+  if (action === 'theory_package' || action === 'practical_package') {
+    const wanted = action === 'theory_package' ? 'theory' : 'practical'
+    const [pkgs, types] = await Promise.all([packagesService.getAll({ is_active: true, limit: 100 }), packageTypesService.getAllPublic()])
+    const wantedId = (types.data || []).find((t) => t.name.toLowerCase() === wanted)?._id
+    return unwrap(pkgs).entities.filter((p) => (typeName(p) ? typeName(p) === wanted : !!wantedId && typeId(p) === wantedId)).map((p) => ({ value: p._id, label: p.name }))
   }
-
-  const matchesNavType = (pkg: PackageType, typeName: string): boolean => {
-    const name = getNavTypeName(pkg)
-    if (name) return name === typeName
-    const typeId = navPackageTypes.find((t) => t.name.toLowerCase() === typeName)?._id
-    if (!typeId) return false
-    const ref = pkg.package_type_id as any
-    const pkgTypeId = typeof ref === 'object' && ref !== null ? ref._id : ref as string
-    return pkgTypeId === typeId
+  if (action === 'ebook') return unwrap(await booksService.getAll({ limit: 100, is_available: true })).entities.filter((b) => b.ebook).map((b) => ({ value: b._id, label: b.title, hint: b.author || undefined }))
+  if (action === 'live_session') {
+    return unwrap(await liveSessionsService.getAll({ limit: 100, publish_status: 'published' })).entities
+      .filter((s) => s.status === 'scheduled' || s.status === 'live')
+      .map((s) => ({ value: s._id, label: s.title, hint: s.status === 'live' ? 'Live now' : s.scheduled_start_time ? dayTimeIST(s.scheduled_start_time) : undefined }))
   }
+  return []
+}
 
-  const theoryNavPackages = navPackages.filter((p) => matchesNavType(p, 'theory'))
-  const practicalNavPackages = navPackages.filter((p) => matchesNavType(p, 'practical'))
+export function SendNotificationTab({ editId, onStopEdit, onSent }: { editId: string | null; onStopEdit: () => void; onSent: (scheduled: boolean) => void }) {
+  const [audience, setAudience] = useState<Audience>(EMPTY_AUDIENCE)
+  const [draft, setDraft] = useState<PushDraft>(EMPTY)
+  const [schedule, setSchedule] = useState<Schedule>(NO_SCHEDULE)
+  const [image, setImage] = useState<{ file: File | null; preview: string | null; url: string | null }>({ file: null, preview: null, url: null })
+  const [uploading, setUploading] = useState(false)
+  const [review, setReview] = useState(false)
+  const [showProblems, setShowProblems] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
-  // Search users with debounce
-  const searchUsers = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setUserResults([])
-      return
-    }
-    setSearchingUsers(true)
-    try {
-      const res = await usersService.getAll({ search: query, limit: 10, is_active: true })
-      if (res.success && res.data) {
-        const selectedIds = new Set(selectedUsers.map((u) => u._id))
-        setUserResults((res.data.entities || []).filter((u) => !selectedIds.has(u._id)))
-      }
-    } catch {
-      // Silently fail search
-    } finally {
-      setSearchingUsers(false)
-    }
-  }, [selectedUsers])
+  const set = (patch: Partial<PushDraft>) => setDraft((d) => ({ ...d, ...patch }))
+  const clearImage = () => setImage((prev) => { if (prev.file && prev.preview) URL.revokeObjectURL(prev.preview); return { file: null, preview: null, url: null } })
+  const reset = () => { setAudience(EMPTY_AUDIENCE); setDraft(EMPTY); setSchedule(NO_SCHEDULE); clearImage(); setShowProblems(false); if (fileInput.current) fileInput.current.value = '' }
 
-  useEffect(() => {
-    const timer = setTimeout(() => searchUsers(userSearch), 300)
-    return () => clearTimeout(timer)
-  }, [userSearch, searchUsers])
+  const edit = useScheduledDraft(editId, 'push', async (id) => unwrap(await notificationsService.getScheduledNotification(id)), (doc, aud) => {
+    setAudience(aud)
+    const route = doc.internal_route || ''
+    const params = doc.internal_params || {}
+    const action: ClickAction = doc.link_type === 'external' ? 'external_url'
+      : route === '/revision-series' ? 'theory_package' : route === '/practical-series' ? 'practical_package' : route === '/ebook-store' ? 'ebook' : route.startsWith('/session/') ? 'live_session' : 'none'
+    setDraft({ title: doc.title || '', message: doc.message || '', action, externalUrl: doc.external_url || '', targetId: params.packageId || params.bookId || params.id || '', targetName: '' })
+    setSchedule({ enabled: true, at: isoToIstInput(doc.scheduled_at) })
+    setImage({ file: null, preview: doc.image_url, url: doc.image_url })
+  })
 
-  const addUser = (user: User) => {
-    setSelectedUsers((prev) => [...prev, user])
-    setUserResults((prev) => prev.filter((u) => u._id !== user._id))
-    setUserSearch('')
-  }
+  const needsTarget = draft.action !== 'none' && draft.action !== 'external_url'
+  const targets = useResource<SelectOption[]>(() => loadTargets(draft.action), [draft.action])
+  const targetName = targets.data?.find((t) => t.value === draft.targetId)?.label || draft.targetName
 
-  const removeUser = (userId: string) => {
-    setSelectedUsers((prev) => prev.filter((u) => u._id !== userId))
-  }
+  const dirty = !!(draft.title || draft.message || image.file || draft.externalUrl) && !edit.loading
+  useUnsavedChanges(dirty)
+  // Free the preview when the tab goes away
+  const previewRef = useRef<string | null>(null)
+  previewRef.current = image.file ? image.preview : null
+  useEffect(() => () => { if (previewRef.current) URL.revokeObjectURL(previewRef.current) }, [])
 
-  // Image upload handlers
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const errors = useMemo(() => ({
+    title: draft.title.trim() ? undefined : 'Enter a title',
+    message: draft.message.trim() ? undefined : 'Enter a message',
+    url: draft.action === 'external_url' ? (!draft.externalUrl.trim() ? 'Enter the link' : /^https?:\/\/\S+$/i.test(draft.externalUrl.trim()) ? undefined : 'Must be a full link starting with https://') : undefined,
+    target: needsTarget && !draft.targetId ? 'Choose what to open' : undefined,
+  }), [draft, needsTarget])
+  const when = scheduleProblem(schedule)
+  const problem = audienceProblem(audience) ?? errors.title ?? errors.message ?? errors.url ?? errors.target ?? when
+  const shown = <T,>(v: T) => (showProblems ? v : undefined)
+  const count = useAudienceCount(audience, 'push')
+
+  const pickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-
-    // Validate file type
-    if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
-      toast.error('Only JPEG and PNG images are supported')
-      return
-    }
-
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB')
-      return
-    }
-
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
-    setImageUrl(null) // Reset the uploaded URL since it's a new file
+    if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) { toast.error('Only JPEG and PNG images are supported'); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be less than 5MB'); return }
+    clearImage()
+    setImage({ file, preview: URL.createObjectURL(file), url: null })
   }
 
   const uploadImage = async (): Promise<string | null> => {
-    if (!imageFile) return imageUrl
-    if (imageUrl) return imageUrl // Already uploaded
-
-    setUploadingImage(true)
+    if (!image.file) return image.url
+    if (image.url) return image.url
+    setUploading(true)
     try {
-      // Get presigned URL
-      const urlRes = await notificationsService.getImageUploadUrl(imageFile.type)
-      if (!urlRes.success || !urlRes.data) {
-        toast.error('Failed to get upload URL')
-        return null
-      }
-
-      const { uploadUrl, imageUrl: publicUrl } = urlRes.data
-
-      // Upload to S3 directly
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        body: imageFile,
-        headers: { 'Content-Type': imageFile.type },
-      })
-
-      setImageUrl(publicUrl)
-      return publicUrl
-    } catch {
-      toast.error('Failed to upload image')
-      return null
+      const { uploadUrl, imageUrl } = unwrap(await notificationsService.getImageUploadUrl(image.file.type), 'The image could not be uploaded.')
+      const res = await fetch(uploadUrl, { method: 'PUT', body: image.file, headers: { 'Content-Type': image.file.type } })
+      if (!res.ok) throw new Error('The image could not be uploaded. Try again or remove it.')
+      setImage((prev) => ({ ...prev, url: imageUrl }))
+      return imageUrl
     } finally {
-      setUploadingImage(false)
+      setUploading(false)
     }
   }
 
-  const removeImage = () => {
-    setImageFile(null)
-    setImageUrl(null)
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview)
-      setImagePreview(null)
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  const resetForm = () => {
-    setTitle('')
-    setMessage('')
-    setClickAction('none')
-    setExternalUrl('')
-    setSelectedNavPackageId('')
-    setSelectedBookId('')
-    setSelectedSessionId('')
-    setSubjectId('')
-    setSubjectScope('subscribers')
-    setPackageId('')
-    setSeriesId('')
-    setPackages([])
-    setSeries([])
-    setSelectedUsers([])
-    setUserSearch('')
-    setUserResults([])
-    setSessionId('')
-    setScheduleEnabled(false)
-    setScheduledAt('')
-    removeImage()
-  }
-
-  const canSend = () => {
-    if (!title.trim() || !message.trim()) return false
-    if (target === 'subject') {
-      if (!subjectId) return false
-      if (subjectScope === 'package' && !packageId) return false
-      if (subjectScope === 'series' && !seriesId) return false
-    }
-    if (target === 'specific' && selectedUsers.length === 0) return false
-    if (target === 'session' && !sessionId) return false
-    // Validate click action requirements
-    if (clickAction === 'external_url' && !externalUrl.trim()) return false
-    if ((clickAction === 'theory_package' || clickAction === 'practical_package') && !selectedNavPackageId) return false
-    if (clickAction === 'ebook' && !selectedBookId) return false
-    if (clickAction === 'live_session' && !selectedSessionId) return false
-    // Schedule validation
-    if (scheduleEnabled) {
-      if (!scheduledAt) return false
-      const when = new Date(scheduledAt)
-      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return false
-    }
-    return true
-  }
-
-  const handleSend = async () => {
-    if (!canSend()) return
-
-    setSending(true)
-    try {
-      // Upload image first if one is selected
-      let finalImageUrl: string | null = null
-      if (imageFile) {
-        finalImageUrl = await uploadImage()
-        if (imageFile && !finalImageUrl) {
-          setSending(false)
-          return // Upload failed
-        }
-      }
-
-      // Resolve click action to link fields
-      const resolveLinkData = (): Partial<Pick<import('@/services/notifications.service').PushPayload, 'link_type' | 'external_url' | 'internal_route' | 'internal_params'>> => {
-        switch (clickAction) {
-          case 'theory_package':
-            return { link_type: 'internal', internal_route: '/revision-series', internal_params: { packageId: selectedNavPackageId } }
-          case 'practical_package':
-            return { link_type: 'internal', internal_route: '/practical-series', internal_params: { packageId: selectedNavPackageId } }
-          case 'ebook':
-            return { link_type: 'internal', internal_route: '/ebook-store', internal_params: { bookId: selectedBookId } }
-          case 'live_session':
-            return { link_type: 'internal', internal_route: '/session/:id', internal_params: { id: selectedSessionId } }
-          case 'external_url':
-            return { link_type: 'external', external_url: externalUrl.trim() }
-          default:
-            return { link_type: 'none' }
-        }
-      }
-
-      const linkData = resolveLinkData()
-      const payload = {
-        title: title.trim(),
-        message: message.trim(),
-        ...linkData,
-        ...(finalImageUrl && { image_url: finalImageUrl }),
-      }
-
-      // ── Scheduled notification path ───────────────────────────────────
-      if (scheduleEnabled) {
-        // Resolve target_type + target_id/user_ids for the scheduled doc
-        let scheduleTargetType: 'all' | 'subject' | 'users' | 'package' | 'series' | 'session' = 'all'
-        let scheduleTargetId: string | undefined
-        let scheduleUserIds: string[] | undefined
-        if (target === 'all') {
-          scheduleTargetType = 'all'
-        } else if (target === 'subject') {
-          if (subjectScope === 'package') { scheduleTargetType = 'package'; scheduleTargetId = packageId }
-          else if (subjectScope === 'series') { scheduleTargetType = 'series'; scheduleTargetId = seriesId }
-          else { scheduleTargetType = 'subject'; scheduleTargetId = subjectId }
-        } else if (target === 'session') {
-          scheduleTargetType = 'session'
-          scheduleTargetId = sessionId
-        } else {
-          scheduleTargetType = 'users'
-          scheduleUserIds = selectedUsers.map((u) => u._id)
-        }
-
-        const schedRes = await notificationsService.scheduleNotification({
-          channel: 'push',
-          target_type: scheduleTargetType,
-          ...(scheduleTargetId && { target_id: scheduleTargetId }),
-          ...(scheduleUserIds && { user_ids: scheduleUserIds }),
-          scheduled_at: new Date(scheduledAt).toISOString(),
-          ...payload,
-        })
-        if (schedRes.success) {
-          toast.success(`Notification scheduled for ${new Date(scheduledAt).toLocaleString()}`)
-          resetForm()
-        } else {
-          toast.error(schedRes.message || 'Failed to schedule notification')
-        }
-        return
-      }
-
-      // ── Immediate send path ───────────────────────────────────────────
-      let response
-      if (target === 'all') {
-        response = await notificationsService.sendToAll(payload)
-      } else if (target === 'subject') {
-        if (subjectScope === 'package') {
-          response = await notificationsService.sendToPackage({ ...payload, package_id: packageId })
-        } else if (subjectScope === 'series') {
-          response = await notificationsService.sendToSeries({ ...payload, series_id: seriesId })
-        } else {
-          response = await notificationsService.sendToSubject({ ...payload, subject_id: subjectId })
-        }
-      } else if (target === 'session') {
-        response = await notificationsService.sendToSession({ ...payload, session_id: sessionId })
-      } else {
-        response = await notificationsService.sendToUsers({
-          ...payload,
-          user_ids: selectedUsers.map((u) => u._id),
-        })
-      }
-
-      if (response.success && response.data) {
-        const { sent, failed, total } = response.data
-        toast.success(
-          `Notification sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`
-        )
-        resetForm()
-      } else {
-        toast.error(response.message || 'Failed to send notification')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send notification')
-    } finally {
-      setSending(false)
+  const linkData = (): Partial<PushPayload> => {
+    switch (draft.action) {
+      case 'theory_package': return { link_type: 'internal', internal_route: '/revision-series', internal_params: { packageId: draft.targetId } }
+      case 'practical_package': return { link_type: 'internal', internal_route: '/practical-series', internal_params: { packageId: draft.targetId } }
+      case 'ebook': return { link_type: 'internal', internal_route: '/ebook-store', internal_params: { bookId: draft.targetId } }
+      case 'live_session': return { link_type: 'internal', internal_route: '/session/:id', internal_params: { id: draft.targetId } }
+      case 'external_url': return { link_type: 'external', external_url: draft.externalUrl.trim() }
+      default: return { link_type: 'none' }
     }
   }
+
+  const openReview = () => {
+    if (problem) { setShowProblems(true); toast.error(problem); return }
+    setReview(true)
+  }
+
+  // Throws on failure, so the review stays open and the draft is kept
+  const send = async () => {
+    const imageUrl = await uploadImage()
+    const payload: PushPayload = { title: draft.title.trim(), message: draft.message.trim(), ...linkData(), ...(imageUrl ? { image_url: imageUrl } : {}) }
+    if (schedule.enabled) {
+      const at = istInputToISO(schedule.at)
+      if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was changed.')
+      unwrap(await notificationsService.scheduleNotification({ channel: 'push', ...scheduleTarget(audience), scheduled_at: at, ...payload }), 'Failed to schedule notification')
+      toast.success(`Notification scheduled for ${dayTimeIST(at)}`)
+      reset(); onSent(true)
+      return
+    }
+    if (edit.doc) unwrap(await notificationsService.cancelScheduledNotification(edit.doc._id), 'The old schedule could not be cancelled, so nothing was sent.')
+    const res = audience.target === 'all' ? await notificationsService.sendToAll(payload)
+      : audience.target === 'session' ? await notificationsService.sendToSession({ ...payload, session_id: audience.sessionId })
+        : audience.target === 'specific' ? await notificationsService.sendToUsers({ ...payload, user_ids: audience.users.map((u) => u._id) })
+          : audience.subjectScope === 'package' ? await notificationsService.sendToPackage({ ...payload, package_id: audience.packageId })
+            : audience.subjectScope === 'series' ? await notificationsService.sendToSeries({ ...payload, series_id: audience.seriesId })
+              : await notificationsService.sendToSubject({ ...payload, subject_id: audience.subjectId })
+    const { sent, failed, total } = unwrap(res, 'Failed to send notification')
+    toast.success(`Notification sent! ${sent}/${total} delivered${failed > 0 ? `, ${failed} failed` : ''}`)
+    reset(); onSent(false)
+  }
+  const sendSafely = async () => { try { await send() } catch (err) { throw new Error(errText(err, 'Failed to send notification')) } }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Send className="h-5 w-5" />
-            Send Push Notification
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Target Audience */}
-          <div className="space-y-2">
-            <Label>Target Audience</Label>
-            <div className="grid grid-cols-4 gap-3">
-              {([
-                { value: 'all' as const, icon: Users, label: 'All Users', desc: 'Send to everyone' },
-                { value: 'subject' as const, icon: BookOpen, label: 'By Subject', desc: 'Subject subscribers' },
-                { value: 'session' as const, icon: Video, label: 'By Session', desc: 'Session enrollees' },
-                { value: 'specific' as const, icon: UserCheck, label: 'Specific Users', desc: 'Pick individual users' },
-              ]).map(({ value, icon: Icon, label, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTarget(value)}
-                  className={`flex items-center gap-3 rounded-lg border-2 p-4 text-left transition-colors ${
-                    target === value
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-muted-foreground/30'
-                  }`}
-                >
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                    target === value ? 'bg-primary/10' : 'bg-muted'
-                  }`}>
-                    <Icon className={`h-5 w-5 ${target === value ? 'text-primary' : 'text-muted-foreground'}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+    <>
+      <ComposeFrame
+        title="Send Push Notification"
+        editing={editId ? { loading: edit.loading, error: edit.error, scheduledFor: edit.doc?.scheduled_at ?? null, onStop: () => { reset(); onStopEdit() } } : null}
+        preview={<PushPreview title={draft.title} message={draft.message} image={image.preview} action={draft.action === 'none' ? null : draft.action === 'external_url' ? draft.externalUrl || 'A link' : targetName || 'A screen in the app'} />}
+        status={`${describeAudience(audience, 'push')}${countText(count) ? ` · ${countText(count)}` : ''}`}
+        problem={showProblems ? problem : audienceProblem(audience)}
+        primaryLabel={schedule.enabled ? (edit.doc ? 'Save Schedule' : 'Schedule Notification') : 'Send Notification'}
+        busyLabel={uploading ? 'Uploading image…' : null}
+        onPrimary={openReview}
+      >
+        <Section title="Target Audience"><AudiencePicker idPrefix="push" value={audience} onChange={setAudience} /></Section>
 
-          {/* Subject Selector + Scope */}
-          {target === 'subject' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Subject</Label>
-                {loadingSubjects ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading subjects...
-                  </div>
-                ) : (
-                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setSubjectScope('subscribers'); setPackageId(''); setSeriesId('') }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+        <Section title="Message">
+          <div className="space-y-5">
+            <Field id="notif-title" label="Title" required error={shown(errors.title)} aside={`${draft.title.length}/200`}>
+              <Input placeholder="e.g. New Live Session Available!" value={draft.title} onChange={(e) => set({ title: e.target.value })} maxLength={200} />
+            </Field>
+            <Field id="notif-message" label="Message" required error={shown(errors.message)} aside={`${draft.message.length}/1000`} hint={draft.message.length > 150 ? 'Phones usually cut a notification after about 150 characters.' : undefined}>
+              <Textarea placeholder="e.g. Dr. Sharma is going live on Anatomy at 5 PM today. Don't miss it!" value={draft.message} onChange={(e) => set({ message: e.target.value })} maxLength={1000} rows={4} />
+            </Field>
 
-              {/* Target Scope within Subject */}
-              {subjectId && (
-                <div className="space-y-2">
-                  <Label>Target Scope</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      { value: 'subscribers' as const, icon: Users, label: 'All Subscribers', desc: 'All subject subscribers' },
-                      { value: 'package' as const, icon: Package, label: 'Package', desc: 'Package purchasers' },
-                      { value: 'series' as const, icon: Layers, label: 'Series', desc: 'Series subscribers' },
-                    ]).map(({ value, icon: Icon, label, desc }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => { setSubjectScope(value); setPackageId(''); setSeriesId('') }}
-                        className={`flex items-center gap-2 rounded-lg border p-3 text-left transition-colors ${
-                          subjectScope === value
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-muted-foreground/30'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 shrink-0 ${subjectScope === value ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <div>
-                          <p className="text-xs font-medium">{label}</p>
-                          <p className="text-[10px] text-muted-foreground">{desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Package Selector */}
-              {subjectId && (subjectScope === 'package' || subjectScope === 'series') && (
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  {loadingPackages ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading packages...
-                    </div>
-                  ) : packages.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No packages found for this subject</p>
-                  ) : (
-                    <Select value={packageId} onValueChange={(v) => { setPackageId(v); setSeriesId('') }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a package" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {packages.map((p) => (
-                          <SelectItem key={p._id} value={p._id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              {/* Series Selector */}
-              {subjectId && subjectScope === 'series' && packageId && (
-                <div className="space-y-2">
-                  <Label>Series</Label>
-                  {loadingSeries ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading series...
-                    </div>
-                  ) : series.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No series found for this package</p>
-                  ) : (
-                    <Select value={seriesId} onValueChange={setSeriesId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a series" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {series.map((s) => (
-                          <SelectItem key={s._id} value={s._id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Session Selector */}
-          {target === 'session' && (
-            <div className="space-y-2">
-              <Label>Live Session</Label>
-              {loadingSessions ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading sessions...
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium">Image <span className="font-normal text-muted-foreground">(optional)</span></p>
+              {image.preview ? (
+                <div className="relative w-fit">
+                  <img src={image.preview} alt="Chosen notification" className="h-32 w-auto max-w-full rounded-lg border border-border object-cover" />
+                  <button type="button" onClick={clearImage} disabled={uploading} aria-label="Remove image" className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"><Trash2 aria-hidden="true" className="h-3 w-3" /></button>
+                  {uploading && <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-ink/50"><Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-white" /></div>}
                 </div>
               ) : (
-                <Select value={sessionId} onValueChange={setSessionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a live session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sessions.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.title}
-                        {s.enrollment_count !== undefined ? ` (${s.enrollment_count} enrolled)` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          )}
-
-          {/* User Selector */}
-          {target === 'specific' && (
-            <div className="space-y-3">
-              <Label>Select Users</Label>
-
-              {/* Selected users */}
-              {selectedUsers.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedUsers.map((user) => (
-                    <Badge key={user._id} variant="secondary" className="gap-1 py-1 pl-2 pr-1">
-                      {user.name || user.phone_number}
-                      <button
-                        type="button"
-                        onClick={() => removeUser(user._id)}
-                        className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-
-              {/* Search input */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search users by name, email, or phone..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="pl-9"
-                />
-                {searchingUsers && (
-                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                )}
-              </div>
-
-              {/* Search results */}
-              {userResults.length > 0 && (
-                <div className="rounded-lg border">
-                  {userResults.map((user) => (
-                    <button
-                      key={user._id}
-                      type="button"
-                      onClick={() => addUser(user)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                        {(user.name || '?')[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{user.name || 'Unnamed'}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {user.phone_number}{user.email ? ` · ${user.email}` : ''}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {userSearch.length >= 2 && !searchingUsers && userResults.length === 0 && (
-                <p className="text-sm text-muted-foreground">No users found</p>
-              )}
-            </div>
-          )}
-
-          {/* Notification Content */}
-          <div className="space-y-4 border-t pt-6">
-            <div className="space-y-2">
-              <Label htmlFor="notif-title">Title <span className="text-red-500">*</span></Label>
-              <Input
-                id="notif-title"
-                placeholder="e.g. New Live Session Available!"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={200}
-              />
-              <p className="text-xs text-muted-foreground">{title.length}/200</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notif-message">Message <span className="text-red-500">*</span></Label>
-              <Textarea
-                id="notif-message"
-                placeholder="e.g. Dr. Sharma is going live on Anatomy at 5 PM today. Don't miss it!"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                maxLength={1000}
-                rows={4}
-              />
-              <p className="text-xs text-muted-foreground">{message.length}/1000</p>
-            </div>
-
-            {/* Image Upload */}
-            <div className="space-y-2">
-              <Label>Image <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              {imagePreview ? (
-                <div className="relative inline-block">
-                  <img
-                    src={imagePreview}
-                    alt="Notification preview"
-                    className="h-32 w-auto rounded-lg border object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={removeImage}
-                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                  {uploadingImage && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
-                      <Loader2 className="h-6 w-6 animate-spin text-white" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-32 w-48 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                >
-                  <ImagePlus className="h-8 w-8" />
-                  <span className="text-xs">Click to upload</span>
+                <button type="button" onClick={() => fileInput.current?.click()} className="flex h-28 w-48 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-input text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary">
+                  <ImagePlus aria-hidden="true" className="h-7 w-7" /><span className="text-xs">Click to upload</span>
                 </button>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/jpg"
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown as a rich image in the push notification. Max 5MB, JPEG or PNG.
-              </p>
+              <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/jpg" onChange={pickImage} className="sr-only" tabIndex={-1} aria-label="Notification image" />
+              <p className="mt-1.5 text-xs text-muted-foreground">Shown as a rich image in the push notification. Max 5MB, JPEG or PNG.</p>
             </div>
 
-            {/* Click Action (internal screen redirection) */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <MousePointerClick className="h-3.5 w-3.5" />
-                  Click Action <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Select
-                  value={clickAction}
-                  onValueChange={(v) => { setClickAction(v as ClickAction); setSelectedNavPackageId(''); setSelectedBookId(''); setSelectedSessionId(''); setExternalUrl('') }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Action</SelectItem>
-                    <SelectItem value="external_url">External URL</SelectItem>
-                    <SelectItem value="theory_package">Open Theory Package</SelectItem>
-                    <SelectItem value="practical_package">Open Practical Package</SelectItem>
-                    <SelectItem value="ebook">Open Ebook Store</SelectItem>
-                    <SelectItem value="live_session">Open Live Session</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {clickAction === 'none' && 'No navigation when the notification is tapped.'}
-                  {clickAction === 'external_url' && 'Opens an external URL in the browser.'}
-                  {clickAction === 'theory_package' && 'Navigates to the selected theory package screen in the app.'}
-                  {clickAction === 'practical_package' && 'Navigates to the selected practical package screen in the app.'}
-                  {clickAction === 'ebook' && 'Opens the ebook store in the app.'}
-                  {clickAction === 'live_session' && 'Opens the selected live session details in the app.'}
-                </p>
-              </div>
-
-              {/* External URL input */}
-              {clickAction === 'external_url' && (
-                <div className="space-y-2">
-                  <Label htmlFor="notif-external-url">External URL <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="notif-external-url"
-                    type="url"
-                    placeholder="https://..."
-                    value={externalUrl}
-                    onChange={(e) => setExternalUrl(e.target.value)}
-                  />
-                </div>
-              )}
-
-              {/* Package selector */}
-              {(clickAction === 'theory_package' || clickAction === 'practical_package') && (
-                <div className="space-y-2">
-                  <Label>
-                    Select {clickAction === 'theory_package' ? 'Theory' : 'Practical'} Package <span className="text-red-500">*</span>
-                  </Label>
-                  {navPackagesLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading packages...
-                    </div>
-                  ) : (
-                    <Select value={selectedNavPackageId} onValueChange={setSelectedNavPackageId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={`Select a ${clickAction === 'theory_package' ? 'theory' : 'practical'} package`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(clickAction === 'theory_package' ? theoryNavPackages : practicalNavPackages).length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">
-                            No {clickAction === 'theory_package' ? 'theory' : 'practical'} packages found
-                          </div>
-                        ) : (
-                          (clickAction === 'theory_package' ? theoryNavPackages : practicalNavPackages).map((pkg) => (
-                            <SelectItem key={pkg._id} value={pkg._id}>
-                              {pkg.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              {/* Book selector */}
-              {clickAction === 'ebook' && (
-                <div className="space-y-2">
-                  <Label>Select Book <span className="text-red-500">*</span></Label>
-                  {navBooksLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading books...
-                    </div>
-                  ) : (
-                    <Select value={selectedBookId} onValueChange={setSelectedBookId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a book" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {navBooks.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No ebooks found</div>
-                        ) : (
-                          navBooks.map((book) => (
-                            <SelectItem key={book._id} value={book._id}>
-                              {book.title}{book.author ? ` — ${book.author}` : ''}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
-              {/* Live session selector */}
-              {clickAction === 'live_session' && (
-                <div className="space-y-2">
-                  <Label>Select Live Session <span className="text-red-500">*</span></Label>
-                  {navSessionsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading sessions...
-                    </div>
-                  ) : (
-                    <Select value={selectedSessionId} onValueChange={setSelectedSessionId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a live session" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {navSessions.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No upcoming or live sessions found</div>
-                        ) : (
-                          navSessions.map((session) => (
-                            <SelectItem key={session._id} value={session._id}>
-                              {session.title}
-                              {session.status === 'live'
-                                ? ' — Live now'
-                                : session.scheduled_start_time ? ` — ${new Date(session.scheduled_start_time).toLocaleDateString()}` : ''}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Schedule */}
-          <div className="space-y-3 border-t pt-6">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={scheduleEnabled}
-                onChange={(e) => setScheduleEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-border"
-              />
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Schedule for later</span>
-              </div>
-            </label>
-            {scheduleEnabled && (
-              <div className="space-y-2 pl-7">
-                <Label htmlFor="schedule-at">Send at <span className="text-red-500">*</span></Label>
-                <Input
-                  id="schedule-at"
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
-                  className="max-w-xs"
+            <Field id="notif-action" label={<span className="inline-flex items-center gap-1.5"><MousePointerClick aria-hidden="true" className="h-3.5 w-3.5" />Click Action</span>} optional hint={ACTION_HINT[draft.action]}>
+              <ActionSelect value={draft.action} onChange={(action) => set({ action, targetId: '', targetName: '', externalUrl: '' })} />
+            </Field>
+            {draft.action === 'external_url' && (
+              <Field id="notif-external-url" label="External URL" required error={shown(errors.url)}><Input type="url" placeholder="https://..." value={draft.externalUrl} onChange={(e) => set({ externalUrl: e.target.value })} /></Field>
+            )}
+            {needsTarget && (
+              <Field id="notif-target" label={draft.action === 'theory_package' ? 'Select Theory Package' : draft.action === 'practical_package' ? 'Select Practical Package' : draft.action === 'ebook' ? 'Select Book' : 'Select Live Session'} required error={shown(errors.target)}>
+                <SearchSelect
+                  value={draft.targetId} options={targets.data || []} loading={targets.loading} error={targets.error} onRetry={() => targets.reload()}
+                  placeholder={draft.action === 'ebook' ? 'Select a book' : draft.action === 'live_session' ? 'Select a live session' : 'Select a package'}
+                  emptyText={draft.action === 'ebook' ? 'No ebooks found' : draft.action === 'live_session' ? 'No upcoming or live sessions found' : 'No packages found'}
+                  onChange={(id) => set({ targetId: id, targetName: targets.data?.find((t) => t.value === id)?.label ?? '' })}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Notification will be queued and sent automatically at this time. Uses your device's local time zone.
-                </p>
-              </div>
+              </Field>
             )}
           </div>
+        </Section>
 
-          {/* Send Button */}
-          <div className="flex items-center justify-between border-t pt-6">
-            <p className="text-sm text-muted-foreground">
-              {target === 'all' && 'This will be sent to all active users'}
-              {target === 'subject' && !subjectId && 'Select a subject first'}
-              {target === 'subject' && subjectId && subjectScope === 'subscribers' && 'Sending to all subscribers of the selected subject'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && !packageId && 'Select a package'}
-              {target === 'subject' && subjectId && subjectScope === 'package' && packageId && 'Sending to active purchasers of the selected package'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && !seriesId && 'Select a package and series'}
-              {target === 'subject' && subjectId && subjectScope === 'series' && seriesId && 'Sending to users with access to the selected series'}
-              {target === 'session' && !sessionId && 'Select a live session first'}
-              {target === 'session' && sessionId && 'Sending to all confirmed enrollees of the selected session'}
-              {target === 'specific' && selectedUsers.length > 0 && `Sending to ${selectedUsers.length} selected user${selectedUsers.length > 1 ? 's' : ''}`}
-              {target === 'specific' && selectedUsers.length === 0 && 'Search and select users first'}
-            </p>
-            <Button
-              onClick={handleSend}
-              disabled={!canSend() || sending}
-              size="lg"
-            >
-              {sending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {uploadingImage ? 'Uploading image...' : (scheduleEnabled ? 'Scheduling...' : 'Sending...')}
-                </>
-              ) : scheduleEnabled ? (
-                <>
-                  <CalendarClock className="mr-2 h-4 w-4" />
-                  Schedule Notification
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send Notification
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <ScheduleSection id="schedule-at" noun="Notification" value={schedule} onChange={setSchedule} problem={shown(when)} />
+      </ComposeFrame>
+
+      <ReviewDock
+        open={review} onClose={() => setReview(false)} onConfirm={sendSafely} noun="notification" audience={describeAudience(audience, 'push')} count={count}
+        scheduledAt={schedule.enabled && schedule.at ? istInputToISO(schedule.at) : null} replacing={!!edit.doc}
+        rows={[
+          { label: 'Title', value: <span className="font-medium">{draft.title}</span> },
+          { label: 'Message', value: <span className="whitespace-pre-wrap">{draft.message}</span> },
+          ...(image.preview ? [{ label: 'Image', value: 'Included' }] : []),
+          { label: 'When tapped', value: draft.action === 'none' ? 'Opens the app' : draft.action === 'external_url' ? draft.externalUrl : targetName || 'A screen in the app' },
+        ]}
+      />
+    </>
+  )
+}
+
+function ActionSelect({ value, onChange, ...aria }: { value: ClickAction; onChange: (v: ClickAction) => void; id?: string }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as ClickAction)}>
+      <SelectTrigger {...aria}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">No Action</SelectItem>
+        <SelectItem value="external_url">External URL</SelectItem>
+        <SelectItem value="theory_package">Open Theory Package</SelectItem>
+        <SelectItem value="practical_package">Open Practical Package</SelectItem>
+        <SelectItem value="ebook">Open Ebook Store</SelectItem>
+        <SelectItem value="live_session">Open Live Session</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
+function PushPreview({ title, message, image, action }: { title: string; message: string; image: string | null; action: string | null }) {
+  return (
+    <Section title="Preview" description="How it looks on a phone.">
+      <div className="rounded-2xl bg-rail p-4">
+        <div className="rounded-xl bg-card p-3.5 shadow-raised">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded bg-primary"><Bell className="h-2.5 w-2.5 text-primary-foreground" /></span>PGME<span className="ml-auto">now</span></p>
+          <p className="mt-1.5 line-clamp-2 break-words text-sm font-semibold">{title || <span className="font-normal text-muted-foreground">Title</span>}</p>
+          <p className="line-clamp-4 whitespace-pre-wrap break-words text-[13px]">{message || <span className="text-muted-foreground">Message</span>}</p>
+          {image && <img src={image} alt="" className="mt-2.5 max-h-44 w-full rounded-lg object-cover" />}
+        </div>
+      </div>
+      <p className="mt-3 break-words text-[13px] text-muted-foreground">{action ? <>When tapped it opens: <span className="font-medium text-foreground">{action}</span></> : 'When tapped it opens the app.'}</p>
+    </Section>
   )
 }

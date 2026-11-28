@@ -94,7 +94,7 @@ class DocumentsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.document }
     }
-    return response as ApiResponse<Document>
+    return response as unknown as ApiResponse<Document>
   }
 
   /**
@@ -218,7 +218,7 @@ class DocumentsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.document }
     }
-    return response as ApiResponse<Document>
+    return response as unknown as ApiResponse<Document>
   }
 
   /**

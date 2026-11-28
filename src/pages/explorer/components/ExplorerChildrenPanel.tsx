@@ -1,134 +1,47 @@
-import { AlertCircle, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { RootChildren } from './children/RootChildren'
-import { SubjectChildren } from './children/SubjectChildren'
-import { PackageChildren } from './children/PackageChildren'
-import { SeriesChildren } from './children/SeriesChildren'
-import { ModuleChildren } from './children/ModuleChildren'
-import { VideoChildren } from './children/VideoChildren'
-import { BooksCatalog } from './children/BooksCatalog'
-import type { ExplorerFocus } from '../parseExplorerPath'
+import { ErrorState } from '@/components/common/detail'
+import { useExplorerAccess } from '../access'
 import type { ExplorerData } from '../hooks/useExplorerData'
+import type { ExplorerFocus } from '../parseExplorerPath'
+import { NoAccess } from './ExplorerEmptyState'
+import { BooksCatalog } from './children/BooksCatalog'
+import { ModuleChildren } from './children/ModuleChildren'
+import { PackageChildren } from './children/PackageChildren'
+import { RootChildren } from './children/RootChildren'
+import { SeriesChildren } from './children/SeriesChildren'
+import { SubjectChildren } from './children/SubjectChildren'
+import { VideoChildren } from './children/VideoChildren'
 
-interface ExplorerChildrenPanelProps {
-  focus: ExplorerFocus
-  data: ExplorerData
-  onRefresh?: () => void
-}
+export function ExplorerChildrenPanel({ focus, data }: { focus: ExplorerFocus; data: ExplorerData }) {
+  const { can } = useExplorerAccess()
 
-function isTheoryPackage(pkg: ExplorerData['packageDetail']): boolean {
-  if (!pkg?.package_type_id) return false
-  if (typeof pkg.package_type_id === 'object') {
-    return (pkg.package_type_id as { name?: string }).name?.toLowerCase().includes('theory') ?? false
-  }
-  return false
-}
-
-export function ExplorerChildrenPanel({ focus, data, onRefresh }: ExplorerChildrenPanelProps) {
-  const { loading, error, subjects, packages, packageDetail, currentSeries, currentModule, currentVideo } = data
-
-  if (focus.level === 'invalid') return null
-
-  // Surface fetch errors once the initial paint finishes — previously this was
-  // silent and left the panel blank.
-  if (error && !loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
-          <AlertCircle className="w-6 h-6 text-red-500" />
-        </div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-1">Couldn't load this view</h3>
-        <p className="text-sm text-slate-400 max-w-xs mb-5 leading-relaxed">{error}</p>
-        {onRefresh && (
-          <Button variant="outline" size="sm" onClick={onRefresh} className="gap-1.5 border-slate-200 text-slate-600 hover:bg-slate-50">
-            <RefreshCw className="w-3.5 h-3.5" /> Retry
-          </Button>
-        )}
-      </div>
-    )
+  if (data.error) {
+    if (data.error.status === 403) return <NoAccess what={focus.level === 'books' || focus.level === 'book' ? 'books' : focus.level === 'root' ? 'subjects' : 'this'} />
+    return <div className="p-4"><ErrorState title="This folder could not be loaded" message={data.error.message} onRetry={() => void data.refetch()} /></div>
   }
 
-  if (focus.level === 'root') {
-    return (
-      <RootChildren
-        subjects={subjects}
-        loading={loading}
-        focus={focus}
-        onRefresh={onRefresh}
-        libraryDocuments={data.libraryDocuments}
-      />
-    )
+  const banner = data.stale && !data.loading && (
+    <p role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-warning/30 bg-warning-soft px-4 py-2 text-[13px] text-warning">
+      The latest version could not be loaded. This is what was here before.
+      <button type="button" onClick={() => void data.refetch()} className="font-semibold underline underline-offset-2">Try again</button>
+    </p>
+  )
+
+  const body = () => {
+    switch (focus.level) {
+      case 'root': return <RootChildren data={data} focus={focus} />
+      case 'books':
+      case 'book': return <BooksCatalog data={data} />
+      case 'subject': return <SubjectChildren data={data} focus={focus} />
+      case 'invalid': return null
+    }
+    if (!can('package', 'read')) return <NoAccess what="packages" />
+    switch (focus.level) {
+      case 'package': return <PackageChildren data={data} focus={focus} />
+      case 'series': return <SeriesChildren data={data} focus={focus} />
+      case 'module': return <ModuleChildren data={data} focus={focus} />
+      case 'video': return <VideoChildren data={data} />
+    }
   }
 
-  if (focus.level === 'books' || focus.level === 'book') {
-    return (
-      <BooksCatalog
-        books={data.books}
-        loading={loading}
-        focus={focus}
-        onRefresh={onRefresh}
-      />
-    )
-  }
-
-  if (focus.level === 'subject') {
-    return (
-      <SubjectChildren
-        packages={packages}
-        loading={loading}
-        focus={focus}
-        onRefresh={onRefresh}
-        subjectDocuments={data.subjectDocuments}
-      />
-    )
-  }
-
-  if (focus.level === 'package') {
-    return (
-      <PackageChildren
-        packageDetail={packageDetail}
-        loading={loading}
-        focus={focus}
-        onRefresh={onRefresh}
-      />
-    )
-  }
-
-  if (focus.level === 'series') {
-    return (
-      <SeriesChildren
-        series={currentSeries}
-        loading={loading}
-        focus={focus}
-        isTheory={isTheoryPackage(packageDetail)}
-        onRefresh={onRefresh}
-      />
-    )
-  }
-
-  if (focus.level === 'module') {
-    return (
-      <ModuleChildren
-        module={currentModule}
-        focus={focus}
-        loading={loading}
-        onRefresh={onRefresh}
-      />
-    )
-  }
-
-  if (focus.level === 'video') {
-    return (
-      <VideoChildren
-        video={currentVideo}
-        videoTags={data.videoTags}
-        videoReviews={data.videoReviews}
-        videoReviewsTotal={data.videoReviewsTotal}
-        loading={loading}
-        onRefresh={onRefresh}
-      />
-    )
-  }
-
-  return null
+  return <>{banner}{body()}</>
 }

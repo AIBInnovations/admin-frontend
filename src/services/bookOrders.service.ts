@@ -11,7 +11,8 @@ export interface OrderItem {
 
 export interface BookOrder {
   _id: string
-  user_id: { _id: string; name: string; email: string; phone_number: string } | string
+  /** null when the student deleted the account */
+  user_id: { _id: string; name: string; email: string; phone_number: string; student_id?: string | null } | string | null
   order_number: string
   items: OrderItem[]
   recipient_name: string
@@ -32,7 +33,41 @@ export interface BookOrder {
   updatedAt: string
 }
 
+export interface BookOrderEvent {
+  _id: string
+  type: string
+  from: string | null
+  to: string | null
+  note: string
+  admin_name: string | null
+  at: string
+}
+
+export interface BookOrderDetail extends Omit<BookOrder, 'items'> {
+  items: { book_id: { _id: string; title: string; thumbnail_url?: string } | string | null; quantity: number; price_at_purchase: number; title: string }[]
+  gateway_amount: number | null
+  zoho_payment_id: string | null
+  coupon_code: string | null
+  coupon_discount: number
+  dispute_status?: 'open' | 'won' | 'lost' | null
+  refunded_at?: string | null
+  refund_amount?: number | null
+  refund_reference?: string | null
+  shipping_address_structured?: Record<string, string>
+  billing_address?: Record<string, string>
+  invoice: { _id: string; invoice_number: string } | null
+  events: BookOrderEvent[]
+  allowed_statuses: BookOrder['order_status'][]
+  shipping_editable: boolean
+}
+
+export interface BookOrderListResult extends ListResponse<BookOrder> {
+  totals?: { count: number; paid_orders: number; revenue: number }
+}
+
 export interface BookOrdersListParams extends BaseListParams {
+  from?: string
+  to?: string
   order_status?: string
   payment_status?: string
   start_date?: string
@@ -45,7 +80,7 @@ export interface OrderStatistics {
   date_range: { start_date: string; end_date: string }
   by_order_status: Record<string, { count: number; total_amount: number }>
   by_payment_status: Record<string, { count: number; total_amount: number }>
-  overall: { total_orders: number; total_revenue: number; average_order_value: number }
+  overall: { total_orders: number; paid_orders?: number; total_revenue: number; average_order_value: number }
 }
 
 class BookOrdersService {
@@ -62,38 +97,30 @@ class BookOrdersService {
     return str ? `?${str}` : ''
   }
 
-  async getAll(params: BookOrdersListParams = {}): Promise<ApiResponse<ListResponse<BookOrder>>> {
+  async getAll(params: BookOrdersListParams = {}): Promise<ApiResponse<BookOrderListResult>> {
     const query = this.buildQuery(params as Record<string, unknown>)
-    return apiService.get<ListResponse<BookOrder>>(`${this.basePath}${query}`)
+    return apiService.get<BookOrderListResult>(`${this.basePath}${query}`)
   }
 
-  async getById(orderId: string): Promise<ApiResponse<BookOrder>> {
-    const response = await apiService.get<{ book_order: BookOrder }>(`${this.basePath}/${orderId}`)
-    if (response.success && response.data) {
-      return { ...response, data: response.data.book_order }
-    }
-    return response as ApiResponse<BookOrder>
+  async getById(orderId: string): Promise<ApiResponse<BookOrderDetail>> {
+    const response = await apiService.get<{ order: BookOrderDetail }>(`${this.basePath}/${orderId}`)
+    return { ...response, data: response.data?.order }
   }
 
-  async updateStatus(orderId: string, orderStatus: string): Promise<ApiResponse<BookOrder>> {
-    const response = await apiService.put<{ book_order: BookOrder }>(`${this.basePath}/${orderId}/status`, {
-      order_status: orderStatus,
-    })
-    if (response.success && response.data) {
-      return { ...response, data: response.data.book_order }
-    }
-    return response as ApiResponse<BookOrder>
+  async updateStatus(orderId: string, orderStatus: string): Promise<ApiResponse<{ new_status: string }>> {
+    return apiService.put(`${this.basePath}/${orderId}/status`, { order_status: orderStatus })
   }
 
-  async updateShipping(orderId: string, trackingNumber: string, courierName: string): Promise<ApiResponse<BookOrder>> {
-    const response = await apiService.put<{ book_order: BookOrder }>(`${this.basePath}/${orderId}/shipping`, {
+  /** Internal note, never shown to the student. */
+  async addNote(orderId: string, note: string): Promise<ApiResponse<{ note: string }>> {
+    return apiService.post(`${this.basePath}/${orderId}/notes`, { note })
+  }
+
+  async updateShipping(orderId: string, trackingNumber: string, courierName: string): Promise<ApiResponse<{ order_status: string }>> {
+    return apiService.put(`${this.basePath}/${orderId}/shipping`, {
       tracking_number: trackingNumber,
       courier_name: courierName,
     })
-    if (response.success && response.data) {
-      return { ...response, data: response.data.book_order }
-    }
-    return response as ApiResponse<BookOrder>
   }
 
   async getStatistics(params: { start_date?: string; end_date?: string } = {}): Promise<ApiResponse<OrderStatistics>> {

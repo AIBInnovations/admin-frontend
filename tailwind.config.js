@@ -42,6 +42,33 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          soft: 'hsl(var(--success-soft))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          soft: 'hsl(var(--warning-soft))',
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--danger))',
+          soft: 'hsl(var(--danger-soft))',
+        },
+        rail: {
+          DEFAULT: 'hsl(var(--rail))',
+          foreground: 'hsl(var(--rail-foreground))',
+          muted: 'hsl(var(--rail-muted))',
+          hover: 'hsl(var(--rail-hover))',
+          active: 'hsl(var(--rail-active))',
+        },
+        // Raw brand swatches for the rare place a token is not enough
+        cobalt: '#0000C8',
+        sky: '#00BEFA',
+        ink: '#0A0E2C',
+      },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+        raised: 'var(--shadow-raised)',
       },
       spacing: {
         // Design token spacing scale (4px base unit)
@@ -78,8 +105,10 @@ export default {
         bold: 'var(--font-bold)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['IBM Plex Sans', 'IBM Plex Sans Fallback', 'system-ui', 'Segoe UI', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // The fallbacks are metric-matched faces in index.css: no reflow when the web font arrives
+        display: ['Bricolage Grotesque', 'Bricolage Grotesque Fallback', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
       },
     },
   },

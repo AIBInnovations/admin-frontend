@@ -3,7 +3,7 @@ import { BaseCrudService } from './base.service'
 import type { ListResponse, BaseListParams } from '@/types/api.types'
 
 export type CouponDiscountType = 'percentage' | 'flat'
-export type CouponAppliesTo = 'all' | 'type' | 'products'
+export type CouponAppliesTo = 'all' | 'type' | 'products' | 'subject'
 export type CouponProductType = 'package' | 'session' | 'workshop' | 'ebook' | 'book' | 'form'
 
 export const COUPON_PRODUCT_TYPES: CouponProductType[] = ['package', 'session', 'workshop', 'ebook', 'book', 'form']
@@ -11,6 +11,30 @@ export const COUPON_PRODUCT_TYPES: CouponProductType[] = ['package', 'session', 
 export interface CouponApplicableProduct {
   product_type: CouponProductType
   product_id: string
+  /**
+   * Package tiers (subscription lengths) this coupon is limited to. Empty or
+   * missing = every tier of that package. Only used for product_type 'package'.
+   */
+  tier_ids?: string[]
+}
+
+/** Tier summary the admin API returns next to a targeted package. */
+export interface CouponProductTier {
+  _id: string
+  name: string
+  duration_days: number
+  price: number
+}
+
+/**
+ * What GET /admin/coupons(/:id) returns per targeted product: the stored
+ * target plus display data, so the UI can show names instead of raw IDs.
+ * The display fields are optional because older backends do not send them;
+ * the UI resolves names itself in that case.
+ */
+export interface CouponApplicableProductView extends CouponApplicableProduct {
+  product_name?: string | null
+  tiers?: CouponProductTier[]
 }
 
 export type CouponCustomerScope = 'all' | 'specific'
@@ -32,7 +56,11 @@ export interface Coupon {
   max_discount_cap: number | null
   applies_to: CouponAppliesTo
   applicable_types: CouponProductType[]
-  applicable_products: CouponApplicableProduct[]
+  applicable_products: CouponApplicableProductView[]
+  /** applies_to 'subject': every product of these subjects gets the discount. */
+  applicable_subject_ids?: string[]
+  /** Names for applicable_subject_ids (name is null if the subject was deleted). */
+  applicable_subjects?: { _id: string; name: string | null }[]
   min_order_value: number
   max_redemptions: number | null
   redemption_count: number
@@ -55,6 +83,7 @@ export interface CouponFormData {
   applies_to: CouponAppliesTo
   applicable_types?: CouponProductType[]
   applicable_products?: CouponApplicableProduct[]
+  applicable_subject_ids?: string[]
   min_order_value?: number
   max_redemptions?: number | null
   per_user_limit?: number | null

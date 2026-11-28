@@ -104,6 +104,6 @@ export class BaseCrudService<
    * Toggle is_active status (convenience method wrapping update)
    */
   async toggleActive(id: string, isActive: boolean): Promise<ApiResponse<TEntity>> {
-    return this.update(id, { is_active: isActive } as Partial<TFormData>)
+    return this.update(id, { is_active: isActive } as unknown as Partial<TFormData>)
   }
 }

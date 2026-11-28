@@ -1,308 +1,124 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  Users, TrendingUp, Eye, ArrowUpRight, Loader2, Clock,
-} from 'lucide-react'
-import { analyticsService, DashboardAnalytics, AnalyticsRange } from '@/services/analytics.service'
-import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { FilterBar, ViewTools } from './components/FilterBar'
+import { FeedbackTab } from './components/FeedbackTab'
+import { OverviewTab } from './components/OverviewTab'
+import { SalesTab } from './components/SalesTab'
+import { StudentsTab } from './components/StudentsTab'
+import { RetentionTab } from './components/RetentionTab'
+import { RefundsTab } from './components/RefundsTab'
+import { CompareTab } from './components/CompareTab'
+import { VideosTab } from './components/VideosTab'
+import { TAB_SCOPE, useAnalyticsState, type AnalyticsState } from './useAnalyticsState'
 
-const RANGE_LABELS: Record<AnalyticsRange, string> = {
-  week: 'Past week',
-  month: 'Past month',
-  year: 'Past year',
-  all: 'All time',
+/**
+ * The first four are the tabs this page has had; the rest are new. The
+ * filters shown and `cross` (chart clicks filter it) come from TAB_SCOPE, the
+ * same table each tab's reports are built from.
+ */
+const TABS = [
+  { id: 'overview', name: 'Overview', ...TAB_SCOPE.overview, Panel: OverviewTab },
+  { id: 'sales', name: 'Sales', ...TAB_SCOPE.sales, Panel: SalesTab },
+  { id: 'students', name: 'Students', ...TAB_SCOPE.students, Panel: StudentsTab },
+  { id: 'feedback', name: 'Feedback', ...TAB_SCOPE.feedback, Panel: FeedbackTab },
+  { id: 'retention', name: 'Retention', ...TAB_SCOPE.retention, Panel: RetentionTab },
+  { id: 'refunds', name: 'Refunds', ...TAB_SCOPE.refunds, Panel: RefundsTab },
+  { id: 'compare', name: 'Compare', ...TAB_SCOPE.compare, Panel: CompareTab },
+  // Round 7: per package, which videos are watched, finished and rated, and who watches
+  { id: 'videos', name: 'Videos', ...TAB_SCOPE.videos, Panel: VideosTab },
+]
+
+function Tabs({ state, current }: { state: AnalyticsState; current: string }) {
+  // A video opened on the Videos tab closes when another tab is chosen
+  const go = (id: string) => state.update({ tab: id === 'overview' ? null : id, page: null, video: null }, { push: true })
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = TABS.findIndex((t) => t.id === current)
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    const t = TABS[(next + TABS.length) % TABS.length]
+    go(t.id)
+    document.getElementById(`tab-${t.id}`)?.focus()
+  }
+  // On a narrow screen the chosen tab may sit past the edge (Videos is last): bring it into the strip
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const list = listRef.current
+    const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!list || !tab) return
+    const left = tab.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft
+    if (left < list.scrollLeft || left + tab.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollLeft = Math.max(0, left - 16)
+  }, [current])
+  return (
+    <div ref={listRef} role="tablist" aria-label="Analytics sections" onKeyDown={onKey} className="mb-3 flex gap-1 overflow-x-auto overscroll-x-contain border-b border-border [scrollbar-width:none]">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          id={`tab-${t.id}`}
+          type="button"
+          role="tab"
+          aria-selected={t.id === current}
+          aria-controls="analytics-panel"
+          tabIndex={t.id === current ? 0 : -1}
+          onClick={() => go(t.id)}
+          className={cn('-mb-px h-10 whitespace-nowrap border-b-2 border-transparent px-3 text-sm text-muted-foreground transition-colors hover:text-foreground sm:px-4', t.id === current && 'border-primary font-medium text-foreground')}
+        >
+          {t.name}
+        </button>
+      ))}
+    </div>
+  )
 }
 
-// Format watch-time seconds into a compact human string.
-function formatWatch(seconds: number): string {
-  if (!seconds || seconds < 1) return '—'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = Math.floor(seconds % 60)
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
+/**
+ * An insight's "See why" lands on the block that proves it (#focus-<block>):
+ * once the block exists, it scrolls into view and a sky ring pulses once.
+ */
+function useProofFocus() {
+  const { hash, search } = useLocation()
+  useEffect(() => {
+    const id = hash.replace(/^#/, '')
+    if (!id) return
+    let tries = 0
+    let timer = 0
+    const find = () => document.getElementById(id.startsWith('focus-') ? id : `focus-${id}`) ?? document.getElementById(id)
+    const tick = () => {
+      const el = find()
+      // Wait until the block has its content (no skeleton inside)
+      if (el && !el.querySelector('[role="status"]')) {
+        el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+        el.classList.remove('chart-proof')
+        void el.offsetWidth
+        el.classList.add('chart-proof')
+        timer = window.setTimeout(() => el.classList.remove('chart-proof'), 1700)
+        return
+      }
+      if ((tries += 1) < 40) timer = window.setTimeout(tick, 150)
+    }
+    tick()
+    return () => window.clearTimeout(timer)
+  }, [hash, search])
 }
 
 export function AnalyticsPage() {
-  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null)
-  const [loading, setLoading] = useState(true)
-  // Default to all-time so the page shows backfilled history immediately; narrower ranges
-  // (week/month/year) are event-derived and only have data after the new backend is live.
-  const [range, setRange] = useState<AnalyticsRange>('all')
-
-  useEffect(() => {
-    async function fetchAnalytics() {
-      try {
-        setLoading(true)
-        const response = await analyticsService.getDashboard(range)
-        if (response.success && response.data) {
-          setAnalytics(response.data)
-        }
-      } catch (error) {
-        toast.error('Failed to load analytics')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchAnalytics()
-  }, [range])
-
-  if (loading && !analytics) {
-    return (
-      <div>
-        <PageHeader
-          title="Analytics"
-          description="Platform performance, user engagement, and content metrics"
-          breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Analytics' }]}
-        />
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    )
-  }
-
-  if (!analytics) {
-    return (
-      <div>
-        <PageHeader
-          title="Analytics"
-          description="Platform performance, user engagement, and content metrics"
-          breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Analytics' }]}
-        />
-        <div className="flex items-center justify-center py-20">
-          <p className="text-muted-foreground">No analytics data available.</p>
-        </div>
-      </div>
-    )
-  }
-
-  const { users, revenue, content, events } = analytics
-
+  const state = useAnalyticsState('30d')
+  const tab = TABS.find((t) => t.id === state.params.get('tab')) ?? TABS[0]
+  useProofFocus()
   return (
-    <div>
+    <div className="pg-viz space-y-6">
       <PageHeader
         title="Analytics"
         description="Platform performance, user engagement, and content metrics"
         breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Analytics' }]}
+        action={<ViewTools state={state} name={`Analytics, ${tab.name}`} />}
       />
-
-      {/* Date-range selector — drives Events + Most Viewed Videos */}
-      <div className="mb-6 flex items-center justify-end gap-3">
-        <span className="text-sm text-muted-foreground">Events &amp; most-viewed for:</span>
-        <Select value={range} onValueChange={(v) => setRange(v as AnalyticsRange)}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="week">Past week</SelectItem>
-            <SelectItem value="month">Past month</SelectItem>
-            <SelectItem value="year">Past year</SelectItem>
-            <SelectItem value="all">All time</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="mb-8 grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{users.total.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-muted-foreground">Total Users</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-                <TrendingUp className="h-5 w-5 text-emerald-600" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{`₹${revenue.this_month.toLocaleString('en-IN')}`}</p>
-            <p className="text-xs text-muted-foreground">Revenue (This Month)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10">
-                <Eye className="h-5 w-5 text-purple-600" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{users.active_30_days.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-muted-foreground">Active Users (30 days)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                <ArrowUpRight className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{users.new_this_month.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-muted-foreground">New Users (This Month)</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Revenue Overview + Events */}
-      <div className="mb-8 grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Revenue Overview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total Revenue</span>
-                <span className="text-sm font-semibold">{`₹${revenue.total.toLocaleString('en-IN')}`}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">This Month</span>
-                <span className="text-sm font-semibold">{`₹${revenue.this_month.toLocaleString('en-IN')}`}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Events ({RANGE_LABELS[range]})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {events.by_range.length > 0 ? (
-                events.by_range.map((event) => (
-                  <div key={event.event_type} className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground capitalize">
-                      {event.event_type.replace(/_/g, ' ')}
-                    </span>
-                    <Badge variant="secondary" className="text-[10px]">{event.count.toLocaleString('en-IN')}</Badge>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No events recorded</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Content Tables */}
-      <div className="grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Popular Subjects</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Purchases</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {content.popular_subjects.length > 0 ? (
-                  content.popular_subjects.map((subject, i) => (
-                    <TableRow key={subject.subject_id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
-                            {i + 1}
-                          </span>
-                          <span className="text-sm font-medium">{subject.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-[10px]">{subject.purchase_count}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-center text-sm text-muted-foreground">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Most Viewed Videos ({RANGE_LABELS[range]})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Video</TableHead>
-                  <TableHead className="text-right">Plays</TableHead>
-                  <TableHead className="text-right">Unique</TableHead>
-                  <TableHead className="text-right">Avg watch</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {content.most_viewed_videos.length > 0 ? (
-                  content.most_viewed_videos.map((video, i) => (
-                    <TableRow key={video.video_id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/10 text-[10px] font-bold text-purple-600">
-                            {i + 1}
-                          </span>
-                          <span className="text-sm font-medium">{video.title}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Eye className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm">{video.view_count.toLocaleString('en-IN')}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm">{video.unique_viewer_count.toLocaleString('en-IN')}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm">{formatWatch(video.avg_watch_seconds)}</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <FilterBar state={state} show={tab.filters} cross={tab.cross}>
+        <Tabs state={state} current={tab.id} />
+      </FilterBar>
+      <div id="analytics-panel" role="tabpanel" aria-labelledby={`tab-${tab.id}`}>
+        <tab.Panel state={state} />
       </div>
     </div>
   )

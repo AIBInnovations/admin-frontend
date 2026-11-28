@@ -11,14 +11,20 @@ import { PublishStatusWarning } from '@/components/common/PublishStatusWarning'
 import { ColumnDef } from '@/components/common/DataTable'
 import { Series } from '@/services/series.service'
 import { GripVertical, MoreVertical, Pencil } from 'lucide-react'
+import type { PopulatedRef, PublishStatus } from '@/types/api.types'
+
+/** The parent as the list endpoint returns it; null once it was deleted. */
+type Parent = (PopulatedRef & { publish_status?: PublishStatus; is_active?: boolean }) | null
 
 interface SeriesColumnsProps {
+  canEdit: boolean
   onEdit: (series: Series) => void
   onToggleActive: (series: Series) => void
   onPublishAction: (series: Series, action: 'publish' | 'unpublish') => void
 }
 
 export function useSeriesColumns({
+  canEdit,
   onEdit,
   onToggleActive,
   onPublishAction,
@@ -56,8 +62,8 @@ export function useSeriesColumns({
       id: 'package',
       header: 'Package',
       cell: (series) => (
-        <Badge variant="secondary">
-          {typeof series.package_id === 'object' ? series.package_id.name : '—'}
+        <Badge variant="outline" className="font-medium">
+          {series.package_id && typeof series.package_id === 'object' ? series.package_id.name : 'Deleted package'}
         </Badge>
       ),
     },
@@ -66,12 +72,12 @@ export function useSeriesColumns({
       header: 'Publish',
       width: 'w-28',
       cell: (series) => {
-        const pkg = typeof series.package_id === 'object' ? series.package_id : null
+        const pkg: Parent = series.package_id && typeof series.package_id === 'object' ? series.package_id : null
         return (
           <div className="flex items-center gap-1.5">
             <Badge
               variant={series.publish_status === 'published' ? 'default' : 'secondary'}
-              className={series.publish_status === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}
+              className={series.publish_status === 'draft' ? 'bg-warning-soft text-warning border-transparent' : 'bg-success-soft text-success border-transparent'}
             >
               {series.publish_status === 'draft' ? 'Draft' : 'Published'}
             </Badge>
@@ -93,8 +99,10 @@ export function useSeriesColumns({
       cell: (series) => (
         <StatusToggle
           checked={series.is_active}
+          label={series.name}
           onCheckedChange={() => onToggleActive(series)}
           size="sm"
+          disabled={!canEdit}
         />
       ),
     },
@@ -116,10 +124,10 @@ export function useSeriesColumns({
       id: 'actions',
       header: '',
       width: 'w-10',
-      cell: (series) => (
+      cell: (series) => canEdit && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${series.name}`}>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>

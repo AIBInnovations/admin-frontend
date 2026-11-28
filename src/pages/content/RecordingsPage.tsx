@@ -1,179 +1,64 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useServerSearch } from '@/hooks/useServerSearch'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Film, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/common/DataTable'
 import { SearchWithFilters, FilterConfig } from '@/components/common/SearchBar'
-import { DeleteModal } from '@/components/modals/DeleteModal'
-import { RecordingFormModal } from '@/components/recordings/RecordingFormModal'
-import { Plus, Film } from 'lucide-react'
-import { toast } from 'sonner'
-import type { DeleteImpactResponse } from '@/types/api.types'
-import { recordingsService, Recording, RecordingFormData } from '@/services/recordings.service'
-import { liveSessionsService, LiveSession } from '@/services/liveSessions.service'
-import { getRecordingsColumns } from './RecordingsPage.columns'
+import { useAuth } from '@/contexts/AuthContext'
+import { recordingsService, Recording } from '@/services/recordings.service'
+import { DeleteRecordingDock } from '@/components/recordings/DeleteRecordingDock'
+import { loadLiveSessions } from '@/components/recordings/sessions'
+import { useOptions } from '@/components/forms/editor/pickers'
+import { ListTable, useListState, useRemoteList } from '@/components/forms/editor/list'
+import { getRecordingsColumns, sessionTitle } from './RecordingsPage.columns'
+
+const LIMIT = 20
+// The list API has no search, so a search reads up to this many rows and
+// filters them here.
+const SEARCH_ROWS = 1000
 
 export function RecordingsPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canCreate = hasPermission('live_sessions.create')
 
-  // State
-  const { inputValue: search, setInputValue: setSearch, debouncedSearch } = useServerSearch('')
-  const [recordings, setRecordings] = useState<Recording[]>([])
-  const [loading, setLoading] = useState(true)
-  const [sessionFilter, setSessionFilter] = useState(searchParams.get('session') || 'all')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
-
-  // Dropdown data
-  const [sessions, setSessions] = useState<LiveSession[]>([])
-
-  // Modal states
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DeleteImpactResponse | null>(null)
-  const [loadingDeleteImpact, setLoadingDeleteImpact] = useState(false)
-
-  // Fetch sessions for filter dropdown
-  useEffect(() => {
-    liveSessionsService.getAll({ limit: 100 }).then((res) => {
-      if (res.success && res.data) setSessions(res.data.entities)
-    })
-  }, [])
-
-  // Fetch recordings
-  const fetchRecordings = useCallback(async () => {
-    try {
-      setLoading(true)
-      const response = await recordingsService.getAll({
-        page: currentPage,
-        limit: 20,
-        search: debouncedSearch || undefined,
-        session_id: sessionFilter !== 'all' ? sessionFilter : undefined,
-        processing_status: statusFilter !== 'all' ? statusFilter : undefined,
-      })
-
-      if (response.success && response.data) {
-        setRecordings(response.data.entities || [])
-        setTotalPages(response.data.pagination?.totalPages || 1)
-        setTotalCount(response.data.pagination?.total || 0)
-      } else {
-        toast.error(response.message || 'Failed to load recordings')
+  const { search, setSearch, query, values, setFilters, page, setPage, filtered, clear } = useListState({ session: 'all', status: 'all' })
+  const list = useRemoteList<Recording>(
+    JSON.stringify([page, query, values]),
+    async () => {
+      const params = {
+        session_id: values.session !== 'all' ? values.session : undefined,
+        processing_status: values.status !== 'all' ? values.status : undefined,
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load recordings')
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, sessionFilter, statusFilter, debouncedSearch])
-
-  useEffect(() => { fetchRecordings() }, [fetchRecordings])
-
-  // URL params sync
-  useEffect(() => {
-    const params: Record<string, string> = {}
-    if (sessionFilter !== 'all') params.session = sessionFilter
-    if (statusFilter !== 'all') params.status = statusFilter
-    if (currentPage > 1) params.page = currentPage.toString()
-    setSearchParams(params)
-  }, [sessionFilter, statusFilter, currentPage, setSearchParams])
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [sessionFilter, statusFilter, debouncedSearch])
-
-  // Handlers
-  const handleCreate = () => {
-    setModalMode('create')
-    setSelectedRecording(null)
-    setFormModalOpen(true)
-  }
-
-  const handleEdit = (recording: Recording) => {
-    setModalMode('edit')
-    setSelectedRecording(recording)
-    setFormModalOpen(true)
-  }
-
-  const handleDeleteClick = async (recording: Recording) => {
-    setSelectedRecording(recording)
-    setDeleteModalOpen(true)
-    setLoadingDeleteImpact(true)
-    setDeleteImpact(null)
-    try {
-      const response = await recordingsService.getDeleteImpact(recording._id)
-      if (response.success && response.data) {
-        setDeleteImpact(response.data)
-      } else {
-        toast.error(response.message || 'Failed to check delete impact')
+      if (!query) return recordingsService.getAll({ ...params, page, limit: LIMIT })
+      const res = await recordingsService.getAll({ ...params, page: 1, limit: SEARCH_ROWS })
+      if (!res.success || !res.data) return res
+      const q = query.toLowerCase()
+      const hits = (res.data.entities || []).filter((r) => [r.title, r.description, sessionTitle(r)].some((x) => x?.toLowerCase().includes(q)))
+      const totalPages = Math.max(1, Math.ceil(hits.length / LIMIT))
+      return {
+        ...res,
+        data: {
+          entities: hits.slice((page - 1) * LIMIT, page * LIMIT),
+          pagination: { total: hits.length, page, limit: LIMIT, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+        },
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to check delete impact')
-      setDeleteImpact(null)
-    } finally {
-      setLoadingDeleteImpact(false)
-    }
-  }
+    },
+    page,
+    setPage,
+  )
 
-  const handleFormSubmit = async (data: RecordingFormData, file?: File, onProgress?: (percent: number) => void, onPhaseChange?: (phase: 'uploading' | 'completing' | 'confirming') => void) => {
-    try {
-      if (modalMode === 'create' && file) {
-        const response = await recordingsService.upload(data, file, onProgress, onPhaseChange)
-        if (response.success) {
-          toast.success('Recording uploaded successfully — processing will begin shortly')
-        } else {
-          toast.error(response.message || 'Failed to upload recording')
-          throw new Error(response.message || 'Failed to upload recording')
-        }
-      } else if (selectedRecording) {
-        const response = await recordingsService.update(selectedRecording._id, data)
-        if (response.success) {
-          toast.success('Recording updated successfully')
-        } else {
-          toast.error(response.message || 'Failed to update recording')
-          throw new Error(response.message || 'Failed to update recording')
-        }
-      }
-      fetchRecordings()
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save recording')
-      throw error
-    }
-  }
+  const sessions = useOptions(loadLiveSessions)
+  const [deleting, setDeleting] = useState<Recording | null>(null)
+  const open = (r: Recording) => navigate(`/content/recordings/${r._id}`)
 
-  const handleDeleteConfirm = async () => {
-    if (!selectedRecording) return
-    try {
-      const response = await recordingsService.delete(selectedRecording._id)
-      if (response.success) {
-        toast.success('Recording deleted successfully')
-        fetchRecordings()
-      } else {
-        toast.error(response.message || 'Failed to delete recording')
-        throw new Error(response.message || 'Failed to delete recording')
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete recording')
-      throw error
-    }
-  }
-
-  // Filters
-  const filters: FilterConfig[] = [
+  const filters: FilterConfig[] = useMemo(() => [
     {
       key: 'session',
       label: 'Session',
       type: 'select',
       searchable: true,
-      options: [
-        { value: 'all', label: 'All Sessions' },
-        ...sessions.map(s => ({ value: s._id, label: s.title })),
-      ],
+      options: [{ value: 'all', label: 'All Sessions' }, ...sessions.options.map((s) => ({ value: s.id, label: s.sub ? `${s.name} (${s.sub})` : s.name }))],
       placeholder: 'Filter by session',
       defaultValue: 'all',
     },
@@ -191,11 +76,13 @@ export function RecordingsPage() {
       placeholder: 'Filter by status',
       defaultValue: 'all',
     },
-  ]
+  ], [sessions.options])
 
   const columns = getRecordingsColumns({
-    onEdit: handleEdit,
-    onDelete: handleDeleteClick,
+    canUpdate: hasPermission('live_sessions.update'),
+    canDelete: hasPermission('live_sessions.delete'),
+    onEdit: open,
+    onDelete: setDeleting,
   })
 
   return (
@@ -203,13 +90,7 @@ export function RecordingsPage() {
       <PageHeader
         title="Session Recordings"
         description="Upload and manage live session recordings"
-        icon={Film}
-        action={
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Upload Recording
-          </Button>
-        }
+        action={canCreate ? <Button asChild><Link to="/content/recordings/new"><Plus aria-hidden="true" />Upload Recording</Link></Button> : undefined}
       />
 
       <SearchWithFilters
@@ -217,51 +98,29 @@ export function RecordingsPage() {
         onChange={setSearch}
         placeholder="Search recordings..."
         filters={filters}
-        activeFilters={{ session: sessionFilter, status: statusFilter }}
-        onFiltersChange={(f) => {
-          if (f.session !== undefined) setSessionFilter(f.session)
-          if (f.status !== undefined) setStatusFilter(f.status)
+        activeFilters={values}
+        onFiltersChange={(f) => setFilters({ session: f.session, status: f.status })}
+      />
+
+      <ListTable
+        list={list}
+        columns={columns}
+        page={page}
+        onPage={setPage}
+        rowKey={(r) => r._id}
+        onRowClick={open}
+        filtered={filtered}
+        filteredTitle="No recordings found"
+        onClear={clear}
+        empty={{
+          icon: Film,
+          title: 'No recordings found',
+          description: canCreate ? 'Upload a recording of a live session or a workshop day' : undefined,
+          action: canCreate ? <Button asChild variant="outline" size="sm"><Link to="/content/recordings/new"><Plus aria-hidden="true" />Upload Recording</Link></Button> : undefined,
         }}
       />
 
-      <DataTable
-        columns={columns}
-        data={recordings}
-        loading={loading}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        emptyMessage="No recordings found"
-        totalCount={totalCount}
-      />
-
-      <RecordingFormModal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
-        recording={selectedRecording}
-        mode={modalMode}
-      />
-
-      <DeleteModal
-        open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteImpact(null); }}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Recording"
-        itemName={selectedRecording?.title || ''}
-        isLoadingImpact={loadingDeleteImpact}
-        blocked={deleteImpact?.blocked}
-        warning={deleteImpact?.dependencies?.length ? {
-          message: deleteImpact.blocked
-            ? 'Cannot delete. Remove the following dependencies first:'
-            : 'The following associated data will be affected:',
-          details: deleteImpact.dependencies.map(d => ({
-            label: d.label,
-            count: d.count,
-            blocking: d.blocking,
-          })),
-        } : undefined}
-      />
+      <DeleteRecordingDock recording={deleting} onClose={() => setDeleting(null)} onDone={list.refresh} />
     </div>
   )
 }

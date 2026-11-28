@@ -427,7 +427,7 @@ class VideosService {
     if (response.success && response.data) {
       return { ...response, data: response.data.video }
     }
-    return response as ApiResponse<Video>
+    return response as unknown as ApiResponse<Video>
   }
 
   /**
@@ -477,7 +477,7 @@ class VideosService {
       { s3Key, thumbnailUrl },
     )
     if (res.success && res.data) return { ...res, data: res.data.video }
-    return res as ApiResponse<Video>
+    return res as unknown as ApiResponse<Video>
   }
 
   /**

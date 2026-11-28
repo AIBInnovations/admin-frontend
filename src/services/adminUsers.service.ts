@@ -56,7 +56,7 @@ class AdminUsersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.admin_user }
     }
-    return response as ApiResponse<AdminUser>
+    return response as unknown as ApiResponse<AdminUser>
   }
 
   /**
@@ -67,7 +67,7 @@ class AdminUsersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.admin_user }
     }
-    return response as ApiResponse<AdminUser>
+    return response as unknown as ApiResponse<AdminUser>
   }
 
   /**
@@ -78,7 +78,7 @@ class AdminUsersService {
     if (response.success && response.data) {
       return { ...response, data: response.data.admin_user }
     }
-    return response as ApiResponse<AdminUser>
+    return response as unknown as ApiResponse<AdminUser>
   }
 
   /**

@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
-import Cropper from 'react-easy-crop'
-import { Area } from 'react-easy-crop/types'
+import Cropper, { type Area } from 'react-easy-crop'
 import {
   Dialog,
   DialogContent,
@@ -132,7 +131,7 @@ export function ImageCropDialog({
     aspectRatio === 1 ? '1:1 (Square)' : aspectRatio === 16 / 9 ? '16:9 (Thumbnail)' : `${aspectRatio}:1`
 
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog variant="modal" open={open} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Crop Image</DialogTitle>

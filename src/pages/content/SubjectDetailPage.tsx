@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { ErrorState } from '@/components/common/detail'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { Package, BookOpen, Calendar, Hash, Pencil, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDuration, formatINR } from '@/lib/format'
 import {
   subjectsService,
   SubjectDetail,
@@ -25,27 +29,30 @@ export function SubjectDetailPage() {
 
   const [subject, setSubject] = useState<SubjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<{ status?: number; message: string } | null>(null)
+  const { hasPermission } = useAuth()
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [packageFormOpen, setPackageFormOpen] = useState(false)
 
+  const { nextFetchId, isStale } = useLatestFetch()
+
   const fetchSubject = useCallback(async () => {
     if (!subjectId) return
+    const fetchId = nextFetchId()
+    setLoading(true)
+    setLoadError(null)
     try {
-      setLoading(true)
       const response = await subjectsService.getSubject(subjectId)
-      if (response.success && response.data) {
-        setSubject(response.data)
-      } else {
-        toast.error('Subject not found')
-        navigate('/content/subjects')
-      }
+      if (isStale(fetchId)) return
+      if (!response.data) throw new Error(response.message || 'The subject could not be loaded.')
+      setSubject(response.data)
     } catch (error: any) {
-      toast.error(error.message || 'Failed to load subject details')
-      navigate('/content/subjects')
+      if (isStale(fetchId)) return
+      setLoadError({ status: error.status, message: error.message || 'The subject could not be loaded.' })
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [subjectId, navigate])
+  }, [subjectId, nextFetchId, isStale])
 
   useEffect(() => { fetchSubject() }, [fetchSubject])
 
@@ -88,7 +95,7 @@ export function SubjectDetailPage() {
     })
   }
 
-  if (loading) {
+  if (loading && !subject) {
     return (
       <div className="space-y-6">
         <div className="space-y-4">
@@ -104,7 +111,19 @@ export function SubjectDetailPage() {
     )
   }
 
-  if (!subject) return null
+  if (!subject) {
+    const gone = loadError?.status === 404 || loadError?.status === 400
+    return (
+      <ErrorState
+        title={gone ? 'This subject no longer exists' : 'The subject could not be loaded'}
+        message={gone ? 'It may have been deleted, or the link is wrong.' : loadError?.message}
+        onRetry={gone ? undefined : fetchSubject}
+        back={{ label: 'Back to subjects', href: '/content/subjects' }}
+      />
+    )
+  }
+
+  const canOpen = hasPermission('packages.read')
 
   return (
     <div className="space-y-6">
@@ -117,7 +136,7 @@ export function SubjectDetailPage() {
           { label: 'Subjects', href: '/content/subjects' },
           { label: subject.name },
         ]}
-        action={
+        action={hasPermission('subjects.update') && (
           <Button
             variant="outline"
             size="sm"
@@ -126,7 +145,7 @@ export function SubjectDetailPage() {
             <Pencil className="mr-2 h-4 w-4" />
             Edit Subject
           </Button>
-        }
+        )}
       />
 
       {/* Subject Info */}
@@ -148,9 +167,9 @@ export function SubjectDetailPage() {
                 <div>
                   <p className="text-lg font-medium">{subject.name}</p>
                   <div className="mt-1 flex items-center gap-2">
-                    <Badge className={`text-[10px] ${subject.is_active
-                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                      : 'bg-red-500/10 text-red-600 border-red-200'
+                    <Badge className={`text-[11px] ${subject.is_active
+                      ? 'bg-success-soft text-success border-transparent'
+                      : 'bg-danger-soft text-danger border-transparent'
                     }`}>
                       {subject.is_active ? 'Active' : 'Inactive'}
                     </Badge>
@@ -205,12 +224,14 @@ export function SubjectDetailPage() {
           <CardTitle className="text-base flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
             Packages
-            <Badge variant="secondary" className="text-[10px] ml-1">{subject.packages?.length || 0}</Badge>
+            <Badge variant="outline" className="text-[11px] ml-1">{subject.packages?.length || 0}</Badge>
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setPackageFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Package
-          </Button>
+          {hasPermission('packages.create') && (
+            <Button variant="outline" size="sm" onClick={() => setPackageFormOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Package
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {(!subject.packages || subject.packages.length === 0) ? (
@@ -234,46 +255,52 @@ export function SubjectDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {subject.packages.map((pkg) => (
-                    <TableRow key={pkg._id}>
+                    <TableRow
+                      key={pkg._id}
+                      className={canOpen ? 'cursor-pointer' : undefined}
+                      onClick={(e) => { if (canOpen && !(e.target as HTMLElement).closest('a')) navigate(`/content/packages/${pkg._id}`) }}
+                    >
                       <TableCell className="text-sm text-muted-foreground">
                         {pkg.display_order}
                       </TableCell>
                       <TableCell>
                         <div>
-                          <Link to={`/content/packages/${pkg._id}`} className="text-sm font-medium hover:underline">
-                            {pkg.name}
-                          </Link>
+                          {canOpen ? (
+                            <Link to={`/content/packages/${pkg._id}`} className="text-sm font-medium hover:underline">
+                              {pkg.name}
+                            </Link>
+                          ) : <span className="text-sm font-medium">{pkg.name}</span>}
                           {pkg.description && (
-                            <p className="text-xs text-muted-foreground truncate max-w-xs">{pkg.description}</p>
+                            <p className="text-xs text-muted-foreground truncate max-w-xs" title={pkg.description}>{pkg.description}</p>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">
                         {pkg.is_on_sale ? (
                           <div>
-                            <span className="line-through text-muted-foreground text-xs">INR {pkg.original_price}</span>
+                            <span className="line-through text-muted-foreground text-xs">{formatINR(pkg.price)}</span>
                             <br />
-                            <span className="font-medium">INR {pkg.sale_price}</span>
+                            <span className="font-medium">{formatINR(pkg.sale_price ?? pkg.price)}</span>
                           </div>
                         ) : (
-                          <span>INR {pkg.price}</span>
+                          <span>{formatINR(pkg.price)}</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-[10px] ${pkg.is_on_sale
-                          ? 'bg-amber-500/10 text-amber-600 border-amber-200'
-                          : 'bg-zinc-500/10 text-zinc-500 border-zinc-200'
+                        <Badge className={`text-[11px] ${pkg.is_on_sale
+                          ? 'bg-warning-soft text-warning border-transparent'
+                          : 'bg-muted text-muted-foreground border-transparent'
                         }`}>
                           {pkg.is_on_sale ? 'On Sale' : 'No'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {pkg.duration_days} days
+                        {formatDuration(pkg.duration_days)}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-[10px] ${pkg.is_active
-                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                          : 'bg-red-500/10 text-red-600 border-red-200'
+                        <Badge className={`text-[11px] ${pkg.is_active
+                          ? 'bg-success-soft text-success border-transparent'
+                          : 'bg-danger-soft text-danger border-transparent'
                         }`}>
                           {pkg.is_active ? 'Active' : 'Inactive'}
                         </Badge>

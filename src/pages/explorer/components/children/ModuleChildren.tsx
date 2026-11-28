@@ -1,36 +1,24 @@
-import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
+import { Clock, CopyPlus, FolderInput, Plus, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, Video, Clock, Eye, EyeOff, Archive } from 'lucide-react'
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
-import type { DragEndEvent } from '@dnd-kit/core'
-import { VideoRow } from '../rows/VideoRow'
-import { SortableItem } from '../SortableItem'
-import { ExplorerEmptyState } from '../ExplorerEmptyState'
-import { ChildrenListSkeleton } from '../ExplorerSkeleton'
-import { ExplorerSelectionBar } from '../ExplorerSelectionBar'
-import { UpcomingVideoDialog } from '../../forms/UpcomingVideoDialog'
-import { CreateVideoDialog } from '../../forms/CreateVideoDialog'
-import { BulkImpactDialog } from '../../dialogs/BulkImpactDialog'
-import { classifyPublish, classifyUnpublish, classifyArchive } from '../../dialogs/bulkImpact'
-import { useSelection } from '../../hooks/useSelection'
+import { cn } from '@/lib/utils'
 import { videosService } from '@/services/videos.service'
-import { publishService } from '@/services/publish.service'
-import { toast } from 'sonner'
-import type { PackageDetailModule, PackageDetailVideo } from '@/services/packages.service'
+import { useActions } from '../../actions/ActionsContext'
+import { useExplorerAccess } from '../../access'
+import { usePanelSelection } from '../../context/PanelSelectionContext'
+import type { ExplorerData } from '../../hooks/useExplorerData'
+import { useReorder } from '../../hooks/useReorder'
+import { useSelection } from '../../hooks/useSelection'
+import { useClearUrl, useUrlState } from '../../hooks/useUrlState'
 import type { ExplorerFocus } from '../../parseExplorerPath'
+import { ExplorerEmptyState, NoAccess } from '../ExplorerEmptyState'
+import { ExplorerSelectionBar, type BulkAction } from '../ExplorerSelectionBar'
+import { ChildrenListSkeleton } from '../ExplorerSkeleton'
+import { ListToolbar } from '../ListToolbar'
+import { SortableList } from '../SortableList'
+import { VideoRow } from '../rows/rows'
+import { matches, selectAllProps, useBulkActions } from './shared'
 
-type ProcessingFilter = 'all' | 'ready' | 'processing' | 'uploading' | 'upcoming' | 'failed'
-
-interface ModuleChildrenProps {
-  module: PackageDetailModule | undefined
-  focus: ExplorerFocus
-  loading: boolean
-  onRefresh?: () => void
-}
-
-const FILTER_OPTIONS: { value: ProcessingFilter; label: string }[] = [
+const FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'ready', label: 'Ready' },
   { value: 'upcoming', label: 'Upcoming' },
@@ -38,219 +26,97 @@ const FILTER_OPTIONS: { value: ProcessingFilter; label: string }[] = [
   { value: 'uploading', label: 'Uploading' },
   { value: 'failed', label: 'Failed' },
 ]
+const NONE: never[] = []
 
-export function ModuleChildren({ module, focus, loading, onRefresh }: ModuleChildrenProps) {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ProcessingFilter>('all')
-  const [upcomingOpen, setUpcomingOpen] = useState(false)
-  const [uploadOpen, setUploadOpen] = useState(false)
-  const selection = useSelection()
+export function ModuleChildren({ data, focus }: { data: ExplorerData; focus: Extract<ExplorerFocus, { level: 'module' }> }) {
+  const { can } = useExplorerAccess()
+  const { create } = usePanelSelection()
+  const { open } = useActions()
+  const [search, setSearch] = useUrlState('q')
+  const [status, setStatus] = useUrlState('status', 'all')
+  const clearUrl = useClearUrl()
+  const module = data.currentModule
+  const videos = module?.videos ?? NONE
 
-  const videos: PackageDetailVideo[] = module?.videos ?? []
-  const moduleId = module?._id ?? ''
-  const [localVideos, setLocalVideos] = useState<PackageDetailVideo[]>([])
-
-  useEffect(() => { setLocalVideos([]) }, [moduleId])
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
-
-  const displayVideos = localVideos.length > 0 ? localVideos : videos
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const oldIndex = displayVideos.findIndex((v) => v._id === active.id)
-    const newIndex = displayVideos.findIndex((v) => v._id === over.id)
-    if (oldIndex === -1 || newIndex === -1) return
-
-    const reordered = arrayMove(displayVideos, oldIndex, newIndex)
-    setLocalVideos(reordered)
-
-    try {
-      await videosService.reorder(reordered.map((v) => v._id))
-      toast.success('Order updated')
-      onRefresh?.()
-    } catch {
-      setLocalVideos(displayVideos)
-      toast.error('Failed to reorder')
-    }
-  }
-
-  const [bulkOp, setBulkOp] = useState<'publish' | 'unpublish' | 'archive' | null>(null)
-  const selectedItems = displayVideos
-    .filter((v) => selection.isSelected(v._id))
-    .map((v) => ({ id: v._id, name: v.title }))
-
-  const bulkCfg =
-    bulkOp === 'publish'
-      ? { title: 'Publish videos', actionLabel: 'Publish', destructive: false, classify: (id: string) => classifyPublish('video', id), runOne: (id: string) => publishService.publish('video', id) }
-      : bulkOp === 'unpublish'
-      ? { title: 'Unpublish videos', actionLabel: 'Unpublish', destructive: true, classify: (id: string) => classifyUnpublish('video', id), runOne: (id: string) => publishService.unpublish('video', id) }
-      : bulkOp === 'archive'
-      ? { title: 'Archive videos', actionLabel: 'Archive', destructive: true, classify: (id: string) => classifyArchive(videosService.getDeleteImpact.bind(videosService), id), runOne: (id: string) => videosService.archive(id) }
-      : null
-
-  const filtered = displayVideos.filter((v) => {
-    const matchesSearch =
-      search.length < 1 ? true : v.title.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === 'all' ? true : v.processing_status === statusFilter
-    return matchesSearch && matchesStatus
+  const { ordered, sensors, onDragEnd } = useReorder(videos, (ids) => videosService.reorder(ids), data.refetch, 'videos')
+  const selection = useSelection(videos)
+  const shared = useBulkActions('video', selection, videos.map((v) => ({ id: v._id, name: v.title })))
+  // Move or copy the selected videos to any module (full-page picker)
+  const pickSelected = (kind: 'video-move' | 'video-copy') => open({
+    type: 'moveContent',
+    kind,
+    items: videos.filter((v) => selection.isSelected(v._id)).map((v) => ({ id: v._id, name: v.title, parentId: focus.moduleId })),
+    onDone: selection.clear,
   })
+  const bulk: BulkAction[] = can('video', 'update')
+    ? [
+        { label: 'Move to…', icon: <FolderInput className="h-3.5 w-3.5" />, onClick: () => pickSelected('video-move') },
+        { label: 'Copy to…', icon: <CopyPlus className="h-3.5 w-3.5" />, onClick: () => pickSelected('video-copy') },
+        ...shared,
+      ]
+    : shared
+  if (!can('video', 'read')) return <NoAccess what="videos" />
 
-  const filteredIds = filtered.map((v) => v._id)
-  const failedCount = displayVideos.filter((v) => v.processing_status === 'failed').length
+  const filtered = ordered.filter((v) => matches(v.title, search) && (status === 'all' || v.processing_status === status))
+  const counts = new Map<string, number>()
+  videos.forEach((v) => counts.set(v.processing_status, (counts.get(v.processing_status) ?? 0) + 1))
+  const canCreate = can('video', 'create')
+  const upload = () => open({ type: 'uploadVideo', moduleId: focus.moduleId })
+  const isFiltered = !!search || status !== 'all'
 
   return (
     <>
-      <div>
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100 flex-wrap">
-          {/* Select all */}
-          {filtered.length > 0 && (
-            <input
-              type="checkbox"
-              checked={filteredIds.length > 0 && filteredIds.every((id) => selection.isSelected(id))}
-              onChange={() => selection.toggleAll(filteredIds)}
-              className="w-4 h-4 accent-primary cursor-pointer shrink-0"
-            />
-          )}
-          <div className="relative flex-1 min-w-40 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9 h-8 text-sm"
-              placeholder="Search videos…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Status filter pills */}
-          <div className="flex items-center gap-1 flex-wrap">
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setStatusFilter(opt.value)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  statusFilter === opt.value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-gray-100 text-muted-foreground hover:bg-gray-200'
-                } ${opt.value === 'failed' && failedCount > 0 ? 'ring-1 ring-red-400' : ''}`}
-              >
-                {opt.label}
-                {opt.value === 'failed' && failedCount > 0 && ` (${failedCount})`}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => setUploadOpen(true)}
-              disabled={!moduleId}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Upload Video</span>
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setUpcomingOpen(true)}
-              disabled={!moduleId}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Add Upcoming</span>
-            </Button>
-          </div>
-        </div>
-
-        {loading && !module ? (
-          <ChildrenListSkeleton />
-        ) : filtered.length > 0 ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={filtered.map((v) => v._id)} strategy={verticalListSortingStrategy}>
-              <div className="py-1.5">
-                {filtered.map((v) => (
-                  <SortableItem key={v._id} id={v._id}>
-                    {({ dragHandleProps, isDragging }) => (
-                      <VideoRow
-                        video={v}
-                        parentFocus={focus}
-                        onRefresh={onRefresh}
-                        selected={selection.isSelected(v._id)}
-                        onSelect={selection.toggle}
-                        dragHandleProps={dragHandleProps}
-                        isDragging={isDragging}
-                      />
-                    )}
-                  </SortableItem>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          <ExplorerEmptyState
-            icon={Video}
-            title={
-              search || statusFilter !== 'all'
-                ? 'No videos match'
-                : 'No videos yet'
-            }
-            description={
-              search
-                ? `No results for "${search}".`
-                : statusFilter !== 'all'
-                ? `No ${statusFilter} videos in this module.`
-                : 'Upload your first video to this module.'
-            }
-            action={
-              search || statusFilter !== 'all'
-                ? undefined
-                : { label: 'Upload video', onClick: () => setUploadOpen(true) }
-            }
-          />
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search videos"
+        selectAll={bulk.length > 0 && filtered.length > 0 ? selectAllProps(selection, filtered.map((v) => v._id), 'videos') : undefined}
+      >
+        {canCreate && (
+          <>
+            <Button size="sm" variant="outline" className="h-9" onClick={upload} disabled={!module}><Plus className="h-4 w-4" /> Upload Video</Button>
+            <Button size="sm" className="h-9" onClick={() => create('upcoming')} disabled={!module}><Clock className="h-4 w-4" /> Add Upcoming</Button>
+          </>
         )}
+      </ListToolbar>
+      <div role="group" aria-label="Show" className="flex shrink-0 gap-1.5 overflow-x-auto overscroll-x-contain border-b border-border px-4 py-2">
+        {FILTERS.map((f) => {
+          const n = counts.get(f.value) ?? 0
+          const on = status === f.value
+          return (
+            <button
+              key={f.value}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setStatus(f.value)}
+              className={cn(
+                'flex h-7 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium transition-colors',
+                on ? 'bg-primary text-primary-foreground' : f.value === 'failed' && n > 0 ? 'bg-danger-soft text-danger' : 'bg-muted text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {f.label}{f.value !== 'all' && n > 0 && <span className="tabular-nums">({n})</span>}
+            </button>
+          )
+        })}
       </div>
 
-      <UpcomingVideoDialog
-        open={upcomingOpen}
-        onClose={() => setUpcomingOpen(false)}
-        onSuccess={() => { setUpcomingOpen(false); onRefresh?.() }}
-        moduleId={moduleId}
-      />
-
-      <CreateVideoDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onSuccess={() => { setUploadOpen(false); onRefresh?.() }}
-        moduleId={moduleId}
-      />
-
-      <ExplorerSelectionBar
-        count={selection.count}
-        onClear={selection.clear}
-        actions={[
-          { label: 'Publish', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setBulkOp('publish') },
-          { label: 'Unpublish', icon: <EyeOff className="w-3.5 h-3.5" />, onClick: () => setBulkOp('unpublish'), variant: 'amber' },
-          { label: 'Archive', icon: <Archive className="w-3.5 h-3.5" />, onClick: () => setBulkOp('archive'), variant: 'amber' },
-        ]}
-      />
-
-      {bulkCfg && (
-        <BulkImpactDialog
-          open={!!bulkOp}
-          onClose={() => setBulkOp(null)}
-          onSuccess={() => { setBulkOp(null); selection.clear(); onRefresh?.() }}
-          items={selectedItems}
-          title={bulkCfg.title}
-          actionLabel={bulkCfg.actionLabel}
-          destructive={bulkCfg.destructive}
-          classify={bulkCfg.classify}
-          runOne={bulkCfg.runOne}
-        />
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {!module ? <ChildrenListSkeleton /> : filtered.length > 0 ? (
+          <SortableList
+            items={filtered}
+            label="Videos"
+            sensors={sensors}
+            onDragEnd={onDragEnd}
+            disabled={!can('video', 'update')}
+            render={(v, drag) => <VideoRow video={v} parentFocus={focus} onRefresh={data.refetch} selected={selection.isSelected(v._id)} onSelect={bulk.length > 0 ? selection.toggle : undefined} {...drag} />}
+          />
+        ) : videos.length > 0 && isFiltered ? (
+          <ExplorerEmptyState icon={Video} title="No videos match" description="Nothing fits this search and filter." action={{ label: 'Clear filters', onClick: () => clearUrl(['q', 'status']) }} />
+        ) : (
+          <ExplorerEmptyState icon={Video} title="No videos yet" description="Upload the first video of this module, or add an upcoming one." action={canCreate ? { label: 'Upload video', onClick: upload } : undefined} />
+        )}
+      </div>
+      <ExplorerSelectionBar count={selection.count} onClear={selection.clear} actions={bulk} />
     </>
   )
 }

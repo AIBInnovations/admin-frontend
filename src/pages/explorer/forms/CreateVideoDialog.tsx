@@ -1,24 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { PanelField, PanelSelect, PanelSwitchRow, PanelText, PanelTextarea } from '../panel/fields'
-import { FileUploadField } from '../media/FileUploadField'
-import { useExplorerMutation } from '../hooks/useExplorerMutation'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import { videosService } from '@/services/videos.service'
-import { facultyService, type Faculty } from '@/services/faculty.service'
+import { useUnsavedChanges } from '@/components/layouts/workspaceStore'
+import { useExplorerMutation } from '../hooks/useExplorerMutation'
+import { FileUploadField } from '../media/FileUploadField'
+import { PanelField, PanelSelect, PanelSwitchRow, PanelText, PanelTextarea } from '../panel/fields'
+import { useFaculty } from '../panel/useFaculty'
+import { fileSize } from '../ui/text'
 
-interface CreateVideoDialogProps {
-  open: boolean
-  onClose: () => void
-  onSuccess: () => void
-  moduleId: string
-}
+interface Props { moduleId: string; onClose: () => void; onSuccess: () => Promise<void> | void }
 
 type Phase = 'idle' | 'uploading' | 'completing' | 'confirming'
 
-export function CreateVideoDialog({ open, onClose, onSuccess, moduleId }: CreateVideoDialogProps) {
+/** Upload a video: a full page, because an upload takes a while and needs room. */
+export function CreateVideoDialog({ moduleId, onClose, onSuccess }: Props) {
+  const faculty = useFaculty()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [facultyId, setFacultyId] = useState('')
@@ -26,75 +25,81 @@ export function CreateVideoDialog({ open, onClose, onSuccess, moduleId }: Create
   const [file, setFile] = useState<File | null>(null)
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState<Phase>('idle')
-  const [faculty, setFaculty] = useState<Faculty[]>([])
-
-  useEffect(() => {
-    if (!open) return
-    setTitle(''); setDescription(''); setFacultyId(''); setIsFree(false); setFile(null); setProgress(0); setPhase('idle')
-    facultyService.getAll({ limit: 200, sort_by: 'name', sort_order: 'asc' }).then((res) => {
-      if (res.success && res.data) setFaculty(res.data.entities)
-    })
-  }, [open])
+  const [tried, setTried] = useState(false)
 
   const upload = useExplorerMutation({
     name: 'Upload video',
-    fn: () =>
-      videosService.upload(
-        { title: title.trim(), description: description.trim(), module_id: moduleId, faculty_id: facultyId || undefined, is_free: isFree },
-        file as File,
-        (p) => setProgress(p),
-        (ph) => setPhase(ph),
-      ),
-    onSuccess: () => { setPhase('idle'); onClose(); onSuccess() },
+    what: 'uploading videos',
+    fn: () => videosService.upload(
+      { title: title.trim(), description: description.trim(), module_id: moduleId, faculty_id: facultyId || undefined, is_free: isFree },
+      file as File,
+      setProgress,
+      setPhase,
+    ),
+    onSuccess: () => { setPhase('idle'); return onSuccess() },
     onError: () => setPhase('idle'),
-    successMessage: 'Video uploaded — processing started',
+    successMessage: 'Video uploaded. Processing has started.',
   })
+  // Leaving the page mid-upload would lose it
+  useUnsavedChanges(upload.loading)
 
-  const canUpload = title.trim().length >= 2 && description.trim().length >= 10 && !!file
-  const phaseLabel = phase === 'uploading' ? `Uploading ${progress}%` : phase === 'completing' ? 'Assembling…' : phase === 'confirming' ? 'Finalising…' : ''
+  const errors = {
+    title: title.trim().length < 5 ? 'Use at least 5 characters.' : title.trim().length > 200 ? 'Use at most 200 characters.' : '',
+    description: description.trim().length < 10 ? 'Use at least 10 characters.' : description.length > 2000 ? 'Use at most 2,000 characters.' : '',
+    file: file ? '' : 'Choose a video file.',
+  }
+  const submit = () => {
+    setTried(true)
+    const first = errors.title ? 'cv-title' : errors.description ? 'cv-desc' : null
+    if (first) { document.getElementById(first)?.focus(); return }
+    if (errors.file) return
+    void upload.execute()
+  }
+  const phaseLabel = phase === 'uploading' ? `Uploading ${progress}%` : phase === 'completing' ? 'Putting the parts together…' : phase === 'confirming' ? 'Finishing…' : 'Starting…'
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && !upload.loading && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+    <Dialog open onOpenChange={(v) => { if (!v && !upload.loading) onClose() }}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Upload video</DialogTitle>
+          <DialogDescription>It is added to this module and processed before students can watch it.</DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-4 py-1">
-          <PanelField label="Title" required htmlFor="cv-title">
-            <PanelText id="cv-title" value={title} onChange={setTitle} placeholder="Lecture title" autoFocus />
+        <fieldset disabled={upload.loading} className="space-y-5 rounded-xl border border-border bg-card p-5 shadow-card">
+          <PanelField label="Title" required htmlFor="cv-title" error={tried ? errors.title : ''}>
+            <PanelText id="cv-title" value={title} onChange={setTitle} placeholder="Lecture title" autoFocus invalid={tried && !!errors.title} required describedBy={tried && errors.title ? 'cv-title-error' : undefined} />
           </PanelField>
-          <PanelField label="Description" required hint="Min 10 characters" htmlFor="cv-desc">
-            <PanelTextarea id="cv-desc" value={description} onChange={setDescription} rows={3} />
+          <PanelField label="Description" required hint="At least 10 characters." htmlFor="cv-desc" error={tried ? errors.description : ''}>
+            <PanelTextarea id="cv-desc" value={description} onChange={setDescription} rows={4} invalid={tried && !!errors.description} required describedBy={tried && errors.description ? 'cv-desc-error' : 'cv-desc-hint'} />
           </PanelField>
-          <PanelField label="Faculty" htmlFor="cv-fac">
-            <PanelSelect id="cv-fac" value={facultyId} onChange={setFacultyId}>
-              <option value="">None</option>
-              {faculty.map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
-            </PanelSelect>
-          </PanelField>
+          <div className="grid gap-5 sm:grid-cols-2 sm:items-end">
+            <PanelField label="Faculty" htmlFor="cv-fac">
+              <PanelSelect id="cv-fac" value={facultyId} onChange={setFacultyId}>
+                <option value="">None</option>
+                {faculty.map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
+              </PanelSelect>
+            </PanelField>
+            <PanelSwitchRow id="cv-free" label="Free preview" hint="No purchase needed" checked={isFree} onChange={setIsFree} />
+          </div>
           <FileUploadField
             label="Video file"
             accept="video/mp4,video/mpeg,video/quicktime,video/x-msvideo,video/webm"
-            maxMb={10240}
-            buttonLabel={file ? `Selected: ${file.name}` : 'Choose video file'}
-            hint="MP4/MOV/WebM · large files upload in parallel chunks"
-            onPick={(f) => setFile(f)}
+            maxMb={10_240}
+            buttonLabel={file ? file.name : 'Choose video file'}
+            hint={file ? `${fileSize(file.size / 1024 / 1024)} selected. Choose again to change it.` : 'MP4, MOV or WebM, up to 10 GB. Large files upload in parts.'}
+            error={tried ? errors.file : ''}
+            onPick={setFile}
           />
-          <PanelSwitchRow label="Free preview" hint="No purchase needed" checked={isFree} onChange={setIsFree} />
-
-          {upload.loading && (
-            <div className="space-y-1">
-              <Progress value={phase === 'uploading' ? progress : 100} className="h-1.5" />
-              <p className="text-[11px] text-slate-400">{phaseLabel}</p>
-            </div>
-          )}
-        </div>
-
+        </fieldset>
+        {upload.loading && (
+          <div role="status" className="space-y-1.5">
+            <Progress value={phase === 'uploading' ? progress : 100} aria-label="Upload progress" className="h-2" />
+            <p className="text-[13px] text-muted-foreground">{phaseLabel} Keep this tab open.</p>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={upload.loading}>Cancel</Button>
-          <Button onClick={upload.execute} disabled={!canUpload || upload.loading}>
-            {upload.loading ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {phaseLabel || 'Working…'}</> : 'Upload'}
+          <Button onClick={submit} disabled={upload.loading}>
+            {upload.loading ? <><Loader2 className="h-4 w-4 animate-spin" /> {phaseLabel}</> : 'Upload video'}
           </Button>
         </DialogFooter>
       </DialogContent>

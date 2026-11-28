@@ -1,23 +1,13 @@
 import { Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface StarDisplayProps {
-  rating: number | null
-  size?: 'sm' | 'md'
-  className?: string
-}
-
-/** Read-only 5-star rating display (explorer-local). */
-export function StarDisplay({ rating, size = 'sm', className }: StarDisplayProps) {
+/** Read-only 5-star rating. */
+export function StarDisplay({ rating, className }: { rating: number | null; className?: string }) {
   const filled = Math.round(rating ?? 0)
-  const px = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4'
   return (
-    <span className={cn('inline-flex items-center gap-0.5', className)}>
+    <span role="img" aria-label={rating == null ? 'No rating' : `${rating.toFixed(1)} out of 5`} className={cn('inline-flex items-center gap-0.5', className)}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={cn(px, i <= filled ? 'fill-amber-400 text-amber-400' : 'text-slate-300')}
-        />
+        <Star key={i} aria-hidden="true" className={cn('h-3.5 w-3.5', i <= filled ? 'fill-warning text-warning' : 'text-border')} />
       ))}
     </span>
   )

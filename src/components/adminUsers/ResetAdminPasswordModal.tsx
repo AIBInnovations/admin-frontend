@@ -1,31 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import { Loader2 } from 'lucide-react'
+import { Section } from '@/components/common/detail'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, KeyRound } from 'lucide-react'
-import { AdminUser } from '@/services/adminUsers.service'
+import { Field, Notice } from '@/components/users/kit'
+import { errText, focusFirstError } from '@/components/users/lib'
+import type { AdminUser } from '@/services/adminUsers.service'
+import { passwordRule } from './AdminUserFormModal'
 
-const schema = z
-  .object({
-    new_password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Must contain uppercase, lowercase, and a number'),
-    confirm_password: z.string(),
-  })
-  .refine((d) => d.new_password === d.confirm_password, {
-    message: 'Passwords do not match',
-    path: ['confirm_password'],
-  })
-
-type FormValues = z.infer<typeof schema>
+const schema = z.object({ new_password: passwordRule, confirm_password: z.string().min(1, 'Type the password again') })
+  .refine((d) => d.new_password === d.confirm_password, { message: 'Passwords do not match', path: ['confirm_password'] })
+type Values = z.infer<typeof schema>
 
 interface ResetAdminPasswordModalProps {
   open: boolean
@@ -34,100 +23,49 @@ interface ResetAdminPasswordModalProps {
   adminUser: AdminUser | null
 }
 
-export function ResetAdminPasswordModal({
-  open,
-  onClose,
-  onConfirm,
-  adminUser,
-}: ResetAdminPasswordModalProps) {
+export function ResetAdminPasswordModal({ open, onClose, onConfirm, adminUser }: ResetAdminPasswordModalProps) {
+  const formRef = useRef<HTMLFormElement>(null)
   const [error, setError] = useState<string | null>(null)
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { new_password: '', confirm_password: '' }, shouldFocusError: false })
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { new_password: '', confirm_password: '' },
-  })
+  useEffect(() => { if (open) { reset({ new_password: '', confirm_password: '' }); setError(null) } }, [open, reset])
 
-  const handleClose = () => {
-    if (!isSubmitting) {
-      reset()
-      setError(null)
-      onClose()
-    }
-  }
-
-  const onSubmit = async (data: FormValues) => {
+  const onSubmit = async (data: Values) => {
+    setError(null)
     try {
-      setError(null)
       await onConfirm(data.new_password)
-      reset()
+      reset({ new_password: '', confirm_password: '' })
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password')
+      setError(errText(err, 'Failed to reset password'))
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !isSubmitting) onClose() }}>
+      <DialogContent backLabel="Admin Users">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5" />
-            Reset Password
-          </DialogTitle>
-          <DialogDescription>
-            Set a new password for <span className="font-medium">{adminUser?.name}</span> ({adminUser?.email})
-          </DialogDescription>
+          <DialogTitle>Reset Password</DialogTitle>
+          <DialogDescription>Set a new password for <span className="font-medium text-foreground">{adminUser?.name}</span> ({adminUser?.email})</DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="new_password">New Password</Label>
-            <Input
-              id="new_password"
-              type="password"
-              placeholder="Enter new password"
-              autoComplete="new-password"
-              disabled={isSubmitting}
-              {...register('new_password')}
-            />
-            {errors.new_password && (
-              <p className="text-sm text-destructive">{errors.new_password.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirm_password">Confirm Password</Label>
-            <Input
-              id="confirm_password"
-              type="password"
-              placeholder="Confirm new password"
-              autoComplete="new-password"
-              disabled={isSubmitting}
-              {...register('confirm_password')}
-            />
-            {errors.confirm_password && (
-              <p className="text-sm text-destructive">{errors.confirm_password.message}</p>
-            )}
-          </div>
-
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-              Cancel
-            </Button>
+        <form ref={formRef} noValidate onSubmit={handleSubmit(onSubmit, () => focusFirstError(formRef.current))} className="space-y-6">
+          <Notice tone="warning">The old password stops working at once. Give the new one to the admin yourself; it is not emailed.</Notice>
+          <Section title="New password">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="new_password" label="New Password" required error={errors.new_password?.message} hint="At least 8 characters with uppercase, lowercase, and a number">
+                <Input type="password" placeholder="Enter new password" autoComplete="new-password" disabled={isSubmitting} {...register('new_password')} />
+              </Field>
+              <Field id="confirm_password" label="Confirm Password" required error={errors.confirm_password?.message}>
+                <Input type="password" placeholder="Confirm new password" autoComplete="new-password" disabled={isSubmitting} {...register('confirm_password')} />
+              </Field>
+            </div>
+          </Section>
+          <DialogFooter className="sm:items-center">
+            {error && <p role="alert" className="min-w-0 flex-1 text-[13px] text-danger">{error}</p>}
+            <Button type="button" variant="outline" className="bg-card" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reset Password
+              {isSubmitting && <Loader2 aria-hidden="true" className="animate-spin" />}
+              {isSubmitting ? 'Resetting…' : 'Reset Password'}
             </Button>
           </DialogFooter>
         </form>

@@ -16,7 +16,7 @@ function hasActiveProcessing(module: PackageDetailModule | undefined): boolean {
  */
 export function useProcessingPoll(
   module: PackageDetailModule | undefined,
-  refetch: () => void,
+  refetch: () => Promise<void> | void,
 ) {
   const refetchRef = useRef(refetch)
   refetchRef.current = refetch
@@ -25,7 +25,7 @@ export function useProcessingPoll(
     if (!hasActiveProcessing(module)) return
 
     const id = setInterval(() => {
-      refetchRef.current()
+      if (document.visibilityState === 'visible') void refetchRef.current()
     }, POLL_INTERVAL)
 
     return () => clearInterval(id)

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useEffect, useMemo, useState } from 'react'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
@@ -19,7 +19,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
 import { Loader2, Upload, X, FileVideo, Link2, FileText, Tag, Check, ChevronsUpDown, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarqueeText } from '@/components/common/MarqueeText'
@@ -27,6 +26,9 @@ import { Video, VideoFormData, ReleaseMode } from '@/services/videos.service'
 import { Module, modulesService } from '@/services/modules.service'
 import { VideoTag, videoTagsService } from '@/services/videoTags.service'
 import { apiService } from '@/services/api.service'
+import { ContentMovePicker } from '@/components/modules/ContentMovePicker'
+import type { MoveKind } from '@/services/contentMove.service'
+import { VideoLocationCard } from './VideoLocationCard'
 
 interface FacultyOption {
   _id: string
@@ -69,6 +71,8 @@ interface VideoFormModalProps {
   video?: Video | null
   mode: 'create' | 'edit'
   defaultModuleId?: string
+  /** A move or copy from the location card went through: reload the list. */
+  onMoved?: () => void
 }
 
 // Convert ISO string to datetime-local value ('YYYY-MM-DDTHH:mm') in the
@@ -81,7 +85,10 @@ function isoToLocalInput(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultModuleId }: VideoFormModalProps) {
+export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultModuleId, onMoved }: VideoFormModalProps) {
+  // "Change" location / "Copy to another module": the full-page picker over this form
+  const [picker, setPicker] = useState<MoveKind | null>(null)
+  const [placeVersion, setPlaceVersion] = useState(0)
   const [modules, setModules] = useState<Module[]>([])
   const [faculty, setFaculty] = useState<FacultyOption[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -98,7 +105,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
     formState: { errors, isSubmitting },
     reset, setValue, watch,
   } = useForm<VideoFormValues>({
-    resolver: zodResolver(videoSchema),
+    resolver: zodResolver(videoSchema) as Resolver<VideoFormValues>,
     defaultValues: {
       title: '', description: '', module_id: '', faculty_id: '',
       display_order: 0, is_free: false, publish_status: 'draft' as const,
@@ -108,6 +115,12 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   })
 
   const isFree = watch('is_free')
+  const currentModuleId = watch('module_id')
+  const pickItems = useMemo(() => (video ? [{
+    id: video._id,
+    name: video.title,
+    parentId: currentModuleId || (typeof video.module_id === 'object' ? video.module_id?._id ?? null : video.module_id),
+  }] : []), [video, currentModuleId])
   const releaseMode = watch('release_mode')
   const scheduledValue = watch('scheduled_release_at')
 
@@ -239,6 +252,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
   const handleClose = () => { if (!isSubmitting) onClose() }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[720px]">
         <DialogHeader>
@@ -259,11 +273,20 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
+          {mode === 'edit' && video && (
+            <VideoLocationCard
+              videoId={video._id}
+              version={placeVersion}
+              onMove={isSubmitting ? undefined : () => setPicker('video-move')}
+              onCopy={isSubmitting || !['ready', 'upcoming'].includes(video.processing_status) ? undefined : () => setPicker('video-copy')}
+            />
+          )}
+
           {/* Video File (create, or edit when upcoming) */}
           {(mode === 'create' || isUpcomingEdit) && (
             <div className="space-y-2">
               <Label>
-                Video File {mode === 'create' && <span className="text-red-500">*</span>}
+                Video File {mode === 'create' && <span className="text-danger">*</span>}
                 {isUpcomingEdit && <span className="text-xs font-normal text-muted-foreground ml-2">(optional — leave empty to edit metadata only)</span>}
               </Label>
               {!videoFile ? (
@@ -303,9 +326,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
 
           {/* Release timing (upcoming edit only) */}
           {isUpcomingEdit && (
-            <div className="space-y-3 rounded-lg border border-orange-200 bg-orange-50/50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20">
+            <div className="space-y-3 rounded-lg border border-warning/30 bg-warning-soft p-4">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-orange-600" />
+                <Clock className="h-4 w-4 text-warning" />
                 <Label className="text-sm font-medium">Release Timing</Label>
               </div>
 
@@ -369,7 +392,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                   the relationship clear. */}
               <div className="space-y-2">
                 <Label htmlFor="scheduled_release_at" className="text-xs">
-                  Release Date {!videoFile && <span className="text-red-500">*</span>}
+                  Release Date {!videoFile && <span className="text-danger">*</span>}
                 </Label>
                 <Input
                   id="scheduled_release_at"
@@ -385,7 +408,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                       : 'Users will see an "Upcoming" placeholder until this date arrives.'}
                 </p>
                 {errors.scheduled_release_at && (
-                  <p className="text-sm text-red-500">{errors.scheduled_release_at.message}</p>
+                  <p className="text-sm text-danger">{errors.scheduled_release_at.message}</p>
                 )}
               </div>
             </div>
@@ -393,22 +416,22 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
 
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
+            <Label htmlFor="title">Title <span className="text-danger">*</span></Label>
             <Input id="title" placeholder="e.g., Introduction to Anatomy" disabled={isSubmitting} {...register('title')} />
-            {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
+            {errors.title && <p className="text-sm text-danger">{errors.title.message}</p>}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
+            <Label htmlFor="description">Description <span className="text-danger">*</span></Label>
             <Textarea id="description" placeholder="Brief description of the video content..." rows={3} disabled={isSubmitting} {...register('description')} />
-            {errors.description && <p className="text-sm text-red-500">{errors.description.message}</p>}
+            {errors.description && <p className="text-sm text-danger">{errors.description.message}</p>}
           </div>
 
           {/* Module + Faculty */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Module <span className="text-red-500">*</span></Label>
+              <Label>Module <span className="text-danger">*</span></Label>
               <Controller
                 name="module_id" control={control}
                 render={({ field }) => (
@@ -417,7 +440,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                       <Button
                         variant="outline" role="combobox"
                         disabled={isSubmitting || (mode === 'create' && !!defaultModuleId)}
-                        className="w-full justify-between font-normal h-9"
+                        className="w-full justify-between text-left font-normal h-9"
                       >
                         <MarqueeText>
                           {field.value
@@ -449,10 +472,10 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                                 <span className="flex items-center gap-2">
                                   {m.name}{typeof m.series_id === 'object' ? ` (${m.series_id.name})` : ''}
                                   {m.publish_status === 'draft' && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Draft</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-warning-soft text-warning border-transparent">Draft</span>
                                   )}
                                   {m.is_active === false && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">Inactive</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-danger-soft text-danger border-transparent">Inactive</span>
                                   )}
                                 </span>
                               </CommandItem>
@@ -467,7 +490,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               <p className="text-xs text-muted-foreground">
                 All items shown including drafts and inactive
               </p>
-              {errors.module_id && <p className="text-sm text-red-500">{errors.module_id.message}</p>}
+              {errors.module_id && <p className="text-sm text-danger">{errors.module_id.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Faculty</Label>
@@ -479,7 +502,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                       <Button
                         variant="outline" role="combobox"
                         disabled={isSubmitting}
-                        className="w-full justify-between font-normal h-9"
+                        className="w-full justify-between text-left font-normal h-9"
                       >
                         <MarqueeText>
                           {field.value ? faculty.find(f => f._id === field.value)?.name || 'Select faculty' : 'None'}
@@ -536,7 +559,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 {...register('display_order')}
               />
               <p className="text-xs text-muted-foreground">Order within the module (0 = auto)</p>
-              {errors.display_order && <p className="text-sm text-red-500">{errors.display_order.message}</p>}
+              {errors.display_order && <p className="text-sm text-danger">{errors.display_order.message}</p>}
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Access</Label>
@@ -585,7 +608,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 disabled={isSubmitting}
                 {...register('subtitle_url')}
               />
-              {errors.subtitle_url && <p className="text-sm text-red-500">{errors.subtitle_url.message}</p>}
+              {errors.subtitle_url && <p className="text-sm text-danger">{errors.subtitle_url.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="transcript_url" className="flex items-center gap-1.5">
@@ -597,7 +620,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
                 disabled={isSubmitting}
                 {...register('transcript_url')}
               />
-              {errors.transcript_url && <p className="text-sm text-red-500">{errors.transcript_url.message}</p>}
+              {errors.transcript_url && <p className="text-sm text-danger">{errors.transcript_url.message}</p>}
             </div>
           </div>
 
@@ -662,9 +685,9 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               <div>
                 <span className="font-medium text-foreground">Status:</span>{' '}
                 <span className={
-                  video.processing_status === 'ready' ? 'text-emerald-600'
-                    : video.processing_status === 'failed' ? 'text-red-600'
-                      : 'text-amber-600'
+                  video.processing_status === 'ready' ? 'text-success'
+                    : video.processing_status === 'failed' ? 'text-danger'
+                      : 'text-warning'
                 }>
                   {video.processing_status}
                 </span>
@@ -687,7 +710,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={`h-full bg-primary rounded-full transition-all duration-300${
+                  className={`h-full bg-primary rounded-full transition-[width] duration-300${
                     uploadPhase === 'completing' || uploadPhase === 'confirming' ? ' animate-pulse' : ''
                   }`}
                   style={{ width: uploadPhase === 'completing' || uploadPhase === 'confirming' ? '100%' : `${uploadProgress ?? 0}%` }}
@@ -698,7 +721,7 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
 
           {/* Upload error message */}
           {uploadError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            <div className="rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
               {uploadError}
             </div>
           )}
@@ -716,5 +739,25 @@ export function VideoFormModal({ open, onClose, onSubmit, video, mode, defaultMo
         </form>
       </DialogContent>
     </Dialog>
+    {picker && video && (
+      <ContentMovePicker
+        kind={picker}
+        items={pickItems}
+        onClose={() => setPicker(null)}
+        onDone={(result) => {
+          // The form now shows the new module, so saving it does not move the video back
+          if (picker === 'video-move' && result.target.module_id) {
+            setValue('module_id', result.target.module_id)
+            // Its new place at the end of that module, so a save keeps it there
+            const moved = result.items.find((it) => it.id === video._id)
+            if (moved) setValue('display_order', moved.display_order)
+          }
+          setPlaceVersion((n) => n + 1)
+          setPicker(null)
+          onMoved?.()
+        }}
+      />
+    )}
+    </>
   )
 }

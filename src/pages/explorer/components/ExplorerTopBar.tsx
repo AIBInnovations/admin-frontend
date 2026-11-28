@@ -1,134 +1,72 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useRef } from 'react'
+import { ArrowLeft, Keyboard, RefreshCw, Share2, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ArrowLeft, Share2, RefreshCw, Keyboard } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { ExplorerBreadcrumb } from './ExplorerBreadcrumb'
-import { KeyboardHelpDialog } from './popovers/KeyboardHelpDialog'
+import { ExplorerFind } from './ExplorerFind'
+import { useActions } from '../actions/ActionsContext'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
+import { usePanelSelection } from '../context/PanelSelectionContext'
 import { copyShareLink } from '../copyShareLink'
 import { getParentUrl, type ExplorerFocus } from '../parseExplorerPath'
+import type { ExplorerData } from '../hooks/useExplorerData'
 
-interface ExplorerTopBarProps {
-  focus: ExplorerFocus
-  subjectName?: string
-  packageName?: string
-  seriesName?: string
-  moduleName?: string
-  videoName?: string
-  bookName?: string
-  onRefresh?: () => void
-  loading?: boolean
+interface BarButtonProps { label: string; icon: LucideIcon; onClick: () => void; disabled?: boolean; spin?: boolean }
+
+function BarButton({ label, icon: Icon, onClick, disabled, spin }: BarButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={label} onClick={onClick} disabled={disabled} className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground">
+          <Icon className={cn('h-4 w-4', spin && 'animate-spin')} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
-export function ExplorerTopBar({
-  focus,
-  subjectName,
-  packageName,
-  seriesName,
-  moduleName,
-  videoName,
-  bookName,
-  onRefresh,
-  loading,
-}: ExplorerTopBarProps) {
-  const navigate = useNavigate()
+export function ExplorerTopBar({ focus, data }: { focus: ExplorerFocus; data: ExplorerData }) {
+  const { go, handle, manual, clear } = usePanelSelection()
+  const { open } = useActions()
   const parentUrl = getParentUrl(focus)
-  const [helpOpen, setHelpOpen] = useState(false)
+  const findRef = useRef<HTMLInputElement>(null)
+  const showHelp = useCallback(() => open({ type: 'shortcuts' }), [open])
 
   useKeyboardNav({
-    onHelp: () => setHelpOpen(true),
-    upUrl: parentUrl ?? undefined,
+    onHelp: showHelp,
+    onFind: () => findRef.current?.focus(),
+    onSave: () => { if (handle?.dirty) void handle.save() },
+    onEscape: () => {
+      if (handle?.dirty) return
+      if (manual) clear()
+      else if (parentUrl) go(parentUrl)
+    },
   })
 
   return (
-    <div className="bg-white">
-      <div className="flex items-center gap-2 px-4 sm:px-5 h-12">
-        {parentUrl && (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                  onClick={() => navigate(parentUrl)}
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Go up</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
-        <div className="flex-1 min-w-0">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2">
+        {parentUrl && <BarButton label="Go up" icon={ArrowLeft} onClick={() => go(parentUrl)} />}
+        <div className="min-w-0 flex-[3] basis-48">
           <ExplorerBreadcrumb
             focus={focus}
-            subjectName={subjectName}
-            packageName={packageName}
-            seriesName={seriesName}
-            moduleName={moduleName}
-            videoName={videoName}
-            bookName={bookName}
+            subjectName={data.subjectName}
+            packageName={data.packageName}
+            seriesName={data.seriesName}
+            moduleName={data.moduleName}
+            videoName={data.videoName}
+            bookName={data.bookName}
           />
         </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          {onRefresh && (
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                    onClick={onRefresh}
-                    disabled={loading}
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Refresh</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                  onClick={() => copyShareLink('Link')}
-                >
-                  <Share2 className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Copy link</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                  onClick={() => setHelpOpen(true)}
-                >
-                  <Keyboard className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Keyboard shortcuts (?)</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        <div className="flex min-w-0 flex-1 basis-56 items-center gap-1 @3xl:max-w-sm">
+          <ExplorerFind inputRef={findRef} />
+          <BarButton label="Refresh" icon={RefreshCw} onClick={() => void data.refetch()} disabled={data.loading} spin={data.loading} />
+          <BarButton label="Copy link" icon={Share2} onClick={() => copyShareLink('Link')} />
+          <BarButton label="Keyboard shortcuts (?)" icon={Keyboard} onClick={showHelp} />
         </div>
       </div>
-
-      <KeyboardHelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
-    </div>
+    </TooltipProvider>
   )
 }

@@ -9,7 +9,6 @@ import { PaginationConfig } from './types';
 export function DataTablePagination({
   currentPage,
   totalPages,
-  totalCount,
   onPageChange,
 }: PaginationConfig) {
   const canGoPrevious = currentPage > 1;

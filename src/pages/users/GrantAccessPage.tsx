@@ -1,563 +1,225 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { History, Hash, Loader2, Mail, Phone, Search } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ErrorState, Section, StatusPill, type Tone } from '@/components/common/detail'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { toast } from 'sonner'
-import { Search, Package, BookOpen, Calendar, User as UserIcon, Phone, Mail, Hash, History } from 'lucide-react'
-import {
-  usersService, User, UserDetail, GrantPackageData, GrantEbookData, GrantSessionData,
-  UserPurchase, EbookPurchase, SessionPurchase,
-} from '@/services/users.service'
-import { GrantPackageModal } from '@/components/users/GrantPackageModal'
-import { GrantEbookModal } from '@/components/users/GrantEbookModal'
-import { GrantSessionModal } from '@/components/users/GrantSessionModal'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { GRANT_TYPES, type GrantType } from '@/components/users/GrantForm'
+import { PersonAvatar, RowsSkeleton, personName, useStudentSearch } from '@/components/users/kit'
+import { dayIST, unwrap, useResource } from '@/components/users/lib'
+import { formatINR, subscriptionLabel } from '@/lib/format'
+import { usersService, type User, type UserDetail } from '@/services/users.service'
+import { StudentLink } from '@/components/students/StudentLink'
 
-// Unified history item for display
 interface GrantHistoryItem {
   id: string
-  type: 'package' | 'ebook' | 'session'
+  type: GrantType
   name: string
   amount: number
-  currency: string
   invoiceCreated: boolean
   reason: string | null
   grantedAt: string
   expiresAt: string | null
   isActive: boolean
   isRevoked: boolean
-  revokedAt: string | null
   revokedReason: string | null
 }
 
-function formatDate(dateStr: string | null | undefined) {
-  if (!dateStr) return '—'
-  try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    })
-  } catch { return dateStr }
-}
+const TYPE_LABEL: Record<GrantType, string> = { package: 'Package', ebook: 'Ebook', session: 'Session' }
 
+/** Everything an admin has given this student, newest first. */
 function buildHistory(detail: UserDetail): GrantHistoryItem[] {
-  const items: GrantHistoryItem[] = []
-
-  // Admin-granted packages
-  ;(detail.purchases || []).forEach((p: UserPurchase) => {
-    if (!p.is_admin_granted) return
-    const pkg = typeof p.package_id === 'object' ? p.package_id : null
-    items.push({
-      id: p._id,
-      type: 'package',
-      name: pkg?.name || (p.package_id as string),
-      amount: p.amount_paid,
-      currency: p.currency || 'INR',
-      invoiceCreated: !!p.zoho_invoice_id,
-      reason: p.admin_grant_reason || null,
-      grantedAt: p.purchased_at,
-      expiresAt: p.expires_at || null,
-      isActive: p.is_active,
-      isRevoked: !!p.is_revoked,
-      revokedAt: p.revoked_at || null,
-      revokedReason: p.revoked_reason || null,
-    })
+  const common = (p: { _id: string; gateway_amount?: number | null; amount_paid: number; zoho_invoice_id?: string | null; admin_grant_reason?: string | null; purchased_at: string; createdAt: string; is_active: boolean; is_revoked?: boolean; revoked_reason?: string | null }) => ({
+    id: p._id, amount: Number(p.gateway_amount ?? p.amount_paid) || 0, invoiceCreated: !!p.zoho_invoice_id, reason: p.admin_grant_reason || null,
+    grantedAt: p.purchased_at || p.createdAt, isActive: p.is_active, isRevoked: !!p.is_revoked, revokedReason: p.revoked_reason || null,
   })
-
-  // Admin-granted ebooks
-  ;(detail.ebook_purchases || []).forEach((ep: EbookPurchase) => {
-    if (!ep.is_admin_granted) return
-    const book = typeof ep.book_id === 'object' ? ep.book_id : null
-    items.push({
-      id: ep._id,
-      type: 'ebook',
-      name: book?.title || (ep.book_id as string),
-      amount: ep.amount_paid,
-      currency: ep.currency || 'INR',
-      invoiceCreated: !!ep.zoho_invoice_id,
-      reason: ep.admin_grant_reason || null,
-      grantedAt: ep.purchased_at,
-      expiresAt: null,
-      isActive: ep.is_active,
-      isRevoked: !!ep.is_revoked,
-      revokedAt: ep.revoked_at || null,
-      revokedReason: ep.revoked_reason || null,
-    })
-  })
-
-  // Admin-granted sessions
-  ;(detail.session_purchases || []).forEach((sp: SessionPurchase) => {
-    if (!sp.is_admin_granted) return
-    const session = typeof sp.session_id === 'object' ? sp.session_id : null
-    items.push({
-      id: sp._id,
-      type: 'session',
-      name: session?.title || (sp.session_id as string),
-      amount: sp.amount_paid,
-      currency: sp.currency || 'INR',
-      invoiceCreated: !!sp.zoho_invoice_id,
-      reason: sp.admin_grant_reason || null,
-      grantedAt: sp.purchased_at,
-      expiresAt: null,
-      isActive: sp.is_active,
-      isRevoked: !!sp.is_revoked,
-      revokedAt: sp.revoked_at || null,
-      revokedReason: sp.revoked_reason || null,
-    })
-  })
-
-  // Sort by granted date descending
-  items.sort((a, b) => new Date(b.grantedAt).getTime() - new Date(a.grantedAt).getTime())
-  return items
+  const items: GrantHistoryItem[] = [
+    ...(detail.purchases || []).filter((p) => p.is_admin_granted).map((p) => ({ ...common(p), type: 'package' as const, name: subscriptionLabel(p.package_id && typeof p.package_id === 'object' ? p.package_id.name : 'Deleted package', p), expiresAt: p.expires_at || null })),
+    ...(detail.ebook_purchases || []).filter((p) => p.is_admin_granted).map((p) => ({ ...common(p), type: 'ebook' as const, name: p.book_id && typeof p.book_id === 'object' ? p.book_id.title : 'Deleted e-book', expiresAt: null })),
+    ...(detail.session_purchases || []).filter((p) => p.is_admin_granted).map((p) => ({ ...common(p), type: 'session' as const, name: p.session_id && typeof p.session_id === 'object' ? p.session_id.title : 'Deleted session', expiresAt: null })),
+  ]
+  return items.sort((a, b) => new Date(b.grantedAt).getTime() - new Date(a.grantedAt).getTime())
 }
 
+function statusOf(item: GrantHistoryItem): { label: string; tone: Tone } {
+  if (item.isRevoked) return { label: 'Revoked', tone: 'danger' }
+  if (item.expiresAt && new Date(item.expiresAt) < new Date()) return { label: 'Expired', tone: 'warning' }
+  return item.isActive ? { label: 'Active', tone: 'success' } : { label: 'Inactive', tone: 'neutral' }
+}
+
+/** Step 1 finds the student (kept in the URL), step 2 opens the grant page. */
 export function GrantAccessPage() {
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const userId = params.get('user') || ''
+  const type: GrantType = GRANT_TYPES.some((t) => t.value === params.get('type')) ? (params.get('type') as GrantType) : 'package'
+  const [query, setQuery] = useState('')
+  const { results, searching, searched, error: searchError } = useStudentSearch(userId ? '' : query)
 
-  // User search state
-  const [searchQuery, setSearchQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<User[]>([])
-  const [searching, setSearching] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const { data: detail, loading, error, status, reload } = useResource<UserDetail | null>(
+    async () => (userId ? unwrap(await usersService.getById(userId), 'User not found') : null), [userId],
+  )
+  const user = detail && detail._id === userId ? detail : null
+  const history = useMemo(() => (user ? buildHistory(user) : []), [user])
+  const notFound = !!userId && !loading && (status === 404 || status === 400)
 
-  // Grant history
-  const [userDetail, setUserDetail] = useState<UserDetail | null>(null)
-  const [loadingDetail, setLoadingDetail] = useState(false)
-  const [grantHistory, setGrantHistory] = useState<GrantHistoryItem[]>([])
+  // A chosen student fills the search box, as before
+  useEffect(() => { if (user) setQuery(user.name || user.phone_number || '') }, [user])
 
-  // Grant modal state
-  const [grantPackageOpen, setGrantPackageOpen] = useState(false)
-  const [grantEbookOpen, setGrantEbookOpen] = useState(false)
-  const [grantSessionOpen, setGrantSessionOpen] = useState(false)
-
-  // Debounce search
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(searchQuery)
-    }, 400)
-    return () => clearTimeout(debounceRef.current)
-  }, [searchQuery])
-
-  // Search users from API
-  const searchUsers = useCallback(async () => {
-    if (!debouncedQuery || debouncedQuery.length < 2) {
-      setSearchResults([])
-      return
-    }
-    try {
-      setSearching(true)
-      const response = await usersService.getAll({ search: debouncedQuery, limit: 10 })
-      if (response.success && response.data) {
-        setSearchResults(response.data.entities || [])
-      }
-    } catch {
-      toast.error('Failed to search users')
-    } finally {
-      setSearching(false)
-    }
-  }, [debouncedQuery])
-
-  useEffect(() => { searchUsers() }, [searchUsers])
-
-  // Fetch user detail when selected
-  const fetchUserDetail = useCallback(async () => {
-    if (!selectedUser) {
-      setUserDetail(null)
-      setGrantHistory([])
-      return
-    }
-    try {
-      setLoadingDetail(true)
-      const response = await usersService.getById(selectedUser._id)
-      if (response.success && response.data) {
-        setUserDetail(response.data)
-        setGrantHistory(buildHistory(response.data))
-      }
-    } catch {
-      // Non-blocking — history just won't show
-    } finally {
-      setLoadingDetail(false)
-    }
-  }, [selectedUser])
-
-  useEffect(() => { fetchUserDetail() }, [fetchUserDetail])
-
-  // Grant handlers — refresh history after success
-  const handleGrantPackage = async (data: GrantPackageData) => {
-    if (!selectedUser) return
-    try {
-      const response = await usersService.grantPackageAccess(selectedUser._id, data)
-      if (response.success) {
-        toast.success(`Package access granted to ${selectedUser.name || selectedUser.phone_number}`)
-        fetchUserDetail()
-        return
-      }
-      toast.error(response.message || 'Failed to grant package access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant package access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const handleGrantEbook = async (data: GrantEbookData) => {
-    if (!selectedUser) return
-    try {
-      const response = await usersService.grantEbookAccess(selectedUser._id, data)
-      if (response.success) {
-        toast.success(`Ebook access granted to ${selectedUser.name || selectedUser.phone_number}`)
-        fetchUserDetail()
-        return
-      }
-      toast.error(response.message || 'Failed to grant ebook access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant ebook access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const handleGrantSession = async (data: GrantSessionData) => {
-    if (!selectedUser) return
-    try {
-      const response = await usersService.grantSessionAccess(selectedUser._id, data)
-      if (response.success) {
-        toast.success(`Session access granted to ${selectedUser.name || selectedUser.phone_number}`)
-        fetchUserDetail()
-        return
-      }
-      toast.error(response.message || 'Failed to grant session access')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to grant session access')
-    }
-    throw new Error('Grant failed')
-  }
-
-  const userName = selectedUser?.name || selectedUser?.phone_number || 'User'
-
-  const typeBadge = (type: GrantHistoryItem['type']) => {
-    const colors = {
-      package: 'bg-blue-500/10 text-blue-700 border-blue-200',
-      ebook: 'bg-emerald-500/10 text-emerald-700 border-emerald-200',
-      session: 'bg-purple-500/10 text-purple-700 border-purple-200',
-    }
-    const labels = { package: 'Package', ebook: 'Ebook', session: 'Session' }
-    return <Badge variant="outline" className={`text-[10px] ${colors[type]}`}>{labels[type]}</Badge>
-  }
-
-  const statusBadge = (item: GrantHistoryItem) => {
-    if (item.isRevoked) return <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-600 border-red-200">Revoked</Badge>
-    if (!item.isActive) {
-      if (item.expiresAt && new Date(item.expiresAt) < new Date()) {
-        return <Badge variant="outline" className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-200">Expired</Badge>
-      }
-      return <Badge variant="outline" className="text-[10px] bg-gray-500/10 text-gray-600 border-gray-200">Inactive</Badge>
-    }
-    return <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-600 border-green-200">Active</Badge>
-  }
+  const patch = (next: Record<string, string | null>) => setParams((prev) => {
+    const p = new URLSearchParams(prev)
+    for (const [k, v] of Object.entries(next)) { if (v) p.set(k, v); else p.delete(k) }
+    return p
+  }, { replace: true })
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
       <PageHeader
         title="Grant Access"
         description="Search for a user and grant them access to packages, ebooks, or live sessions"
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/' },
-          { label: 'Users', href: '/users' },
-          { label: 'Grant Access' },
-        ]}
+        breadcrumbs={[{ label: 'Dashboard', href: '/' }, { label: 'Users', href: '/users' }, { label: 'Grant Access' }]}
       />
 
-      {/* Step 1: User Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Step 1: Find User</CardTitle>
-          <CardDescription>Search by name, email, phone number, or student ID</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section title="Step 1: Find User" description="Search by name, email, phone number, or student ID">
+        <div className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                if (selectedUser) setSelectedUser(null)
-              }}
-              className="pl-10"
+              aria-label="Find user" placeholder="Search users..." value={query} autoComplete="off" className="pl-10 pr-10"
+              onChange={(e) => { setQuery(e.target.value); if (userId) patch({ user: null }) }}
             />
+            {searching && <Loader2 aria-hidden="true" className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
           </div>
 
-          {/* Search Results */}
-          {searching && (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-lg" />
-              ))}
-            </div>
-          )}
+          <div aria-live="polite" className="space-y-2">
+            {searchError && <p className="text-sm text-danger">{searchError}</p>}
+            {!userId && searching && results.length === 0 && [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
+            {!userId && searched && !searching && !searchError && results.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">No users found for "{query.trim()}"</p>
+            )}
+            {!userId && results.length > 0 && (
+              <ul className="max-h-96 space-y-1 overflow-y-auto">
+                {results.map((u) => <li key={u._id}><UserOption user={u} onSelect={() => patch({ user: u._id })} /></li>)}
+              </ul>
+            )}
+          </div>
 
-          {!searching && !selectedUser && debouncedQuery.length >= 2 && searchResults.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No users found for "{debouncedQuery}"
-            </p>
-          )}
+          {userId && !user && loading && <Skeleton className="h-20 w-full rounded-lg" />}
+          {notFound && <ErrorState title="User not found" message="The account may have been deleted. Search for another user." />}
+          {userId && !user && !loading && !notFound && error && <ErrorState message={error} onRetry={() => reload()} />}
 
-          {!searching && !selectedUser && searchResults.length > 0 && (
-            <div className="space-y-1 max-h-80 overflow-y-auto">
-              {searchResults.map((user) => (
-                <button
-                  key={user._id}
-                  onClick={() => {
-                    setSelectedUser(user)
-                    setSearchResults([])
-                    setSearchQuery(user.name || user.phone_number)
-                  }}
-                  className="w-full flex items-center gap-4 rounded-lg border p-3 text-left transition-colors hover:bg-accent border-border"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <UserIcon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{user.name || 'Unnamed User'}</p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                      {user.phone_number && (
-                        <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{user.phone_number}</span>
-                      )}
-                      {user.email && (
-                        <span className="flex items-center gap-1 truncate"><Mail className="h-3 w-3" />{user.email}</span>
-                      )}
-                      {user.student_id && (
-                        <span className="flex items-center gap-1"><Hash className="h-3 w-3" />{user.student_id}</span>
-                      )}
-                    </div>
-                  </div>
-                  <Badge variant={user.is_active ? 'default' : 'destructive'} className="text-[10px] shrink-0">
-                    {user.is_active ? 'Active' : 'Blocked'}
-                  </Badge>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Selected User Card */}
-          {selectedUser && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-lg border border-primary bg-primary/5 p-4">
-              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <UserIcon className="h-5 w-5 sm:h-6 sm:w-6" />
-                </div>
+          {user && (
+            <div className="flex flex-col gap-3 rounded-lg border border-primary bg-accent p-4 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+                <PersonAvatar name={user.name} photo={user.photo_url} size="md" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{selectedUser.name || 'Unnamed User'}</p>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
-                    {selectedUser.phone_number && <span>{selectedUser.phone_number}</span>}
-                    {selectedUser.email && <span className="truncate">{selectedUser.email}</span>}
-                    {selectedUser.student_id && <span>ID: {selectedUser.student_id}</span>}
-                  </div>
+                  <p className="truncate"><StudentLink student={user} fallback="Unnamed User" from="Grant access" /></p>
+                  <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+                    {user.phone_number && <span>{user.phone_number}</span>}
+                    {user.email && <span className="min-w-0 truncate">{user.email}</span>}
+                    {user.student_id && <span>ID: {user.student_id}</span>}
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 ml-13 sm:ml-0">
-                <Badge variant={selectedUser.is_active ? 'default' : 'destructive'}>
-                  {selectedUser.is_active ? 'Active' : 'Blocked'}
-                </Badge>
-                <button
-                  onClick={() => navigate(`/users/${selectedUser._id}`)}
-                  className="text-xs text-primary hover:underline whitespace-nowrap"
-                >
-                  View Profile
-                </button>
+              <div className="flex items-center gap-3">
+                <StatusPill tone={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Blocked'}</StatusPill>
+                <Link to={`/users/${user._id}`} className="whitespace-nowrap text-[13px] font-medium text-primary hover:underline hover:underline-offset-4">View Profile</Link>
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      {/* Step 2: Choose Grant Type */}
-      {selectedUser && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Step 2: Grant Access</CardTitle>
-            <CardDescription>
-              Choose what to grant to <strong>{userName}</strong>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="package">
-              <TabsList className="w-full justify-start overflow-x-auto">
-                <TabsTrigger value="package" className="gap-1.5 sm:gap-2">
-                  <Package className="h-4 w-4" />
-                  Package
-                </TabsTrigger>
-                <TabsTrigger value="ebook" className="gap-1.5 sm:gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  Ebook
-                </TabsTrigger>
-                <TabsTrigger value="session" className="gap-1.5 sm:gap-2">
-                  <Calendar className="h-4 w-4" />
-                  <span className="hidden sm:inline">Live </span>Session
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="package" className="mt-6">
+      {user && (
+        <Section title="Step 2: Grant Access" description={<>Choose what to grant to <strong className="font-semibold text-foreground">{personName(user)}</strong></>}>
+          <Tabs value={type} onValueChange={(v) => patch({ type: v === 'package' ? null : v })}>
+            <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto sm:w-fit">
+              {GRANT_TYPES.map((t) => <TabsTrigger key={t.value} value={t.value} className="gap-1.5 sm:gap-2"><t.icon aria-hidden="true" className="h-4 w-4" />{t.value === 'session' ? <span><span className="hidden sm:inline">Live </span>Session</span> : t.label}</TabsTrigger>)}
+            </TabsList>
+            {GRANT_TYPES.map((t) => (
+              <TabsContent key={t.value} value={t.value} className="mt-5">
                 <div className="max-w-md space-y-3">
                   <div>
-                    <h3 className="font-medium">Grant Package Access</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Give the user access to a content package with a specific duration.
-                    </p>
+                    <h3 className="text-sm font-semibold">{t.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{t.description}</p>
                   </div>
-                  <button
-                    onClick={() => setGrantPackageOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <Package className="h-4 w-4" />
-                    Grant Package
-                  </button>
+                  <Button onClick={() => navigate(`/users/${user._id}/grant?type=${t.value}&from=grant-access`)}>
+                    <t.icon aria-hidden="true" />Grant {t.value === 'session' ? 'Session' : t.label}
+                  </Button>
                 </div>
               </TabsContent>
-
-              <TabsContent value="ebook" className="mt-6">
-                <div className="max-w-md space-y-3">
-                  <div>
-                    <h3 className="font-medium">Grant Ebook Access</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Give the user perpetual access to an ebook. Optionally create an invoice.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setGrantEbookOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    Grant Ebook
-                  </button>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="session" className="mt-6">
-                <div className="max-w-md space-y-3">
-                  <div>
-                    <h3 className="font-medium">Grant Live Session Access</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Give the user access to a live session with guaranteed enrollment. Optionally create an invoice.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setGrantSessionOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    Grant Session
-                  </button>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+            ))}
+          </Tabs>
+        </Section>
       )}
 
-      {/* Grant History */}
-      {selectedUser && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <History className="h-5 w-5" />
-              Admin Grant History
-            </CardTitle>
-            <CardDescription>
-              All admin-granted access for <strong>{userName}</strong>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingDetail ? (
-              <div className="space-y-2">
-                {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
-            ) : grantHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No admin grants found for this user.
-              </p>
+      {userId && !notFound && (user || loading) && (
+        <Section flush title={<span className="flex items-center gap-2"><History aria-hidden="true" className="h-4 w-4 text-muted-foreground" />Admin Grant History</span>} description={user ? <>All admin-granted access for <strong className="font-semibold text-foreground">{personName(user)}</strong></> : undefined}>
+          <div className="border-t border-border">
+            {!user ? <RowsSkeleton rows={2} /> : history.length === 0 ? (
+              <p className="px-5 py-9 text-center text-sm text-muted-foreground">No admin grants found for this user.</p>
             ) : (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Type</TableHead>
-                      <TableHead className="text-xs">Item</TableHead>
-                      <TableHead className="text-xs">Amount</TableHead>
-                      <TableHead className="text-xs">Invoice</TableHead>
-                      <TableHead className="text-xs">Reason</TableHead>
-                      <TableHead className="text-xs">Granted</TableHead>
-                      <TableHead className="text-xs">Expires</TableHead>
-                      <TableHead className="text-xs">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {grantHistory.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{typeBadge(item.type)}</TableCell>
-                        <TableCell className="text-sm font-medium max-w-48 truncate">{item.name}</TableCell>
-                        <TableCell className="text-sm">
-                          {item.amount > 0 ? `${item.currency} ${item.amount}` : 'Free'}
-                        </TableCell>
+              <Table className="min-w-[860px]">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    {['Type', 'Item', 'Amount', 'Invoice', 'Reason', 'Granted', 'Expires', 'Status'].map((h, i) => <TableHead key={h} scope="col" className={i === 0 ? 'pl-5' : ''}>{h}</TableHead>)}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((item) => {
+                    const s = statusOf(item)
+                    const open = () => navigate(`/commerce/purchases/${item.type}/${item.id}`)
+                    return (
+                      <TableRow
+                        key={`${item.type}:${item.id}`} tabIndex={0} aria-label={`Open ${item.name}`} onClick={open}
+                        onKeyDown={(e) => { if (e.key === 'Enter') open() }}
+                        className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2"
+                      >
+                        <TableCell className="whitespace-nowrap pl-5 text-sm text-muted-foreground">{TYPE_LABEL[item.type]}</TableCell>
+                        <TableCell className="max-w-72 text-sm font-medium"><span className="break-words">{item.name}</span></TableCell>
+                        <TableCell className="whitespace-nowrap text-sm tabular-nums">{item.amount > 0 ? formatINR(item.amount) : 'Free'}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{item.invoiceCreated ? 'Yes' : 'No'}</TableCell>
+                        <TableCell className="max-w-44 truncate text-sm text-muted-foreground" title={item.reason || undefined}>{item.reason || 'None'}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{dayIST(item.grantedAt)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{item.expiresAt ? dayIST(item.expiresAt) : 'Never'}</TableCell>
                         <TableCell>
-                          {item.invoiceCreated ? (
-                            <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200">Yes</Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-40 truncate" title={item.reason || undefined}>
-                          {item.reason || '—'}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {formatDate(item.grantedAt)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {item.expiresAt ? formatDate(item.expiresAt) : 'Never'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            {statusBadge(item)}
-                            {item.isRevoked && item.revokedReason && (
-                              <span className="text-[10px] text-muted-foreground truncate max-w-24" title={item.revokedReason}>
-                                {item.revokedReason}
-                              </span>
-                            )}
-                          </div>
+                          <StatusPill tone={s.tone}>{s.label}</StatusPill>
+                          {item.isRevoked && item.revokedReason && <p className="mt-0.5 max-w-40 truncate text-xs text-muted-foreground" title={item.revokedReason}>{item.revokedReason}</p>}
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       )}
+    </div>
+  )
+}
 
-      {/* Grant Modals */}
-      <GrantPackageModal
-        open={grantPackageOpen}
-        onClose={() => setGrantPackageOpen(false)}
-        onSubmit={handleGrantPackage}
-        userName={userName}
-      />
-      <GrantEbookModal
-        open={grantEbookOpen}
-        onClose={() => setGrantEbookOpen(false)}
-        onSubmit={handleGrantEbook}
-        userName={userName}
-      />
-      <GrantSessionModal
-        open={grantSessionOpen}
-        onClose={() => setGrantSessionOpen(false)}
-        onSubmit={handleGrantSession}
-        userName={userName}
-      />
+function UserOption({ user, onSelect }: { user: User; onSelect: () => void }) {
+  return (
+    // The row picks the student for the grant; the name above it opens the student page
+    <div className="relative flex w-full items-center gap-4 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/50">
+      <button type="button" onClick={onSelect} aria-label={`Choose ${user.name || user.phone_number || 'this user'}`} className="absolute inset-0 rounded-lg" />
+      <span className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-4">
+      <PersonAvatar name={user.name} photo={user.photo_url} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm"><StudentLink student={user} fallback="Unnamed User" from="Grant access" className="pointer-events-auto" /></span>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          {user.phone_number && <span className="flex items-center gap-1"><Phone aria-hidden="true" className="h-3 w-3" />{user.phone_number}</span>}
+          {user.email && <span className="flex min-w-0 items-center gap-1 truncate"><Mail aria-hidden="true" className="h-3 w-3 shrink-0" />{user.email}</span>}
+          {user.student_id && <span className="flex items-center gap-1"><Hash aria-hidden="true" className="h-3 w-3" />{user.student_id}</span>}
+        </span>
+      </span>
+      <StatusPill tone={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Blocked'}</StatusPill>
+      </span>
     </div>
   )
 }

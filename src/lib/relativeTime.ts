@@ -64,3 +64,18 @@ export const EXPIRY_BADGE_CLASS: Record<ExpiryStatus, string> = {
   ok: 'bg-emerald-100 text-emerald-700',
   lifetime: 'bg-teal-100 text-teal-700',
 }
+
+const rtf = new Intl.RelativeTimeFormat('en-IN', { numeric: 'auto' })
+
+/** "2 hours ago", "yesterday", "in 3 days". For moments, not expiry days. */
+export function relativeTime(iso: string | Date | null | undefined): string {
+  if (!iso) return '—'
+  const ms = new Date(iso).getTime() - Date.now()
+  if (Number.isNaN(ms)) return '—'
+  const abs = Math.abs(ms)
+  if (abs < 60_000) return 'just now'
+  if (abs < 3_600_000) return rtf.format(Math.round(ms / 60_000), 'minute')
+  if (abs < 86_400_000) return rtf.format(Math.round(ms / 3_600_000), 'hour')
+  if (abs < 30 * 86_400_000) return rtf.format(Math.round(ms / 86_400_000), 'day')
+  return formatDate(iso)
+}

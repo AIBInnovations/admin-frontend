@@ -1,6 +1,9 @@
 import axios from 'axios'
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams, PopulatedRef, DeleteImpactResponse, PublishStatus } from '@/types/api.types'
+import type { SessionRepeat } from '@/components/sessions/weeklySchedule'
+
+export type { SessionRepeat }
 
 export type VisibleTo = 'all' | 'subject' | 'package'
 
@@ -41,6 +44,26 @@ export interface LiveSession {
   publish_status: PublishStatus
   createdAt: string
   updatedAt: string
+  // Weekly series (round 6). For a repeating session the stored times are the
+  // series (first class start, last class end) and duration_minutes is one
+  // class; the fields below say what is happening now.
+  repeat?: SessionRepeat | null
+  /** "Every Wednesday, 7:00 PM to 9:00 PM" */
+  schedule_label?: string | null
+  /** "May run until 10:00 PM" */
+  overtime_label?: string | null
+  /** The class running now (or in its overtime), else the next; null when over */
+  next_class_start?: string | null
+  next_class_end?: string | null
+  class_number?: number | null
+  classes_total?: number | null
+  class_state?: 'upcoming' | 'running' | 'buffer' | 'over' | null
+  /** Live now: during the class, or in its overtime while Zoom says it is still on */
+  class_live?: boolean
+  class_zoom_running?: boolean
+  join_closes_at?: string | null
+  /** What students see now (live only during a class); `status` stays as stored */
+  effective_status?: LiveSession['status']
 }
 
 export interface LiveSessionFormData {
@@ -56,8 +79,9 @@ export interface LiveSessionFormData {
   auto_admit_users?: boolean
   allow_join_before_host?: boolean
   meeting_link?: string
-  thumbnail_url?: string
-  thumbnail_s3_key?: string
+  /** null clears a saved thumbnail. */
+  thumbnail_url?: string | null
+  thumbnail_s3_key?: string | null
   visible_to?: VisibleTo
   visible_to_subjects?: string[]
   visible_to_packages?: string[]
@@ -68,6 +92,8 @@ export interface LiveSessionFormData {
   allow_waitlist?: boolean
   guaranteed_seats_for_paid?: boolean
   publish_status?: PublishStatus
+  /** Weekly repeat; null turns it off. The server derives the stored times from it. */
+  repeat?: SessionRepeat | null
 }
 
 export interface EnrolleeUser {
@@ -137,7 +163,7 @@ class LiveSessionsService {
         },
       }
     }
-    return response as ApiResponse<ListResponse<LiveSession>>
+    return response as unknown as ApiResponse<ListResponse<LiveSession>>
   }
 
   async getById(sessionId: string): Promise<ApiResponse<LiveSession>> {
@@ -145,7 +171,7 @@ class LiveSessionsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.session }
     }
-    return response as ApiResponse<LiveSession>
+    return response as unknown as ApiResponse<LiveSession>
   }
 
   async getEnrollees(sessionId: string, enrollmentStatus?: string): Promise<ApiResponse<EnrolleesResponse>> {
@@ -158,7 +184,7 @@ class LiveSessionsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.session }
     }
-    return response as ApiResponse<LiveSession>
+    return response as unknown as ApiResponse<LiveSession>
   }
 
   async update(sessionId: string, data: Partial<LiveSessionFormData>): Promise<ApiResponse<LiveSession>> {
@@ -166,7 +192,7 @@ class LiveSessionsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.session }
     }
-    return response as ApiResponse<LiveSession>
+    return response as unknown as ApiResponse<LiveSession>
   }
 
   async cancel(sessionId: string): Promise<ApiResponse<LiveSession>> {
@@ -174,7 +200,7 @@ class LiveSessionsService {
     if (response.success && response.data) {
       return { ...response, data: response.data.session }
     }
-    return response as ApiResponse<LiveSession>
+    return response as unknown as ApiResponse<LiveSession>
   }
 
   /**

@@ -1,5 +1,6 @@
 import { apiService, ApiResponse } from './api.service'
 import type { BaseListParams } from '@/types/api.types'
+import type { FeedbackPriority, FeedbackStatus } from './feedback.service'
 
 // ─── Shared sub-types ────────────────────────────────────────────────────────
 
@@ -52,6 +53,9 @@ export interface VideoReview {
   feedback: string | null
   feedback_submitted_at: string | null
   createdAt: string
+  /** Follow-up in the Feedback module. Absent on an older backend. */
+  status?: FeedbackStatus
+  priority?: FeedbackPriority
   user: ReviewUser
   video: ReviewVideo
   faculty: ReviewFaculty | null

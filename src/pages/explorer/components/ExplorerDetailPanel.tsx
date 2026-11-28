@@ -1,63 +1,48 @@
-import { MousePointerClick } from 'lucide-react'
 import { usePanelSelection } from '../context/PanelSelectionContext'
-import { SubjectPanel } from '../panel/SubjectPanel'
-import { PackagePanel } from '../panel/PackagePanel'
-import { SeriesPanel } from '../panel/SeriesPanel'
-import { ModulePanel } from '../panel/ModulePanel'
-import { VideoPanel } from '../panel/VideoPanel'
+import type { ExplorerData } from '../hooks/useExplorerData'
 import { BookPanel } from '../panel/BookPanel'
 import { DocumentPanel, type DocPanelEntity } from '../panel/DocumentPanel'
-import type { Subject, SubjectDetail } from '@/services/subjects.service'
-import type { Package, PackageDetail, PackageDetailSeries, PackageDetailModule, PackageDetailVideo } from '@/services/packages.service'
+import { ModulePanel } from '../panel/ModulePanel'
+import { PackagePanel } from '../panel/PackagePanel'
+import { SeriesPanel } from '../panel/SeriesPanel'
+import { SubjectPanel } from '../panel/SubjectPanel'
+import { UpcomingVideoPanel } from '../panel/UpcomingVideoPanel'
+import { VideoPanel } from '../panel/VideoPanel'
+import { targetKey } from '../panel/panelTypes'
+import type { ExplorerFocus } from '../parseExplorerPath'
+import type { AnyPackage } from '../types'
 import type { Book } from '@/services/books.service'
+import type { PackageDetailModule, PackageDetailSeries, PackageDetailVideo } from '@/services/packages.service'
+import type { Subject } from '@/services/subjects.service'
+import { useExplorerAccess } from '../access'
+import { NoAccess } from './ExplorerEmptyState'
+import { PanelSkeleton } from './ExplorerSkeleton'
+import { ExplorerSummary } from './ExplorerSummary'
 
-interface ExplorerDetailPanelProps {
-  onRefresh?: () => void
-}
-
-/**
- * Resolves the current panel target (from PanelSelectionContext) to the right
- * entity editor. The target carries the entity object by reference, so no
- * extra fetch is needed to render.
- */
-export function ExplorerDetailPanel({ onRefresh }: ExplorerDetailPanelProps) {
-  const { target, clear } = usePanelSelection()
+/** The docked editor: the form of whatever is selected, or the folder at a glance. */
+export function ExplorerDetailPanel({ focus, data }: { focus: ExplorerFocus; data: ExplorerData }) {
+  const { target, waiting } = usePanelSelection()
+  const { can } = useExplorerAccess()
+  const refresh = data.refetch
 
   if (!target) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full px-6 text-center text-slate-400">
-        <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
-          <MousePointerClick className="w-6 h-6 text-slate-300" />
-        </div>
-        <p className="text-sm font-medium text-slate-500">Nothing selected</p>
-        <p className="text-xs mt-1 max-w-[16rem] leading-relaxed">
-          Pick an item from the list to view and edit its details here.
-        </p>
-      </div>
-    )
+    if (waiting) return <PanelSkeleton />
+    if (focus.level === 'root' || focus.level === 'books' || focus.level === 'book') return <ExplorerSummary focus={focus} data={data} />
+    return <p className="px-6 py-14 text-center text-sm text-muted-foreground">Details appear here once the folder has loaded.</p>
   }
+  if (target.kind !== 'upcoming' && !can(target.kind, 'read')) return <NoAccess what={`${target.kind}s`.replace('seriess', 'series')} />
 
+  // A new key per item: each form starts from that item's own values.
+  const key = targetKey(target)!
+  const entity = target.entity
   switch (target.kind) {
-    case 'subject':
-      return <SubjectPanel entity={target.entity as Subject | SubjectDetail | null} onRefresh={onRefresh} onClose={clear} />
-    case 'package':
-      return <PackagePanel entity={target.entity as Package | PackageDetail | null} ctx={target.ctx} onRefresh={onRefresh} onClose={clear} />
-    case 'series':
-      return <SeriesPanel entity={target.entity as PackageDetailSeries | null} ctx={target.ctx} onRefresh={onRefresh} onClose={clear} />
-    case 'module':
-      return <ModulePanel entity={target.entity as PackageDetailModule | null} ctx={target.ctx} onRefresh={onRefresh} onClose={clear} />
-    case 'video':
-      return target.entity
-        ? <VideoPanel entity={target.entity as PackageDetailVideo} onRefresh={onRefresh} onClose={clear} />
-        : null
-    case 'document':
-      // Documents are always edited (no blank create in Phase 1).
-      return target.entity
-        ? <DocumentPanel entity={target.entity as DocPanelEntity} onRefresh={onRefresh} onClose={clear} />
-        : null
-    case 'book':
-      return <BookPanel entity={target.entity as Book | null} onRefresh={onRefresh} onClose={clear} />
-    default:
-      return null
+    case 'subject': return <SubjectPanel key={key} entity={entity as Subject | null} onRefresh={refresh} />
+    case 'package': return <PackagePanel key={key} entity={entity as AnyPackage | null} ctx={target.ctx} onRefresh={refresh} />
+    case 'series': return <SeriesPanel key={key} entity={entity as PackageDetailSeries | null} ctx={target.ctx} onRefresh={refresh} />
+    case 'module': return <ModulePanel key={key} entity={entity as PackageDetailModule | null} ctx={target.ctx} onRefresh={refresh} />
+    case 'video': return <VideoPanel key={key} entity={entity as PackageDetailVideo} onRefresh={refresh} />
+    case 'upcoming': return <UpcomingVideoPanel key={key} ctx={target.ctx} onRefresh={refresh} />
+    case 'document': return <DocumentPanel key={key} entity={entity as DocPanelEntity} onRefresh={refresh} />
+    case 'book': return <BookPanel key={key} entity={entity as Book | null} onRefresh={refresh} />
   }
 }

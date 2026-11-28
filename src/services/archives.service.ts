@@ -1,9 +1,11 @@
 import { apiService, ApiResponse } from './api.service'
 import type { ListResponse, BaseListParams } from '@/types/api.types'
 
+export type ArchivedType = 'video' | 'document' | 'banner' | 'live_session' | 'workshop'
+
 export interface ArchivedItem {
   _id: string
-  _type: 'video' | 'document' | 'banner' | 'live_session'
+  _type: ArchivedType
   title: string
   archivedAt: string
   createdAt: string
@@ -24,6 +26,10 @@ export interface ArchivedItem {
   scheduled_start_time?: string
   status?: string
   platform?: string
+  // Workshop-specific (its days are archived with it and are not listed alone)
+  start_date?: string
+  end_date?: string
+  day_count?: number
 }
 
 export interface ArchiveCounts {
@@ -31,11 +37,22 @@ export interface ArchiveCounts {
   document: number
   banner: number
   live_session: number
+  /** Older API versions leave it out. */
+  workshop?: number
   total: number
 }
 
 export interface ArchivesListParams extends BaseListParams {
-  type?: 'video' | 'document' | 'banner' | 'live_session' | 'all'
+  type?: ArchivedType | 'all'
+}
+
+/** Where each type's restore, delete and delete-impact endpoints live. */
+export const ARCHIVE_PATH: Record<ArchivedType, string> = {
+  video: 'videos',
+  document: 'documents',
+  banner: 'banners',
+  live_session: 'live-sessions',
+  workshop: 'workshops',
 }
 
 class ArchivesService {
@@ -61,14 +78,12 @@ class ArchivesService {
     return apiService.get<ArchiveCounts>(`${this.basePath}/counts`)
   }
 
-  async restore(type: 'video' | 'document' | 'banner' | 'live_session', id: string): Promise<ApiResponse<void>> {
-    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners', live_session: 'live-sessions' }
-    return apiService.patch<void>(`admin/${typePathMap[type]}/${id}/restore`, {})
+  async restore(type: ArchivedType, id: string): Promise<ApiResponse<void>> {
+    return apiService.patch<void>(`admin/${ARCHIVE_PATH[type]}/${id}/restore`, {})
   }
 
-  async permanentDelete(type: 'video' | 'document' | 'banner' | 'live_session', id: string): Promise<ApiResponse<void>> {
-    const typePathMap = { video: 'videos', document: 'documents', banner: 'banners', live_session: 'live-sessions' }
-    return apiService.delete<void>(`admin/${typePathMap[type]}/${id}`)
+  async permanentDelete(type: ArchivedType, id: string): Promise<ApiResponse<void>> {
+    return apiService.delete<void>(`admin/${ARCHIVE_PATH[type]}/${id}`)
   }
 }
 

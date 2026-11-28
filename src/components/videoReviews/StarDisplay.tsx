@@ -12,16 +12,17 @@ export function StarDisplay({ rating, size = 'sm', className }: StarDisplayProps
   const px = size === 'sm' ? 12 : 16
 
   return (
-    <div className={cn('flex items-center gap-0.5', className)}>
+    <div
+      role="img"
+      aria-label={rating === null ? 'Not rated' : `${Number.isInteger(rating) ? rating : rating.toFixed(1)} out of 5 stars`}
+      className={cn('flex items-center gap-0.5', className)}
+    >
       {Array.from({ length: 5 }, (_, i) => (
         <Star
           key={i}
+          aria-hidden="true"
           style={{ width: px, height: px }}
-          className={
-            i < filled
-              ? 'fill-amber-400 text-amber-400'
-              : 'fill-none text-muted-foreground/40'
-          }
+          className={i < filled ? 'fill-warning text-warning' : 'fill-none text-muted-foreground/40'}
         />
       ))}
     </div>

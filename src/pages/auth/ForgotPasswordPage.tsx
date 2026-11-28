@@ -8,15 +8,8 @@ import { authService } from "@/services/auth.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { AuthCard } from "./AuthCard";
 
 // Step 1: email form
 const emailSchema = z.object({
@@ -112,164 +105,119 @@ export function ForgotPasswordPage() {
     }
   };
 
+  const problem = error && (
+    <p role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
+      <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+      <span className="min-w-0 break-words">{error}</span>
+    </p>
+  );
+  const emailError = emailForm.formState.errors.email?.message;
+  const newError = passwordForm.formState.errors.new_password?.message;
+  const confirmError = passwordForm.formState.errors.confirm_password?.message;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <div className="flex justify-center mb-4">
-            <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">P</span>
-            </div>
+    <AuthCard
+      title={step === "success" ? "Password Reset" : "Forgot Password"}
+      description={
+        step === "email" ? "Enter your admin email to receive an OTP on your registered phone"
+          : step === "otp" ? `Sending OTP to ${maskedPhone}…`
+            : step === "new_password" ? "OTP verified. Set your new password."
+              : "Your password has been reset successfully."
+      }
+    >
+      {/* Email Step */}
+      {step === "email" && (
+        <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} noValidate className="space-y-5">
+          {problem}
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-[13px] font-medium">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="admin@pgme.com"
+              autoComplete="email"
+              autoFocus
+              disabled={emailForm.formState.isSubmitting}
+              aria-invalid={emailError ? true : undefined}
+              aria-describedby={emailError ? "email-error" : undefined}
+              className="h-10"
+              {...emailForm.register("email")}
+            />
+            {emailError && <p id="email-error" role="alert" className="text-xs text-danger">{emailError}</p>}
           </div>
-          <CardTitle className="text-2xl font-bold text-center">
-            {step === "success" ? "Password Reset" : "Forgot Password"}
-          </CardTitle>
-          <CardDescription className="text-center">
-            {step === "email" && "Enter your admin email to receive an OTP on your registered phone"}
-            {step === "otp" && `Sending OTP to ${maskedPhone}…`}
-            {step === "new_password" && "OTP verified. Set your new password."}
-            {step === "success" && "Your password has been reset successfully."}
-          </CardDescription>
-        </CardHeader>
+          <Button type="submit" className="h-10 w-full" disabled={emailForm.formState.isSubmitting}>
+            {emailForm.formState.isSubmitting && <Loader2 aria-hidden="true" className="animate-spin" />}
+            {emailForm.formState.isSubmitting ? "Sending OTP…" : "Send OTP"}
+          </Button>
+          <div className="text-center">
+            <Link to="/login" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+              <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+              Back to login
+            </Link>
+          </div>
+        </form>
+      )}
 
-        <CardContent>
-          {/* Email Step */}
-          {step === "email" && (
-            <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+      {/* OTP Widget Loading Step */}
+      {step === "otp" && (
+        <div role="status" className="flex flex-col items-center gap-4 py-6">
+          <Loader2 aria-hidden="true" className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-center text-sm text-muted-foreground">
+            Opening OTP verification for <span className="font-medium text-foreground">{maskedPhone}</span>
+          </p>
+        </div>
+      )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@pgme.com"
-                  autoComplete="email"
-                  disabled={emailForm.formState.isSubmitting}
-                  {...emailForm.register("email")}
-                />
-                {emailForm.formState.errors.email && (
-                  <p className="text-sm text-red-500">
-                    {emailForm.formState.errors.email.message}
-                  </p>
-                )}
-              </div>
+      {/* New Password Step */}
+      {step === "new_password" && (
+        <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} noValidate className="space-y-5">
+          {problem}
+          <div className="space-y-1.5">
+            <Label htmlFor="new_password" className="text-[13px] font-medium">New Password</Label>
+            <Input
+              id="new_password"
+              type="password"
+              placeholder="Enter new password"
+              autoComplete="new-password"
+              autoFocus
+              disabled={passwordForm.formState.isSubmitting}
+              aria-invalid={newError ? true : undefined}
+              aria-describedby={newError ? "new-error" : "new-hint"}
+              className="h-10"
+              {...passwordForm.register("new_password")}
+            />
+            {newError ? <p id="new-error" role="alert" className="text-xs text-danger">{newError}</p> : <p id="new-hint" className="text-xs text-muted-foreground">At least 8 characters</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm_password" className="text-[13px] font-medium">Confirm Password</Label>
+            <Input
+              id="confirm_password"
+              type="password"
+              placeholder="Confirm new password"
+              autoComplete="new-password"
+              disabled={passwordForm.formState.isSubmitting}
+              aria-invalid={confirmError ? true : undefined}
+              aria-describedby={confirmError ? "confirm-error" : undefined}
+              className="h-10"
+              {...passwordForm.register("confirm_password")}
+            />
+            {confirmError && <p id="confirm-error" role="alert" className="text-xs text-danger">{confirmError}</p>}
+          </div>
+          <Button type="submit" className="h-10 w-full" disabled={passwordForm.formState.isSubmitting}>
+            {passwordForm.formState.isSubmitting && <Loader2 aria-hidden="true" className="animate-spin" />}
+            {passwordForm.formState.isSubmitting ? "Resetting password…" : "Reset Password"}
+          </Button>
+        </form>
+      )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={emailForm.formState.isSubmitting}
-              >
-                {emailForm.formState.isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending OTP…
-                  </>
-                ) : (
-                  "Send OTP"
-                )}
-              </Button>
-
-              <div className="text-center">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
-                >
-                  <ArrowLeft className="h-3 w-3" />
-                  Back to login
-                </Link>
-              </div>
-            </form>
-          )}
-
-          {/* OTP Widget Loading Step */}
-          {step === "otp" && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground text-center">
-                Opening OTP verification for <span className="font-medium">{maskedPhone}</span>
-              </p>
-            </div>
-          )}
-
-          {/* New Password Step */}
-          {step === "new_password" && (
-            <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="new_password">New Password</Label>
-                <Input
-                  id="new_password"
-                  type="password"
-                  placeholder="Enter new password"
-                  autoComplete="new-password"
-                  disabled={passwordForm.formState.isSubmitting}
-                  {...passwordForm.register("new_password")}
-                />
-                {passwordForm.formState.errors.new_password && (
-                  <p className="text-sm text-red-500">
-                    {passwordForm.formState.errors.new_password.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirm_password">Confirm Password</Label>
-                <Input
-                  id="confirm_password"
-                  type="password"
-                  placeholder="Confirm new password"
-                  autoComplete="new-password"
-                  disabled={passwordForm.formState.isSubmitting}
-                  {...passwordForm.register("confirm_password")}
-                />
-                {passwordForm.formState.errors.confirm_password && (
-                  <p className="text-sm text-red-500">
-                    {passwordForm.formState.errors.confirm_password.message}
-                  </p>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={passwordForm.formState.isSubmitting}
-              >
-                {passwordForm.formState.isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Resetting password…
-                  </>
-                ) : (
-                  "Reset Password"
-                )}
-              </Button>
-            </form>
-          )}
-
-          {/* Success Step */}
-          {step === "success" && (
-            <div className="flex flex-col items-center gap-4 py-4">
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <p className="text-sm text-center text-muted-foreground">
-                You can now sign in with your new password.
-              </p>
-              <Button className="w-full" onClick={() => navigate("/login")}>
-                Go to Login
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      {/* Success Step */}
+      {step === "success" && (
+        <div className="flex flex-col items-center gap-4 py-2">
+          <CheckCircle2 aria-hidden="true" className="h-12 w-12 text-success" />
+          <p className="text-center text-sm text-muted-foreground">You can now sign in with your new password.</p>
+          <Button className="h-10 w-full" onClick={() => navigate("/login")}>Go to Login</Button>
+        </div>
+      )}
+    </AuthCard>
   );
 }

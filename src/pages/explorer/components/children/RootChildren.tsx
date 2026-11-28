@@ -1,97 +1,42 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Input } from '@/components/ui/input'
+import { BookCopy, BookOpen, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, BookOpen, BookCopy } from 'lucide-react'
-import { SubjectRow } from '../rows/SubjectRow'
-import { ExplorerEmptyState } from '../ExplorerEmptyState'
-import { SubjectsGridSkeleton } from '../ExplorerSkeleton'
-import { ExplorerLibraryRail } from '../ExplorerLibraryRail'
+import { useExplorerAccess } from '../../access'
 import { usePanelSelection } from '../../context/PanelSelectionContext'
-import { EXPLORER_BASE } from '../../parseExplorerPath'
-import type { Subject } from '@/services/subjects.service'
-import type { Document } from '@/services/documents.service'
-import type { ExplorerFocus } from '../../parseExplorerPath'
+import type { ExplorerData } from '../../hooks/useExplorerData'
+import { useUrlState } from '../../hooks/useUrlState'
+import { EXPLORER_BASE, type ExplorerFocus } from '../../parseExplorerPath'
+import { ExplorerEmptyState } from '../ExplorerEmptyState'
+import { ExplorerLibraryRail } from '../ExplorerLibraryRail'
+import { ChildrenListSkeleton } from '../ExplorerSkeleton'
+import { ListToolbar } from '../ListToolbar'
+import { SubjectRow } from '../rows/rows'
+import { matches } from './shared'
 
-interface RootChildrenProps {
-  subjects: Subject[] | undefined
-  loading: boolean
-  focus: ExplorerFocus
-  onRefresh?: () => void
-  libraryDocuments?: Document[]
-}
-
-export function RootChildren({ subjects, loading, focus, onRefresh, libraryDocuments }: RootChildrenProps) {
-  const [search, setSearch] = useState('')
-  const { select } = usePanelSelection()
-  const navigate = useNavigate()
-
-  const newSubject = () => select({ kind: 'subject', entity: null })
-
-  const filtered = subjects?.filter((s) =>
-    search.length < 1 ? true : s.name.toLowerCase().includes(search.toLowerCase()),
-  )
+export function RootChildren({ data, focus }: { data: ExplorerData; focus: ExplorerFocus }) {
+  const { can } = useExplorerAccess()
+  const { create, go } = usePanelSelection()
+  const [search, setSearch] = useUrlState('q')
+  const { subjects } = data
+  const filtered = (subjects ?? []).filter((s) => matches(s.name, search))
+  const canCreate = can('subject', 'create')
 
   return (
     <>
-      <div>
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9 h-8 text-sm"
-              placeholder="Search subjects…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 shrink-0 border-slate-200 text-slate-600 hover:bg-slate-50"
-            onClick={() => navigate(`${EXPLORER_BASE}/books`)}
-          >
-            <BookCopy className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Books</span>
-          </Button>
-          <Button size="sm" className="gap-1.5 shrink-0" onClick={newSubject}>
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">New Subject</span>
-          </Button>
-        </div>
+      <ListToolbar search={search} onSearch={setSearch} placeholder="Search subjects">
+        {can('book', 'read') && <Button size="sm" variant="outline" className="h-9" onClick={() => go(`${EXPLORER_BASE}/books`)}><BookCopy className="h-4 w-4" /> Books</Button>}
+        {canCreate && <Button size="sm" className="h-9" onClick={() => create('subject')}><Plus className="h-4 w-4" /> New Subject</Button>}
+      </ListToolbar>
 
-        {/* List */}
-        {loading && !subjects ? (
-          <SubjectsGridSkeleton />
-        ) : filtered && filtered.length > 0 ? (
-          <div className="py-1.5">
-            {filtered.map((subject) => (
-              <SubjectRow
-                key={subject._id}
-                subject={subject}
-                parentFocus={focus}
-                onRefresh={onRefresh}
-              />
-            ))}
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {!subjects ? <ChildrenListSkeleton /> : filtered.length > 0 ? (
+          <ul aria-label="Subjects" className="py-1.5">{filtered.map((s) => <li key={s._id}><SubjectRow subject={s} parentFocus={focus} /></li>)}</ul>
+        ) : subjects.length > 0 ? (
+          <ExplorerEmptyState icon={BookOpen} title="No subjects match" description={`Nothing here is called "${search}".`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
         ) : (
-          <ExplorerEmptyState
-            icon={BookOpen}
-            title={search ? 'No subjects match' : 'No subjects yet'}
-            description={
-              search
-                ? `No results for "${search}". Try a different search.`
-                : 'Create your first subject to start organising your content.'
-            }
-            action={search ? undefined : { label: 'Create subject', onClick: newSubject }}
-          />
+          <ExplorerEmptyState icon={BookOpen} title="No subjects yet" description="A subject holds packages, and packages hold series, modules and videos." action={canCreate ? { label: 'Create subject', onClick: () => create('subject') } : undefined} />
         )}
+        {can('document', 'read') && <ExplorerLibraryRail documents={data.libraryDocuments ?? []} />}
       </div>
-
-      {libraryDocuments && libraryDocuments.length > 0 && (
-        <ExplorerLibraryRail documents={libraryDocuments} onRefresh={onRefresh} />
-      )}
     </>
   )
 }

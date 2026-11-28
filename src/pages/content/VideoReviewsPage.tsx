@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,7 +22,9 @@ import { packagesService } from '@/services/packages.service'
 import { seriesService } from '@/services/series.service'
 import { modulesService } from '@/services/modules.service'
 import type { ViewMode } from '@/components/videoReviews/ViewModeToggle'
-import { toast } from 'sonner'
+import { apiErrorMessage, ErrorState } from '@/components/common/detail'
+import { useLatestFetch } from '@/hooks/useLatestFetch'
+import { useResetPageOnChange } from '@/hooks/useResetPageOnChange'
 import { Search, MessageSquare } from 'lucide-react'
 
 // Minimal option shape for filter dropdowns
@@ -38,8 +41,8 @@ const SORT_OPTIONS = [
 
 type DrillDown =
   | { type: 'none' }
-  | { type: 'video'; id: string; label: string }
-  | { type: 'teacher'; id: string; label: string }
+  | { type: 'video'; id: string; label?: string }
+  | { type: 'teacher'; id: string; label?: string }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
 
@@ -89,11 +92,11 @@ function EmptyReviews({ search }: { search: string }) {
       <MessageSquare className="h-12 w-12 text-muted-foreground/30 mb-4" />
       <p className="text-sm font-medium text-muted-foreground">No reviews found</p>
       {search ? (
-        <p className="text-xs text-muted-foreground/70 mt-1">
-          Try adjusting your search term
+        <p className="text-xs text-muted-foreground mt-1">
+          Try adjusting your search or filters
         </p>
       ) : (
-        <p className="text-xs text-muted-foreground/70 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Reviews will appear here once users start rating videos
         </p>
       )}
@@ -104,13 +107,36 @@ function EmptyReviews({ search }: { search: string }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function VideoReviewsPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [drillDown, setDrillDown] = useState<DrillDown>({ type: 'none' })
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  // The view lives in the URL, so Back, refresh and sharing work
+  const [params, setParams] = useSearchParams()
+  const modeParam = params.get('mode')
+  const viewMode: ViewMode = modeParam === 'by-video' || modeParam === 'by-teacher' ? modeParam : 'list'
+  const [drillLabel, setDrillLabel] = useState<{ id: string; label: string } | null>(null)
+  const drillId = params.get('video') || params.get('teacher')
+  const drillDown: DrillDown = !drillId
+    ? { type: 'none' }
+    : { type: params.get('video') ? 'video' : 'teacher', id: drillId, label: drillLabel?.id === drillId ? drillLabel.label : undefined }
+  const openDrillDown = (type: 'video' | 'teacher', id: string, label: string) => {
+    setDrillLabel({ id, label })
+    setParams((prev) => { const next = new URLSearchParams(prev); next.set(type, id); return next })
+  }
+  const closeDrillDown = () => {
+    setParams((prev) => { const next = new URLSearchParams(prev); next.delete('video'); next.delete('teacher'); return next })
+  }
+
+  const [search, setSearch] = useState(params.get('q') || '')
+  const [query, setQuery] = useState(params.get('q') || '')
+  const [page, setPage] = useState(Math.max(1, Number(params.get('page')) || 1))
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { nextFetchId, isStale } = useLatestFetch()
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 350)
+    return () => clearTimeout(t)
+  }, [search])
 
   // Data per mode
   const [reviews, setReviews] = useState<VideoReview[]>([])
@@ -118,11 +144,11 @@ export function VideoReviewsPage() {
   const [teacherSummaries, setTeacherSummaries] = useState<TeacherSummary[]>([])
 
   // ── By-video filters + sort ──────────────────────────────────────────────────
-  const [subjectFilter, setSubjectFilter] = useState('all')
-  const [packageFilter, setPackageFilter] = useState('all')
-  const [seriesFilter, setSeriesFilter] = useState('all')
-  const [moduleFilter, setModuleFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('default')
+  const [subjectFilter, setSubjectFilter] = useState(params.get('subject') || 'all')
+  const [packageFilter, setPackageFilter] = useState(params.get('package') || 'all')
+  const [seriesFilter, setSeriesFilter] = useState(params.get('series') || 'all')
+  const [moduleFilter, setModuleFilter] = useState(params.get('module') || 'all')
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS.some((o) => o.value === params.get('sort')) ? params.get('sort')! : 'default')
 
   // Cascading option lists (subject -> package -> series -> module)
   const [subjects, setSubjects] = useState<FilterOption[]>([])
@@ -212,22 +238,22 @@ export function VideoReviewsPage() {
   ]
 
   const fetchData = useCallback(async () => {
+    const fetchId = nextFetchId()
     setLoading(true)
+    const searchText = query || undefined
     try {
       if (viewMode === 'list') {
-        const res = await videoReviewsService.getList({ page, limit: 20, search: search || undefined })
-        if (res.success && res.data) {
-          setReviews(res.data.reviews)
-          setTotalPages(res.data.pagination.totalPages)
-          setTotal(res.data.pagination.total)
-        } else {
-          toast.error(res.message || 'Failed to load reviews')
-        }
+        const res = await videoReviewsService.getList({ page, limit: 20, search: searchText })
+        if (isStale(fetchId)) return
+        if (!res.success || !res.data) throw new Error(res.message || 'Failed to load reviews')
+        setReviews(res.data.reviews)
+        setTotalPages(res.data.pagination.totalPages)
+        setTotal(res.data.pagination.total)
       } else if (viewMode === 'by-video') {
         const res = await videoReviewsService.getByVideo({
           page,
           limit: 12,
-          search: search || undefined,
+          search: searchText,
           subject_id: subjectFilter !== 'all' ? subjectFilter : undefined,
           package_id: packageFilter !== 'all' ? packageFilter : undefined,
           series_id: seriesFilter !== 'all' ? seriesFilter : undefined,
@@ -235,29 +261,26 @@ export function VideoReviewsPage() {
           sort_by: sortBy !== 'default' ? sortBy : undefined,
           sort_order: 'desc',
         })
-        if (res.success && res.data) {
-          setVideoSummaries(res.data.videos)
-          setTotalPages(res.data.pagination.totalPages)
-          setTotal(res.data.pagination.total)
-        } else {
-          toast.error(res.message || 'Failed to load video summaries')
-        }
+        if (isStale(fetchId)) return
+        if (!res.success || !res.data) throw new Error(res.message || 'Failed to load video summaries')
+        setVideoSummaries(res.data.videos)
+        setTotalPages(res.data.pagination.totalPages)
+        setTotal(res.data.pagination.total)
       } else {
-        const res = await videoReviewsService.getByTeacher({ page, limit: 12, search: search || undefined })
-        if (res.success && res.data) {
-          setTeacherSummaries(res.data.teachers)
-          setTotalPages(res.data.pagination.totalPages)
-          setTotal(res.data.pagination.total)
-        } else {
-          toast.error(res.message || 'Failed to load teacher summaries')
-        }
+        const res = await videoReviewsService.getByTeacher({ page, limit: 12, search: searchText })
+        if (isStale(fetchId)) return
+        if (!res.success || !res.data) throw new Error(res.message || 'Failed to load teacher summaries')
+        setTeacherSummaries(res.data.teachers)
+        setTotalPages(res.data.pagination.totalPages)
+        setTotal(res.data.pagination.total)
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to load reviews')
+      setError(null)
+    } catch (err) {
+      if (!isStale(fetchId)) setError(apiErrorMessage(err, 'Failed to load reviews'))
     } finally {
-      setLoading(false)
+      if (!isStale(fetchId)) setLoading(false)
     }
-  }, [viewMode, page, search, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy])
+  }, [viewMode, page, query, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy, nextFetchId, isStale])
 
   useEffect(() => {
     if (drillDown.type === 'none') {
@@ -266,13 +289,32 @@ export function VideoReviewsPage() {
   }, [fetchData, drillDown.type])
 
   // Reset page when mode, search, filters or sort change
+  useResetPageOnChange(setPage, [viewMode, query, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy])
+
+  // Keep the URL in step (the mode and drill-down are written where they change)
   useEffect(() => {
-    setPage(1)
-  }, [viewMode, search, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy])
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const write = (key: string, value: string, empty: string) => { if (value && value !== empty) next.set(key, value); else next.delete(key) }
+      write('q', query, '')
+      write('subject', subjectFilter, 'all')
+      write('package', packageFilter, 'all')
+      write('series', seriesFilter, 'all')
+      write('module', moduleFilter, 'all')
+      write('sort', sortBy, 'default')
+      write('page', String(page), '1')
+      return next.toString() === prev.toString() ? prev : next
+    }, { replace: true })
+  }, [query, subjectFilter, packageFilter, seriesFilter, moduleFilter, sortBy, page, setParams])
 
   const handleModeChange = (mode: ViewMode) => {
-    setViewMode(mode)
-    setDrillDown({ type: 'none' })
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      for (const key of ['video', 'teacher', 'page']) next.delete(key)
+      if (mode === 'list') next.delete('mode')
+      else next.set('mode', mode)
+      return next
+    }, { replace: true })
   }
 
   // ── Drill-down ──────────────────────────────────────────────────────────────
@@ -291,7 +333,7 @@ export function VideoReviewsPage() {
           type={drillDown.type}
           id={drillDown.id}
           label={drillDown.label}
-          onBack={() => setDrillDown({ type: 'none' })}
+          onBack={closeDrillDown}
         />
       </div>
     )
@@ -316,13 +358,14 @@ export function VideoReviewsPage() {
           <ViewModeToggle value={viewMode} onChange={handleModeChange} />
           {viewMode !== 'by-video' && (
             <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={
                   viewMode === 'list'
                     ? 'Search by user, teacher, video, package...'
                     : 'Search by teacher name...'
                 }
+                aria-label={viewMode === 'list' ? 'Search reviews' : 'Search teachers'}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -356,12 +399,13 @@ export function VideoReviewsPage() {
       </div>
 
       {/* Content */}
-      {viewMode === 'list' && (
+      {error && !loading && <ErrorState title="The reviews could not be loaded" message={error} onRetry={fetchData} />}
+      {!error && viewMode === 'list' && (
         <div>
           {loading ? (
             <ListSkeleton />
           ) : reviews.length === 0 ? (
-            <EmptyReviews search={search} />
+            <EmptyReviews search={query} />
           ) : (
             <div>
               {reviews.map((r) => (
@@ -372,12 +416,12 @@ export function VideoReviewsPage() {
         </div>
       )}
 
-      {viewMode === 'by-video' && (
+      {!error && viewMode === 'by-video' && (
         <div>
           {loading ? (
             <CardGridSkeleton cols={4} />
           ) : videoSummaries.length === 0 ? (
-            <EmptyReviews search={search} />
+            <EmptyReviews search={query} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {videoSummaries.map((s) => (
@@ -385,11 +429,7 @@ export function VideoReviewsPage() {
                   key={s.video._id}
                   summary={s}
                   onClick={() =>
-                    setDrillDown({
-                      type: 'video',
-                      id: s.video._id,
-                      label: `Reviews for: ${s.video.title}`,
-                    })
+                    openDrillDown('video', s.video._id, `Reviews for: ${s.video.title}`)
                   }
                 />
               ))}
@@ -398,12 +438,12 @@ export function VideoReviewsPage() {
         </div>
       )}
 
-      {viewMode === 'by-teacher' && (
+      {!error && viewMode === 'by-teacher' && (
         <div>
           {loading ? (
             <CardGridSkeleton cols={3} />
           ) : teacherSummaries.length === 0 ? (
-            <EmptyReviews search={search} />
+            <EmptyReviews search={query} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {teacherSummaries.map((s) => (
@@ -411,11 +451,7 @@ export function VideoReviewsPage() {
                   key={s.faculty._id}
                   summary={s}
                   onClick={() =>
-                    setDrillDown({
-                      type: 'teacher',
-                      id: s.faculty._id,
-                      label: `Reviews for: ${s.faculty.name}`,
-                    })
+                    openDrillDown('teacher', s.faculty._id, `Reviews for: ${s.faculty.name}`)
                   }
                 />
               ))}
@@ -425,7 +461,7 @@ export function VideoReviewsPage() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && !loading && drillDown.type === 'none' && (
+      {totalPages > 1 && !loading && !error && (
         <div className="flex items-center justify-between pt-2">
           <p className="text-xs text-muted-foreground">
             Page {page} of {totalPages}

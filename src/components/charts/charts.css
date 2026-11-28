@@ -1,0 +1,178 @@
+/* Chart colours. Derived from the brand (cobalt, sky) and checked with the
+   dataviz validator: lightness band, chroma, colour-blind separation between
+   neighbours, contrast with the card. Colour follows the thing, never its rank. */
+:root {
+  --chart-primary: #0000c8;
+  --chart-primary-wash: rgb(0 0 200 / 0.08);
+  --chart-previous: #8a92ad;
+  --chart-grid: hsl(225 22% 86%);
+  --chart-axis: hsl(225 22% 84%);
+  --chart-crosshair: hsl(229 20% 52% / 0.55);
+  /* The live end point's halo: sky, the brand's signal colour */
+  --chart-halo: rgb(0 190 250 / 0.38);
+  /* Top of the gradient wash under a line (fades to 0 at the baseline) */
+  --chart-wash-top: 0.18;
+  --chart-track: hsl(234 60% 96%);
+  --chart-surface: hsl(var(--card));
+  --chart-low: hsl(var(--danger));
+
+  /* Product types, in stacking order */
+  --chart-package: #2424e8;
+  --chart-session: #0b8457;
+  --chart-workshop: #0098cc;
+  --chart-book: #d97706;
+  --chart-ebook: #8b5cf6;
+  --chart-form: #c2386b;
+
+  /* Package types, in stacking order; everything else is neutral */
+  --chart-theory: #2424e8;
+  --chart-practical: #d97706;
+  --chart-combo: #0098cc;
+  --chart-other: #c2386b;
+  --chart-rest: #9aa1b9;
+}
+.dark {
+  --chart-primary: #7a7aff;
+  --chart-primary-wash: rgb(122 122 255 / 0.14);
+  --chart-previous: #7a82a3;
+  --chart-grid: hsl(233 26% 26%);
+  --chart-axis: hsl(233 26% 30%);
+  --chart-crosshair: hsl(230 30% 75% / 0.45);
+  --chart-halo: rgb(0 190 250 / 0.45);
+  --chart-wash-top: 0.28;
+  --chart-track: hsl(233 35% 18%);
+  --chart-package: #6b6bff;
+  --chart-session: #1f9e5a;
+  --chart-workshop: #1b93d6;
+  --chart-book: #d07a12;
+  --chart-ebook: #9a74ec;
+  --chart-form: #d65a86;
+  --chart-theory: #6b6bff;
+  --chart-practical: #d07a12;
+  --chart-combo: #1a9bcc;
+  --chart-other: #d65a86;
+  --chart-rest: #6c7391;
+}
+
+/* Magnitude (heatmap, cohorts): one cobalt hue, light to dark. Step 0 is "none"
+   and recedes into the card; text inside a cell switches ink by step. Dark mode
+   is its own selection: low values recede into the dark card, high ones glow. */
+:root {
+  --seq-0: hsl(234 60% 97%);
+  --seq-1: #d3d9fb; --seq-2: #aeb8f7; --seq-3: #8593f1; --seq-4: #5a6ae6;
+  --seq-5: #2f3fd6; --seq-6: #0a14b8; --seq-7: #00008a;
+  --seq-ink-1: #0a0e2c; --seq-ink-2: #0a0e2c; --seq-ink-3: #0a0e2c; --seq-ink-4: #ffffff;
+  --seq-ink-5: #ffffff; --seq-ink-6: #ffffff; --seq-ink-7: #ffffff;
+  /* Funnel stages, validated as an ordinal ramp (light end 3.2:1) */
+  --ord-1: #7b88f0; --ord-2: #3a48dc; --ord-3: #0000b0;
+  --ord-ink-1: #0a0e2c; --ord-ink-2: #ffffff; --ord-ink-3: #ffffff;
+  /* After a subscription ends: renewed, through a combo, another package, other products, nothing yet */
+  --out-renewed: #2424e8; --out-combo: #0b8457; --out-switched: #d97706; --out-other: #8b5cf6; --out-lapsed: #9aa1b9; --out-lapsed-ink: #0a0e2c;
+  /* The estimate: sky, the brand's signal colour */
+  --chart-estimate: #0098cc;
+  --chart-estimate-wash: rgb(0 152 204 / 0.12);
+}
+.dark {
+  --seq-0: hsl(233 35% 15%);
+  --seq-1: #1f2a6b; --seq-2: #28388f; --seq-3: #3247b4; --seq-4: #4a60da;
+  --seq-5: #6d82f5; --seq-6: #98a8ff; --seq-7: #c7d0ff;
+  --seq-ink-1: #e6e9ff; --seq-ink-2: #e6e9ff; --seq-ink-3: #ffffff; --seq-ink-4: #ffffff;
+  --seq-ink-5: #0a0e2c; --seq-ink-6: #0a0e2c; --seq-ink-7: #0a0e2c;
+  --ord-1: #3f55d6; --ord-2: #7488ff; --ord-3: #b6c0ff;
+  --ord-ink-1: #ffffff; --ord-ink-2: #0a0e2c; --ord-ink-3: #0a0e2c;
+  --out-renewed: #6b6bff; --out-combo: #1f9e5a; --out-switched: #d07a12; --out-other: #9a74ec; --out-lapsed: #6c7391; --out-lapsed-ink: #ffffff;
+  --chart-estimate: #1fb6ec;
+  --chart-estimate-wash: rgb(31 182 236 / 0.16);
+}
+
+.chart-bar { transition: opacity 150ms ease-out; }
+
+/* First load: the line draws in from the left and its wash fades up (600ms,
+   ease-out). Later changes glide (useTween) and never replay this. */
+.chart-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: chart-draw 640ms cubic-bezier(0.22, 0.8, 0.24, 1) both; }
+.chart-fade { animation: chart-fade 640ms ease-out both; }
+.chart-fade-late { animation: chart-fade 260ms ease-out 480ms both; }
+@keyframes chart-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes chart-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* The live end point: one gentle 2s pulse, the page's single moving signal */
+.chart-halo { transform-box: fill-box; transform-origin: center; animation: chart-halo 2s ease-out infinite; }
+@keyframes chart-halo {
+  0% { transform: scale(0.55); opacity: 0.9; }
+  70% { transform: scale(1.45); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+/* Text on a plot keeps a card-coloured halo so a line never cuts through it */
+.chart-label { paint-order: stroke; stroke: var(--chart-surface); stroke-width: 4px; stroke-linejoin: round; }
+
+/* Rings fill to their value */
+.chart-ring { transition: stroke-dasharray 600ms cubic-bezier(0.22, 0.8, 0.24, 1); }
+
+/* The tooltip glides after the pointer instead of jumping */
+.chart-tip { transition: transform 90ms ease-out, opacity 120ms ease-out; will-change: transform; }
+
+/* Cells: the hovered one lifts with a ring in the card colour and a hairline */
+.chart-lift { transition: transform 140ms ease-out, box-shadow 140ms ease-out, filter 140ms ease-out; }
+.chart-lift:hover, .chart-lift:focus-visible {
+  position: relative; z-index: 2; transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 0 0 2px hsl(var(--card)), 0 0 0 3px hsl(var(--foreground) / 0.45), 0 6px 14px -6px hsl(233 63% 11% / 0.35);
+}
+
+/* Equal-height cards: a body that takes the height the row gives it */
+.chart-fill { display: flex; flex-direction: column; }
+.chart-fill > .chart-fill-body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.chart-plot text { font-family: inherit; font-variant-numeric: tabular-nums; }
+/* Bars grow and shrink to their new value instead of jumping */
+.chart-grow { transition: width 420ms cubic-bezier(0.22, 0.8, 0.24, 1), opacity 150ms ease-out; }
+.chart-cell { transition: fill 320ms ease-out, opacity 150ms ease-out, background-color 320ms ease-out; }
+
+/* Full screen: the card fills the window above everything else */
+.chart-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  overflow: auto;
+  overscroll-behavior: contain;
+  animation: pg-fade 160ms ease-out backwards;
+}
+.chart-expanded > .chart-expanded-inner { max-width: 1600px; margin: 0 auto; }
+
+/* An insight link lands on the block that proves it: a short sky ring */
+@keyframes chart-proof {
+  0% { box-shadow: 0 0 0 0 hsl(var(--ring) / 0); }
+  25% { box-shadow: 0 0 0 3px hsl(var(--ring) / 0.65); }
+  100% { box-shadow: 0 0 0 3px hsl(var(--ring) / 0); }
+}
+.chart-proof { animation: chart-proof 1600ms ease-out 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-grow, .chart-cell, .chart-ring, .chart-tip, .chart-lift { transition: none; }
+  .chart-draw, .chart-fade, .chart-fade-late { animation: none; }
+  .chart-halo { animation: none; opacity: 0.35; transform: none; }
+  .chart-lift:hover, .chart-lift:focus-visible { transform: none; }
+  .chart-proof { animation: none; outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+}
+
+@media (forced-colors: active) {
+  .chart-swatch { forced-color-adjust: none; }
+}
+
+/* ── One card language on the dashboard, analytics and revenue pages ──────
+   Those pages mark their root with .pg-viz. Cards built on the shared
+   Section (common/detail, not owned here) get the same title face and inset
+   as the chart cards: display face at 17px, 24px sides from 640px up, and
+   tables that start where the title starts. */
+.pg-viz section.rounded-xl > div:first-child > div.min-w-0 > h2 {
+  font-family: 'Bricolage Grotesque', 'Bricolage Grotesque Fallback', 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.pg-viz section.rounded-xl > div.px-5:first-child { padding-top: 20px; }
+@media (min-width: 640px) {
+  .pg-viz section.rounded-xl > div.px-5 { padding-left: 24px; padding-right: 24px; }
+  .pg-viz section.rounded-xl > div.px-5.pb-5:last-child { padding-bottom: 24px; }
+  .pg-viz .report-table > table > * > tr > :first-child:not(.pl-8) { padding-left: 24px; }
+  .pg-viz .report-table > table > * > tr > :last-child { padding-right: 24px; }
+}

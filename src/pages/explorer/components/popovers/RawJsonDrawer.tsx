@@ -1,48 +1,20 @@
-import { useState } from 'react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
-import { Copy, Check } from 'lucide-react'
+import { useMemo } from 'react'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { CopyButton } from '@/components/common/detail'
 
-interface RawJsonDrawerProps {
-  open: boolean
-  onClose: () => void
-  label: string
-  data: unknown
-}
+interface RawJsonDrawerProps { open: boolean; onClose: () => void; label: string; data: unknown }
 
+/** The record exactly as the server returned it. */
 export function RawJsonDrawer({ open, onClose, label, data }: RawJsonDrawerProps) {
-  const [copied, setCopied] = useState(false)
-  const json = JSON.stringify(data, null, 2)
-
-  function handleCopy() {
-    navigator.clipboard.writeText(json).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
+  const json = useMemo(() => (open ? JSON.stringify(data, null, 2) : ''), [open, data])
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
-        <SheetHeader className="px-5 py-4 border-b border-slate-100 flex-row items-center justify-between space-y-0">
-          <SheetTitle className="text-sm font-semibold text-slate-800">
-            Raw JSON — {label}
-          </SheetTitle>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-            onClick={handleCopy}
-          >
-            {copied
-              ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copied</>
-              : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-          </Button>
+    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <SheetContent side="right" className="flex w-full flex-col bg-card p-0 sm:max-w-lg">
+        <SheetHeader className="space-y-0 border-b border-border py-4 pl-5 pr-12 text-left">
+          <SheetTitle className="flex items-center gap-2 text-base"><span className="min-w-0 truncate">Raw JSON: {label}</span><CopyButton value={json} label="JSON" /></SheetTitle>
+          <SheetDescription className="text-xs">Read only. For support and debugging.</SheetDescription>
         </SheetHeader>
-        <div className="flex-1 overflow-auto p-5">
-          <pre className="text-[11px] leading-relaxed font-mono text-slate-700 whitespace-pre-wrap break-all">
-            {json}
-          </pre>
-        </div>
+        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all p-5 font-mono text-xs leading-relaxed text-foreground">{json}</pre>
       </SheetContent>
     </Sheet>
   )
